@@ -127,6 +127,7 @@ jobs:
               -e DB_NAME=frutapp \
               -e DB_USER=frutapp \
               -e DB_PASSWORD='${{ secrets.POSTGRES_PASSWORD }}' \
+              -e JWT_SECRET='${{ secrets.JWT_SECRET }}' \
               --label "traefik.enable=true" \
               --label "traefik.http.routers.frutapp-backend.rule=Host(\`frutapp-api.grandline.cl\`)" \
               --label "traefik.http.routers.frutapp-backend.entrypoints=websecure" \
