@@ -1,0 +1,271 @@
+@file:OptIn(ExperimentalResourceApi::class)
+
+package cl.frutapp.app.navigation.shop
+
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.CartItem
+import cl.frutapp.app.data.CartStore
+import cl.frutapp.app.data.formatClp
+import cl.frutapp.app.ui.components.FrutBottomNav
+import cl.frutapp.app.ui.components.FrutButtonPrimary
+import cl.frutapp.app.ui.components.FrutTab
+import cl.frutapp.app.ui.theme.FrutAppColors
+import org.jetbrains.compose.resources.ExperimentalResourceApi
+import org.jetbrains.compose.resources.painterResource
+
+private const val ENVIO_GRATIS_DESDE = 15000
+private const val COSTO_ENVIO = 2990
+
+/**
+ * Carrito (mockup 09): banner de envío gratis con progreso, lista de items con stepper,
+ * resumen (subtotal/envío/total) y botón de pago. Estado desde [CartStore] (cliente).
+ */
+class CartScreen : Screen {
+    @Composable
+    override fun Content() {
+        val navigator = LocalNavigator.currentOrThrow
+        val items = CartStore.items
+        val subtotal = CartStore.subtotal
+        val envio = if (subtotal == 0 || subtotal >= ENVIO_GRATIS_DESDE) 0 else COSTO_ENVIO
+        val total = subtotal + envio
+
+        Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                CartHeader(
+                    onBack = { navigator.pop() },
+                    canClear = items.isNotEmpty(),
+                    onClear = { CartStore.clear() }
+                )
+
+                if (items.isEmpty()) {
+                    EmptyCart(modifier = Modifier.weight(1f))
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp)
+                    ) {
+                        item { FreeShippingBanner(subtotal = subtotal, modifier = Modifier.padding(20.dp)) }
+                        items.forEachIndexed { index, item ->
+                            item(key = "${item.producto.id}-${item.gramos}") {
+                                CartRow(
+                                    item = item,
+                                    onMinus = { CartStore.setCantidad(index, item.cantidad - 1) },
+                                    onPlus = { CartStore.setCantidad(index, item.cantidad + 1) },
+                                    onDelete = { CartStore.remove(index) }
+                                )
+                            }
+                        }
+                        item { Summary(subtotal = subtotal, envio = envio, total = total, modifier = Modifier.padding(20.dp)) }
+                    }
+
+                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
+                        FrutButtonPrimary(
+                            text = "Proceder al pago · ${formatClp(total)}",
+                            onClick = { /* TODO: CheckoutScreen (mockup 10) — próximo paso */ }
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Filled.Lock, contentDescription = null, tint = FrutAppColors.InkSoft, modifier = Modifier.size(14.dp))
+                            Text("Paga 100% seguro", color = FrutAppColors.InkSoft, fontSize = 12.sp, modifier = Modifier.padding(start = 6.dp))
+                        }
+                    }
+                }
+
+                FrutBottomNav(
+                    selected = FrutTab.CARRITO,
+                    onSelect = { tab -> if (tab != FrutTab.CARRITO) navigator.popUntilRoot() }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CartHeader(onBack: () -> Unit, canClear: Boolean, onClear: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.size(40.dp).background(FrutAppColors.Brand50, CircleShape).clickable(onClick = onBack),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Filled.ArrowBack, contentDescription = "Volver", tint = FrutAppColors.Ink, modifier = Modifier.size(20.dp))
+        }
+        Text("Carrito", color = FrutAppColors.Brand800, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 12.dp).weight(1f))
+        if (canClear) {
+            Text("Vaciar carrito", color = FrutAppColors.Error, fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.clickable(onClick = onClear))
+        }
+    }
+}
+
+@Composable
+private fun FreeShippingBanner(subtotal: Int, modifier: Modifier = Modifier) {
+    val falta = (ENVIO_GRATIS_DESDE - subtotal).coerceAtLeast(0)
+    val progreso = (subtotal.toFloat() / ENVIO_GRATIS_DESDE).coerceIn(0f, 1f)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(FrutAppColors.Brand50, RoundedCornerShape(16.dp))
+            .padding(16.dp)
+    ) {
+        Text(
+            text = if (falta == 0) "¡Tienes envío gratis! 🎉" else "¡Falta poco! Te faltan ${formatClp(falta)} para envío gratis",
+            color = FrutAppColors.Brand800,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp)
+                .height(7.dp)
+                .clip(CircleShape)
+                .background(FrutAppColors.Brand100)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(progreso)
+                    .height(7.dp)
+                    .clip(CircleShape)
+                    .background(FrutAppColors.Brand400)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CartRow(item: CartItem, onMinus: () -> Unit, onPlus: () -> Unit, onDelete: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.size(64.dp).background(FrutAppColors.Brand50, RoundedCornerShape(14.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(item.producto.imagen),
+                contentDescription = item.producto.nombre,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(52.dp).padding(6.dp)
+            )
+        }
+        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(item.producto.nombre, color = FrutAppColors.Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(item.detalle, color = FrutAppColors.InkSoft, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+            Text(formatClp(item.precioTotal), color = FrutAppColors.Brand600, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Icon(
+                Icons.Filled.Delete,
+                contentDescription = "Eliminar",
+                tint = FrutAppColors.InkSoft,
+                modifier = Modifier.size(20.dp).clickable(onClick = onDelete)
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                MiniStep(Icons.Filled.Remove, onMinus)
+                Text("${item.cantidad}", color = FrutAppColors.Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 12.dp))
+                MiniStep(Icons.Filled.Add, onPlus)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniStep(icon: ImageVector, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier.size(30.dp).background(FrutAppColors.Brand50, CircleShape).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(16.dp))
+    }
+}
+
+@Composable
+private fun Summary(subtotal: Int, envio: Int, total: Int, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(FrutAppColors.Cream, RoundedCornerShape(16.dp))
+            .padding(16.dp)
+    ) {
+        SummaryRow("Subtotal", formatClp(subtotal))
+        SummaryRow("Envío", if (envio == 0) "Gratis" else formatClp(envio))
+        Spacer(Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Total", color = FrutAppColors.Brand800, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text(formatClp(total), color = FrutAppColors.Brand800, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun SummaryRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = FrutAppColors.InkMuted, fontSize = 14.sp)
+        Text(value, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun EmptyCart(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier.size(96.dp).background(FrutAppColors.Brand50, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Filled.ShoppingCart, contentDescription = null, tint = FrutAppColors.Brand400, modifier = Modifier.size(44.dp))
+        }
+        Text("Tu carrito está vacío", color = FrutAppColors.Brand800, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
+        Text("Agrega productos frescos y aparecerán aquí.", color = FrutAppColors.InkMuted, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
+    }
+}

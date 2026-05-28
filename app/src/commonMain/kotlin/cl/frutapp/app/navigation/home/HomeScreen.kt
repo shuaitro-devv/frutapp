@@ -44,6 +44,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.CartStore
 import cl.frutapp.app.data.Categoria
 import cl.frutapp.app.data.DemoCatalog
 import cl.frutapp.app.data.Producto
@@ -51,6 +54,8 @@ import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.data.remote.CatalogApi
 import cl.frutapp.app.data.toProducto
+import cl.frutapp.app.navigation.shop.CartScreen
+import cl.frutapp.app.navigation.shop.ProductDetailScreen
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.components.ProductCard
@@ -72,6 +77,7 @@ import org.jetbrains.compose.resources.painterResource
 class HomeScreen : Screen {
     @Composable
     override fun Content() {
+        val navigator = LocalNavigator.currentOrThrow
         var selectedTab by remember { mutableStateOf(FrutTab.INICIO) }
         // Catálogo real desde el backend; si falla la red, queda el mock como fallback.
         var destacados by remember { mutableStateOf(DemoCatalog.destacados) }
@@ -81,7 +87,15 @@ class HomeScreen : Screen {
         }
 
         Scaffold(
-            bottomBar = { FrutBottomNav(selected = selectedTab, onSelect = { selectedTab = it }) },
+            bottomBar = {
+                FrutBottomNav(
+                    selected = selectedTab,
+                    onSelect = { tab ->
+                        selectedTab = tab
+                        if (tab == FrutTab.CARRITO) navigator.push(CartScreen())
+                    }
+                )
+            },
             containerColor = Color.White
         ) { innerPadding ->
             LazyColumn(
@@ -105,7 +119,8 @@ class HomeScreen : Screen {
                                 price = formatClp(producto.precioClp),
                                 image = producto.imagen,
                                 unit = producto.unidad,
-                                onAdd = {},
+                                onAdd = { CartStore.add(producto, 1, if (producto.unidad == "kg") 1000 else null) },
+                                onClick = { navigator.push(ProductDetailScreen(producto)) },
                                 modifier = Modifier.weight(1f)
                             )
                         }
