@@ -38,13 +38,22 @@ data class JwtConfig(
     val refreshTtlDays: Long
 ) {
     companion object {
-        fun from(config: ApplicationConfig) = JwtConfig(
-            secret = config.property("jwt.secret").getString(),
-            issuer = config.property("jwt.issuer").getString(),
-            audience = config.property("jwt.audience").getString(),
-            realm = config.property("jwt.realm").getString(),
-            accessTtlMinutes = config.property("jwt.accessTtlMinutes").getString().toLong(),
-            refreshTtlDays = config.property("jwt.refreshTtlDays").getString().toLong()
-        )
+        fun from(config: ApplicationConfig): JwtConfig {
+            val secret = config.property("jwt.secret").getString()
+            // Fail-fast: si el secret está vacío (env var seteada pero vacía), HMAC256 tira
+            // "Empty key" recién al firmar el primer token. Mejor reventar al arrancar con
+            // un mensaje claro que devolver 500 por request.
+            require(secret.isNotBlank()) {
+                "JWT_SECRET vacío: configúralo como env var / GitHub secret antes de desplegar."
+            }
+            return JwtConfig(
+                secret = secret,
+                issuer = config.property("jwt.issuer").getString(),
+                audience = config.property("jwt.audience").getString(),
+                realm = config.property("jwt.realm").getString(),
+                accessTtlMinutes = config.property("jwt.accessTtlMinutes").getString().toLong(),
+                refreshTtlDays = config.property("jwt.refreshTtlDays").getString().toLong()
+            )
+        }
     }
 }
