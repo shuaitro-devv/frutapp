@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import cl.frutapp.app.navigation.PlaceholderHomeScreen
+import cl.frutapp.app.navigation.home.HomeScreen
 import cl.frutapp.app.ui.components.AuthHeaderText
 import cl.frutapp.app.ui.components.AuthScaffold
 import cl.frutapp.app.ui.components.FrutButtonGhost
@@ -65,7 +65,7 @@ class LoginScreen : Screen {
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                     FrutButtonGhost(text = "¿Olvidaste tu contraseña?", onClick = { navigator.push(RecoverPasswordScreen()) })
                 }
-                FrutButtonPrimary(text = "Ingresar", onClick = { navigator.replace(PlaceholderHomeScreen()) })
+                FrutButtonPrimary(text = "Ingresar", onClick = { navigator.replace(HomeScreen()) })
                 FrutButtonOutline(text = "Crear cuenta", onClick = { navigator.push(RegisterScreen()) })
             }
 
