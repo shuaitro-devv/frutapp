@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.remote.AuthApi
 import cl.frutapp.app.ui.components.AuthHeaderText
 import cl.frutapp.app.ui.components.AuthScaffold
 import cl.frutapp.app.ui.components.FrutButtonGhost
@@ -33,12 +35,17 @@ import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.FrutCard
 import cl.frutapp.app.ui.components.FrutTextField
 import cl.frutapp.app.ui.theme.FrutAppColors
+import cl.frutapp.shared.dto.ForgotPasswordRequest
+import kotlinx.coroutines.launch
 
 class RecoverPasswordScreen : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val scope = rememberCoroutineScope()
         var email by remember { mutableStateOf("") }
+        var loading by remember { mutableStateOf(false) }
+        var error by remember { mutableStateOf<String?>(null) }
 
         AuthScaffold(showBackButton = true, onBack = { navigator.pop() }) {
             AuthHeaderText(
@@ -54,9 +61,23 @@ class RecoverPasswordScreen : Screen {
                     keyboardType = KeyboardType.Email
                 )
                 FrutButtonPrimary(
-                    text = "Enviar enlace de recuperación",
-                    onClick = { navigator.push(VerifyCodeScreen(email = email.ifBlank { "correo@ejemplo.com" })) }
+                    text = if (loading) "Enviando…" else "Enviar código de recuperación",
+                    enabled = email.isNotBlank() && !loading,
+                    onClick = {
+                        error = null
+                        loading = true
+                        val correo = email.trim()
+                        scope.launch {
+                            runCatching { AuthApi().forgotPassword(ForgotPasswordRequest(email = correo)) }
+                                .onSuccess { navigator.push(ResetPasswordScreen(email = correo)) }
+                                .onFailure { error = "No pudimos enviar el código. Intenta de nuevo." }
+                            loading = false
+                        }
+                    }
                 )
+                if (error != null) {
+                    Text(error!!, color = FrutAppColors.Error, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+                }
             }
 
             Text(text = "o", color = FrutAppColors.InkSoft, fontSize = 13.sp, modifier = Modifier.padding(vertical = 14.dp))

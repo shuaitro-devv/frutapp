@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,8 +25,12 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.TokenStore
+import cl.frutapp.app.data.remote.AuthApi
 import cl.frutapp.app.navigation.home.HomeScreen
 import cl.frutapp.app.ui.components.AuthHeaderText
+import cl.frutapp.shared.dto.LoginRequest
+import kotlinx.coroutines.launch
 import cl.frutapp.app.ui.components.AuthScaffold
 import cl.frutapp.app.ui.components.FrutButtonGhost
 import cl.frutapp.app.ui.components.FrutButtonOutline
@@ -39,8 +44,11 @@ class LoginScreen : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val scope = rememberCoroutineScope()
         var email by remember { mutableStateOf("") }
         var password by remember { mutableStateOf("") }
+        var loading by remember { mutableStateOf(false) }
+        var error by remember { mutableStateOf<String?>(null) }
 
         AuthScaffold {
             AuthHeaderText(
@@ -65,7 +73,26 @@ class LoginScreen : Screen {
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                     FrutButtonGhost(text = "¿Olvidaste tu contraseña?", onClick = { navigator.push(RecoverPasswordScreen()) })
                 }
-                FrutButtonPrimary(text = "Ingresar", onClick = { navigator.replace(HomeScreen()) })
+                if (error != null) {
+                    Text(error!!, color = FrutAppColors.Error, fontSize = 13.sp)
+                }
+                FrutButtonPrimary(
+                    text = if (loading) "Ingresando…" else "Ingresar",
+                    enabled = !loading,
+                    onClick = {
+                        error = null
+                        loading = true
+                        scope.launch {
+                            runCatching { AuthApi().login(LoginRequest(email = email.trim(), password = password)) }
+                                .onSuccess { resp ->
+                                    TokenStore.save(resp.accessToken, resp.refreshToken, resp.user)
+                                    navigator.replace(HomeScreen())
+                                }
+                                .onFailure { error = "No pudimos iniciar sesión. Revisa tu correo y contraseña." }
+                            loading = false
+                        }
+                    }
+                )
                 FrutButtonOutline(text = "Crear cuenta", onClick = { navigator.push(RegisterScreen()) })
             }
 

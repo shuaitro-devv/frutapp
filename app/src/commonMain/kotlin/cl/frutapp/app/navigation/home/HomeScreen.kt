@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,7 +47,10 @@ import cafe.adriel.voyager.core.screen.Screen
 import cl.frutapp.app.data.Categoria
 import cl.frutapp.app.data.DemoCatalog
 import cl.frutapp.app.data.Producto
+import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.data.formatClp
+import cl.frutapp.app.data.remote.CatalogApi
+import cl.frutapp.app.data.toProducto
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.components.ProductCard
@@ -69,6 +73,12 @@ class HomeScreen : Screen {
     @Composable
     override fun Content() {
         var selectedTab by remember { mutableStateOf(FrutTab.INICIO) }
+        // Catálogo real desde el backend; si falla la red, queda el mock como fallback.
+        var destacados by remember { mutableStateOf(DemoCatalog.destacados) }
+        LaunchedEffect(Unit) {
+            runCatching { CatalogApi().products() }
+                .onSuccess { dtos -> if (dtos.isNotEmpty()) destacados = dtos.map { it.toProducto() }.take(6) }
+        }
 
         Scaffold(
             bottomBar = { FrutBottomNav(selected = selectedTab, onSelect = { selectedTab = it }) },
@@ -84,7 +94,7 @@ class HomeScreen : Screen {
                 item { SectionHeader("Categorías", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 4.dp)) }
                 item { CategoriesRow(modifier = Modifier.padding(vertical = 8.dp)) }
                 item { SectionHeader("Productos destacados", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp)) }
-                items(DemoCatalog.destacados.chunked(2)) { fila ->
+                items(destacados.chunked(2)) { fila ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -118,7 +128,7 @@ private fun HomeHeader(modifier: Modifier = Modifier) {
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "¡Hola, Juan! 👋",
+                text = TokenStore.user?.name?.substringBefore(' ')?.let { "¡Hola, $it! 👋" } ?: "¡Hola! 👋",
                 style = MaterialTheme.typography.headlineSmall,
                 color = FrutAppColors.Brand800
             )

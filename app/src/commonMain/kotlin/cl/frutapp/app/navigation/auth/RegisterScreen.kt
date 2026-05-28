@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +27,8 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.TokenStore
+import cl.frutapp.app.data.remote.AuthApi
 import cl.frutapp.app.ui.components.AuthHeaderText
 import cl.frutapp.app.ui.components.AuthScaffold
 import cl.frutapp.app.ui.components.FrutButtonGhost
@@ -34,6 +37,8 @@ import cl.frutapp.app.ui.components.FrutTextField
 import cl.frutapp.app.ui.components.OrDivider
 import cl.frutapp.app.ui.components.SocialButtons
 import cl.frutapp.app.ui.theme.FrutAppColors
+import cl.frutapp.shared.dto.RegisterRequest
+import kotlinx.coroutines.launch
 
 class RegisterScreen : Screen {
     @Composable
@@ -45,6 +50,9 @@ class RegisterScreen : Screen {
         var password by remember { mutableStateOf("") }
         var confirm by remember { mutableStateOf("") }
         var acceptTerms by remember { mutableStateOf(false) }
+        val scope = rememberCoroutineScope()
+        var loading by remember { mutableStateOf(false) }
+        var error by remember { mutableStateOf<String?>(null) }
 
         AuthScaffold(showBackButton = true, onBack = { navigator.pop() }) {
             AuthHeaderText(
@@ -111,10 +119,36 @@ class RegisterScreen : Screen {
                 )
             }
 
+            if (error != null) {
+                Text(error!!, color = FrutAppColors.Error, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+            }
             FrutButtonPrimary(
-                text = "Crear cuenta",
-                onClick = { navigator.push(VerifyCodeScreen(email = email.ifBlank { "correo@ejemplo.com" })) },
-                enabled = acceptTerms,
+                text = if (loading) "Creando…" else "Crear cuenta",
+                onClick = {
+                    error = null
+                    loading = true
+                    scope.launch {
+                        runCatching {
+                            AuthApi().register(
+                                RegisterRequest(
+                                    name = name.trim(),
+                                    email = email.trim(),
+                                    phone = phone.trim().ifBlank { null },
+                                    password = password
+                                )
+                            )
+                        }
+                            .onSuccess { resp ->
+                                TokenStore.save(resp.accessToken, resp.refreshToken, resp.user)
+                                navigator.push(VerifyCodeScreen(email = email.trim().ifBlank { "correo@ejemplo.com" }))
+                            }
+                            .onFailure {
+                                error = "No pudimos crear la cuenta. Revisa el correo (puede estar registrado) y la contraseña (mín. 6, con letras y números)."
+                            }
+                        loading = false
+                    }
+                },
+                enabled = acceptTerms && !loading && password.isNotEmpty() && confirm == password,
                 modifier = Modifier.padding(top = 8.dp)
             )
 

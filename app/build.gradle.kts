@@ -70,7 +70,9 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
-            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080\"")
+            // Apunta al backend de producción (vivo) para el demo. Para backend local
+            // usar "http://10.0.2.2:8080" (requiere correr :backend:run con Postgres).
+            buildConfigField("String", "API_BASE_URL", "\"https://frutapp-api.grandline.cl\"")
         }
         release {
             isMinifyEnabled = false
