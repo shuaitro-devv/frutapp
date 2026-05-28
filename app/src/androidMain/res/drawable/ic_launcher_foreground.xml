@@ -1,19 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <!-- Hoja FrutApp estilizada, blanca, centrada en la zona segura del adaptive icon -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,34 C66,46 66,72 54,82 C42,72 42,46 54,34 Z" />
-    <!-- Vena central -->
-    <path
-        android:fillColor="#639922"
-        android:pathData="M53,42 L55,42 L55,78 L53,78 Z" />
-    <!-- Tallo / brote superior -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,30 C58,26 64,26 68,28 C64,32 58,34 54,34 Z" />
-</vector>
+<!-- Ícono real FrutApp (favicon): se inseta para que la marca quede en la zona
+     segura del adaptive icon. El borde insetado se funde con el fondo #234B07. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/frutapp_favicon"
+    android:inset="14%" />
