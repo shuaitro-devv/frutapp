@@ -30,11 +30,18 @@ data class CartItem(
  * [mutableStateListOf]: cualquier pantalla que lea [items] recompone al cambiar.
  */
 object CartStore {
+    const val ENVIO_GRATIS_DESDE = 15000
+    const val COSTO_ENVIO = 2990
+
     val items = mutableStateListOf<CartItem>()
 
     val subtotal: Int get() = items.sumOf { it.precioTotal }
     val cantidadTotal: Int get() = items.sumOf { it.cantidad }
     val isEmpty: Boolean get() = items.isEmpty()
+
+    /** Costo de envío: gratis si el carrito está vacío o supera el umbral. */
+    val envio: Int get() = if (subtotal == 0 || subtotal >= ENVIO_GRATIS_DESDE) 0 else COSTO_ENVIO
+    val total: Int get() = subtotal + envio
 
     /** Agrega una línea; si ya existe el mismo producto+gramaje, suma la cantidad. */
     fun add(producto: Producto, cantidad: Int = 1, gramos: Int? = null) {

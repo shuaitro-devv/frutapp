@@ -51,9 +51,6 @@ import cl.frutapp.app.ui.theme.FrutAppColors
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
 
-private const val ENVIO_GRATIS_DESDE = 15000
-private const val COSTO_ENVIO = 2990
-
 /**
  * Carrito (mockup 09): banner de envío gratis con progreso, lista de items con stepper,
  * resumen (subtotal/envío/total) y botón de pago. Estado desde [CartStore] (cliente).
@@ -64,8 +61,8 @@ class CartScreen : Screen {
         val navigator = LocalNavigator.currentOrThrow
         val items = CartStore.items
         val subtotal = CartStore.subtotal
-        val envio = if (subtotal == 0 || subtotal >= ENVIO_GRATIS_DESDE) 0 else COSTO_ENVIO
-        val total = subtotal + envio
+        val envio = CartStore.envio
+        val total = CartStore.total
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -99,7 +96,7 @@ class CartScreen : Screen {
                     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
                         FrutButtonPrimary(
                             text = "Proceder al pago · ${formatClp(total)}",
-                            onClick = { /* TODO: CheckoutScreen (mockup 10) — próximo paso */ }
+                            onClick = { navigator.push(CheckoutScreen()) }
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
@@ -145,8 +142,8 @@ private fun CartHeader(onBack: () -> Unit, canClear: Boolean, onClear: () -> Uni
 
 @Composable
 private fun FreeShippingBanner(subtotal: Int, modifier: Modifier = Modifier) {
-    val falta = (ENVIO_GRATIS_DESDE - subtotal).coerceAtLeast(0)
-    val progreso = (subtotal.toFloat() / ENVIO_GRATIS_DESDE).coerceIn(0f, 1f)
+    val falta = (CartStore.ENVIO_GRATIS_DESDE - subtotal).coerceAtLeast(0)
+    val progreso = (subtotal.toFloat() / CartStore.ENVIO_GRATIS_DESDE).coerceIn(0f, 1f)
     Column(
         modifier = modifier
             .fillMaxWidth()
