@@ -1,10 +1,9 @@
 package cl.frutapp.backend.modules.health
 
 import cl.frutapp.shared.domain.HealthResponse
-import io.ktor.server.response.respond
-import io.ktor.server.routing.Route
-import io.ktor.server.routing.get
-import io.ktor.server.routing.route
+import io.ktor.server.application.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
 
 private const val VERSION = "0.1.0"
 
