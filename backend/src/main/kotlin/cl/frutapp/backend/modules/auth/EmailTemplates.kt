@@ -36,6 +36,38 @@ object EmailTemplates {
         return Email(to = to, subject = subject, html = baseLayout("Bienvenido a FrutApp", content), text = text)
     }
 
+    fun emailVerification(to: String, name: String, code: String): Email {
+        val subject = "Verifica tu correo · FrutApp"
+        val text = buildString {
+            appendLine("¡Hola, $name! Tu código de verificación FrutApp es: $code")
+            appendLine("Vence en 30 minutos.")
+            appendLine("Ingrésalo en la app para activar tu cuenta.")
+        }
+        val content = """
+            <h1 style="margin:0 0 12px;color:#27500A;font-size:28px;line-height:1.25;font-weight:800;">
+              Verifica tu correo
+            </h1>
+            <p style="margin:0 auto 26px;max-width:400px;color:#4B5563;font-size:16px;line-height:1.55;">
+              ¡Hola, $name! Usa este código para activar tu cuenta FrutApp.
+            </p>
+
+            <table role="presentation" cellspacing="0" cellpadding="0" align="center" style="margin:0 auto 26px;">
+              <tr>
+                <td style="background-color:#EAF3DE;border:1px solid #CFE7BF;border-radius:18px;padding:18px 28px;">
+                  <span style="display:block;color:#27500A;font-size:34px;line-height:1;font-weight:800;letter-spacing:10px;">$code</span>
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:0 0 24px;color:#6B7280;font-size:14px;line-height:1.5;">
+              Este código vence en <strong style="color:#27500A;">30 minutos</strong>.
+            </p>
+
+            ${noticeBox("¿No creaste esta cuenta?", "Si no fuiste tú, puedes ignorar este correo y no se activará ninguna cuenta.")}
+        """.trimIndent()
+        return Email(to = to, subject = subject, html = baseLayout("Verifica tu correo - FrutApp", content), text = text)
+    }
+
     fun passwordReset(to: String, code: String): Email {
         val subject = "Tu código para restablecer la contraseña · FrutApp"
         val text = buildString {

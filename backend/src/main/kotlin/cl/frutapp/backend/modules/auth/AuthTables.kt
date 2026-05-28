@@ -11,6 +11,7 @@ object UsersTable : Table("app_user") {
     val phone = text("phone").nullable()
     val passwordHash = text("password_hash")
     val role = text("role")
+    val emailVerified = bool("email_verified")
     val createdAt = timestamp("created_at")
     val updatedAt = timestamp("updated_at")
     val deletedAt = timestamp("deleted_at").nullable()
@@ -30,6 +31,17 @@ object RefreshTokensTable : Table("refresh_token") {
 
 /** Códigos de recuperación de contraseña: se guarda solo el hash del código. */
 object PasswordResetTokensTable : Table("password_reset_token") {
+    val id = uuid("id")
+    val userId = uuid("user_id")
+    val codeHash = text("code_hash")
+    val expiresAt = timestamp("expires_at")
+    val usedAt = timestamp("used_at").nullable()
+    val createdAt = timestamp("created_at")
+    override val primaryKey = PrimaryKey(id)
+}
+
+/** Códigos de verificación de correo: se guarda solo el hash del código. */
+object EmailVerificationTokensTable : Table("email_verification_token") {
     val id = uuid("id")
     val userId = uuid("user_id")
     val codeHash = text("code_hash")

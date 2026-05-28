@@ -4,6 +4,7 @@ import cl.frutapp.backend.config.JwtConfig
 import cl.frutapp.backend.config.MailConfig
 import cl.frutapp.backend.modules.auth.AuthService
 import cl.frutapp.backend.modules.auth.EmailSender
+import cl.frutapp.backend.modules.auth.EmailVerificationTokenRepository
 import cl.frutapp.backend.modules.auth.LogEmailSender
 import cl.frutapp.backend.modules.auth.PasswordResetTokenRepository
 import cl.frutapp.backend.modules.auth.RefreshTokenRepository
@@ -53,6 +54,7 @@ fun Application.module() {
         users = UserRepository(),
         refreshTokens = RefreshTokenRepository(),
         passwordResetTokens = PasswordResetTokenRepository(),
+        emailVerificationTokens = EmailVerificationTokenRepository(),
         tokens = tokenService,
         emailSender = emailSender
     )

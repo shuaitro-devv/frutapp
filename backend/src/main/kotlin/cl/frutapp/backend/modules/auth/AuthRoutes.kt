@@ -7,7 +7,9 @@ import cl.frutapp.shared.dto.LogoutRequest
 import cl.frutapp.shared.dto.MessageResponse
 import cl.frutapp.shared.dto.RefreshRequest
 import cl.frutapp.shared.dto.RegisterRequest
+import cl.frutapp.shared.dto.ResendVerificationRequest
 import cl.frutapp.shared.dto.ResetPasswordRequest
+import cl.frutapp.shared.dto.VerifyEmailRequest
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
 import io.ktor.server.auth.authenticate
@@ -23,7 +25,15 @@ import io.ktor.server.routing.route
 fun Route.authRoutes(authService: AuthService) {
     route("/v1/auth") {
         post("/register") {
-            call.respond(HttpStatusCode.Created, authService.register(call.receive<RegisterRequest>()))
+            authService.register(call.receive<RegisterRequest>())
+            call.respond(HttpStatusCode.Created, MessageResponse("Te enviamos un código de verificación a tu correo."))
+        }
+        post("/verify-email") {
+            call.respond(HttpStatusCode.OK, authService.verifyEmail(call.receive<VerifyEmailRequest>()))
+        }
+        post("/resend-verification") {
+            authService.resendVerification(call.receive<ResendVerificationRequest>())
+            call.respond(HttpStatusCode.OK, MessageResponse("Si tu cuenta está pendiente, reenviamos el código."))
         }
         post("/login") {
             call.respond(HttpStatusCode.OK, authService.login(call.receive<LoginRequest>()))

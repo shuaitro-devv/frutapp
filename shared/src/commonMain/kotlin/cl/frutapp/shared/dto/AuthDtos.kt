@@ -30,6 +30,19 @@ data class LogoutRequest(
     val refreshToken: String
 )
 
+/** Verificar el correo con el código enviado al registrarse. */
+@Serializable
+data class VerifyEmailRequest(
+    val email: String,
+    val code: String
+)
+
+/** Reenviar el código de verificación de correo. */
+@Serializable
+data class ResendVerificationRequest(
+    val email: String
+)
+
 /** Solicitar código de recuperación de contraseña. */
 @Serializable
 data class ForgotPasswordRequest(

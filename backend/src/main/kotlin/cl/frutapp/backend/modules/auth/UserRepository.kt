@@ -17,7 +17,8 @@ data class UserRow(
     val email: String,
     val phone: String?,
     val passwordHash: String,
-    val role: String
+    val role: String,
+    val emailVerified: Boolean
 ) {
     fun toDto() = UserDto(id = id.toString(), name = name, email = email, phone = phone, role = role)
 }
@@ -54,8 +55,17 @@ class UserRepository {
             it[UsersTable.phone] = phone
             it[UsersTable.passwordHash] = passwordHash
             it[UsersTable.role] = role
+            it[UsersTable.emailVerified] = false
         }
-        UserRow(newId, name, email, phone, passwordHash, role)
+        UserRow(newId, name, email, phone, passwordHash, role, emailVerified = false)
+    }
+
+    suspend fun markEmailVerified(userId: UUID) = dbQuery {
+        UsersTable.update({ (UsersTable.id eq userId) and UsersTable.deletedAt.isNull() }) {
+            it[UsersTable.emailVerified] = true
+            it[UsersTable.updatedAt] = Clock.System.now()
+        }
+        Unit
     }
 
     suspend fun updatePassword(userId: UUID, passwordHash: String) = dbQuery {
@@ -72,6 +82,7 @@ class UserRepository {
         email = row[UsersTable.email],
         phone = row[UsersTable.phone],
         passwordHash = row[UsersTable.passwordHash],
-        role = row[UsersTable.role]
+        role = row[UsersTable.role],
+        emailVerified = row[UsersTable.emailVerified]
     )
 }

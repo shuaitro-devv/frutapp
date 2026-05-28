@@ -9,8 +9,10 @@ import cl.frutapp.shared.dto.LoginRequest
 import cl.frutapp.shared.dto.LogoutRequest
 import cl.frutapp.shared.dto.RefreshRequest
 import cl.frutapp.shared.dto.RegisterRequest
+import cl.frutapp.shared.dto.ResendVerificationRequest
 import cl.frutapp.shared.dto.ResetPasswordRequest
 import cl.frutapp.shared.dto.UserDto
+import cl.frutapp.shared.dto.VerifyEmailRequest
 import kotlinx.datetime.Clock
 import org.slf4j.LoggerFactory
 import java.util.UUID
@@ -20,6 +22,7 @@ class AuthService(
     private val users: UserRepository,
     private val refreshTokens: RefreshTokenRepository,
     private val passwordResetTokens: PasswordResetTokenRepository,
+    private val emailVerificationTokens: EmailVerificationTokenRepository,
     private val tokens: TokenService,
     private val emailSender: EmailSender
 ) {
@@ -31,7 +34,9 @@ class AuthService(
             .onFailure { logger.error("No se pudo enviar correo a {}", email.to, it) }
     }
 
-    suspend fun register(req: RegisterRequest): AuthResponse {
+    /** Crea la cuenta SIN activar y envía un código de verificación al correo. No
+     *  entrega tokens: el usuario inicia sesión recién al verificar (ver [verifyEmail]). */
+    suspend fun register(req: RegisterRequest) {
         if (req.name.isBlank()) throw ValidationException("El nombre es obligatorio.")
         val email = normalizeEmail(req.email)
         validatePassword(req.password)
@@ -45,15 +50,45 @@ class AuthService(
             passwordHash = PasswordHasher.hash(req.password),
             role = "CUSTOMER"
         )
+        sendVerificationCode(user)
+    }
+
+    /** Verifica el correo con el código; al lograrlo activa la cuenta, da la bienvenida
+     *  y recién entonces emite los tokens (login efectivo). */
+    suspend fun verifyEmail(req: VerifyEmailRequest): AuthResponse {
+        val email = normalizeEmail(req.email)
+        val user = users.findByEmail(email) ?: throw UnauthorizedException("Código inválido o expirado.")
+        if (user.emailVerified) return issueFor(user)
+        val tokenId = emailVerificationTokens.findValid(user.id, tokens.hashRefreshToken(req.code))
+            ?: throw UnauthorizedException("Código inválido o expirado.")
+        users.markEmailVerified(user.id)
+        emailVerificationTokens.markUsed(tokenId)
         sendSafely(EmailTemplates.welcome(to = user.email, name = user.name.substringBefore(' ')))
         return issueFor(user)
+    }
+
+    /** Reenvía el código de verificación. No revela si el correo existe. */
+    suspend fun resendVerification(req: ResendVerificationRequest) {
+        val email = req.email.trim().lowercase()
+        val user = users.findByEmail(email) ?: return
+        if (user.emailVerified) return
+        sendVerificationCode(user)
     }
 
     suspend fun login(req: LoginRequest): AuthResponse {
         val email = normalizeEmail(req.email)
         val user = users.findByEmail(email) ?: throw UnauthorizedException()
         if (!PasswordHasher.verify(req.password, user.passwordHash)) throw UnauthorizedException()
+        if (!user.emailVerified) throw UnauthorizedException("Verifica tu correo para iniciar sesión.")
         return issueFor(user)
+    }
+
+    /** Genera, guarda (hash) y envía un código de verificación de correo (vence 30 min). */
+    private suspend fun sendVerificationCode(user: UserRow) {
+        emailVerificationTokens.invalidateAllForUser(user.id)
+        val code = tokens.generateNumericCode()
+        emailVerificationTokens.create(user.id, tokens.hashRefreshToken(code), Clock.System.now() + 30.minutes)
+        sendSafely(EmailTemplates.emailVerification(to = user.email, name = user.name.substringBefore(' '), code = code))
     }
 
     /** Rota el refresh token: revoca el presentado y emite uno nuevo. */
