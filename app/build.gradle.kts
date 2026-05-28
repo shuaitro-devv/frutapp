@@ -80,7 +80,8 @@ android {
     }
 
     buildFeatures {
-        compose = true
+        // compose lo maneja el plugin org.jetbrains.compose (Compose Multiplatform),
+        // NO buildFeatures.compose del AGP (que usaría un compose-compiler incompatible con Kotlin 1.9.22)
         buildConfig = true
     }
 
