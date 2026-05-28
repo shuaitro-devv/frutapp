@@ -81,8 +81,19 @@ jobs:
             echo "==> Asegurar red interna 'frutapp' (DB privada)"
             docker network inspect frutapp >/dev/null 2>&1 || docker network create frutapp
 
-            echo "==> Pull nueva imagen backend"
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            echo "==> Pull nueva imagen backend (con reintentos por flakiness de red)"
+            for attempt in 1 2 3 4 5; do
+              if docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest; then
+                echo "Pull exitoso en intento $attempt"
+                break
+              fi
+              if [ "$attempt" -eq 5 ]; then
+                echo "ERROR: pull fallo despues de 5 intentos"
+                exit 1
+              fi
+              echo "Pull intento $attempt fallo (probable network reset). Reintentando en 10s..."
+              sleep 10
+            done
 
             echo "==> Asegurar Postgres FrutApp (si aun no existe)"
             if ! docker ps -a --format '{{.Names}}' | grep -q '^frutapp-postgres$'; then
