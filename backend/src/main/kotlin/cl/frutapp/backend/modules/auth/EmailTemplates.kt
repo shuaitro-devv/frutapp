@@ -3,9 +3,10 @@ package cl.frutapp.backend.modules.auth
 /**
  * Plantillas de correo con la identidad FrutApp.
  *
- * NOMENCLATURA: todo correo se arma con [baseLayout] (header con logo + slogan y footer
- * comunes) + un bloque `content` propio. Para un correo nuevo: escribe su `content` y
- * envuélvelo con [baseLayout]; así todos comparten la misma identidad visual.
+ * NOMENCLATURA: todo correo se arma con [baseLayout] (header con logo y footer comunes)
+ * + un bloque `content` propio. Para un correo nuevo: escribe su `content` (usando
+ * [noticeBox] para los avisos) y envuélvelo con [baseLayout]; así todos comparten la
+ * misma identidad visual.
  *
  * Reglas de HTML para correo: tablas (no flex/grid), estilos inline (Gmail descarta
  * <style>), e imágenes por URL absoluta https. El header lleva un color sólido de
@@ -15,6 +16,25 @@ object EmailTemplates {
 
     private const val LOGO_URL = "https://frutapp.grandline.cl/img/logo-white.png"
     private const val SLOGAN = "De la cosecha a tu mesa"
+
+    fun welcome(to: String, name: String): Email {
+        val subject = "¡Te damos la bienvenida a FrutApp!"
+        val text = buildString {
+            appendLine("¡Hola, $name! Tu cuenta FrutApp ya está lista.")
+            appendLine("Llevamos frutas y verduras frescas de la feria directo a tu mesa.")
+            appendLine("Explora productos frescos, junta FrutCoins y recicla con cada pedido.")
+        }
+        val content = """
+            <h1 style="margin:0 0 12px;color:#27500A;font-size:28px;line-height:1.25;font-weight:800;">
+              ¡Hola, $name!
+            </h1>
+            <p style="margin:0 auto 26px;max-width:400px;color:#4B5563;font-size:16px;line-height:1.55;">
+              Tu cuenta ya está lista. En FrutApp llevamos frutas y verduras frescas de la feria directo a tu mesa.
+            </p>
+            ${noticeBox("¿Qué puedes hacer ahora?", "Explorar productos frescos, juntar FrutCoins en cada compra y reciclar con tus pedidos. ¡Que aproveche!")}
+        """.trimIndent()
+        return Email(to = to, subject = subject, html = baseLayout("Bienvenido a FrutApp", content), text = text)
+    }
 
     fun passwordReset(to: String, code: String): Email {
         val subject = "Tu código para restablecer la contraseña · FrutApp"
@@ -43,26 +63,42 @@ object EmailTemplates {
               Este código vence en <strong style="color:#27500A;">30 minutos</strong>.
             </p>
 
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#F6FBF2;border:1px solid #DDEED3;border-radius:16px;">
-              <tr>
-                <td style="padding:18px 20px;text-align:left;">
-                  <p style="margin:0 0 6px;color:#27500A;font-size:15px;font-weight:700;">Tu seguridad es importante</p>
-                  <p style="margin:0;color:#5F6F5A;font-size:13px;line-height:1.5;">
-                    Si no solicitaste este cambio, puedes ignorar este correo. Tu contraseña actual seguirá funcionando.
-                  </p>
-                </td>
-              </tr>
-            </table>
+            ${noticeBox("Tu seguridad es importante", "Si no solicitaste este cambio, puedes ignorar este correo. Tu contraseña actual seguirá funcionando.")}
         """.trimIndent()
-        return Email(
-            to = to,
-            subject = subject,
-            html = baseLayout("Restablece tu contraseña - FrutApp", content),
-            text = text
-        )
+        return Email(to = to, subject = subject, html = baseLayout("Restablece tu contraseña - FrutApp", content), text = text)
     }
 
-    /** Envoltorio común (header con logo + slogan, slot de contenido y footer). */
+    fun passwordChanged(to: String, name: String): Email {
+        val subject = "Tu contraseña fue actualizada · FrutApp"
+        val text = buildString {
+            appendLine("Hola $name, te confirmamos que la contraseña de tu cuenta FrutApp se cambió correctamente.")
+            appendLine("Si no fuiste tú, contáctanos de inmediato para proteger tu cuenta.")
+        }
+        val content = """
+            <h1 style="margin:0 0 12px;color:#27500A;font-size:28px;line-height:1.25;font-weight:800;">
+              Tu contraseña fue actualizada
+            </h1>
+            <p style="margin:0 auto 26px;max-width:400px;color:#4B5563;font-size:16px;line-height:1.55;">
+              Hola $name, te confirmamos que la contraseña de tu cuenta se cambió correctamente.
+            </p>
+            ${noticeBox("¿No fuiste tú?", "Si no realizaste este cambio, contáctanos de inmediato para proteger tu cuenta.")}
+        """.trimIndent()
+        return Email(to = to, subject = subject, html = baseLayout("Contraseña actualizada - FrutApp", content), text = text)
+    }
+
+    /** Caja de aviso reutilizable (verde suave) para destacar un mensaje dentro del content. */
+    private fun noticeBox(title: String, body: String): String = """
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#F6FBF2;border:1px solid #DDEED3;border-radius:16px;">
+          <tr>
+            <td style="padding:18px 20px;text-align:left;">
+              <p style="margin:0 0 6px;color:#27500A;font-size:15px;font-weight:700;">$title</p>
+              <p style="margin:0;color:#5F6F5A;font-size:13px;line-height:1.5;">$body</p>
+            </td>
+          </tr>
+        </table>
+    """.trimIndent()
+
+    /** Envoltorio común (header con logo, slot de contenido y footer). */
     private fun baseLayout(title: String, content: String): String = """
         <!DOCTYPE html>
         <html lang="es">
@@ -78,9 +114,8 @@ object EmailTemplates {
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;background-color:#FFFFFF;border-radius:22px;overflow:hidden;box-shadow:0 12px 32px rgba(22,101,52,0.12);">
 
                   <tr>
-                    <td align="center" style="background-color:#27500A;background:linear-gradient(135deg,#27500A,#4C8A1F);padding:34px 28px 28px;">
-                      <img src="$LOGO_URL" alt="FrutApp" width="180" style="display:block;max-width:180px;margin:0 auto 14px;" />
-                      <p style="margin:0;color:#EAF7E4;font-size:14px;letter-spacing:0.3px;">$SLOGAN</p>
+                    <td align="center" style="background-color:#27500A;background:linear-gradient(135deg,#27500A,#4C8A1F);padding:32px 28px;">
+                      <img src="$LOGO_URL" alt="FrutApp" width="180" style="display:block;max-width:180px;margin:0 auto;" />
                     </td>
                   </tr>
 

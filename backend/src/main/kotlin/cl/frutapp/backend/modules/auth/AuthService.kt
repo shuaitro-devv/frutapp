@@ -12,6 +12,7 @@ import cl.frutapp.shared.dto.RegisterRequest
 import cl.frutapp.shared.dto.ResetPasswordRequest
 import cl.frutapp.shared.dto.UserDto
 import kotlinx.datetime.Clock
+import org.slf4j.LoggerFactory
 import java.util.UUID
 import kotlin.time.Duration.Companion.minutes
 
@@ -22,6 +23,13 @@ class AuthService(
     private val tokens: TokenService,
     private val emailSender: EmailSender
 ) {
+    private val logger = LoggerFactory.getLogger(AuthService::class.java)
+
+    /** Envía un correo sin tumbar el flujo principal si el proveedor falla. */
+    private suspend fun sendSafely(email: Email) {
+        runCatching { emailSender.send(email) }
+            .onFailure { logger.error("No se pudo enviar correo a {}", email.to, it) }
+    }
 
     suspend fun register(req: RegisterRequest): AuthResponse {
         if (req.name.isBlank()) throw ValidationException("El nombre es obligatorio.")
@@ -37,6 +45,7 @@ class AuthService(
             passwordHash = PasswordHasher.hash(req.password),
             role = "CUSTOMER"
         )
+        sendSafely(EmailTemplates.welcome(to = user.email, name = user.name.substringBefore(' ')))
         return issueFor(user)
     }
 
@@ -74,7 +83,7 @@ class AuthService(
         passwordResetTokens.invalidateAllForUser(user.id)
         val code = tokens.generateNumericCode()
         passwordResetTokens.create(user.id, tokens.hashRefreshToken(code), Clock.System.now() + 30.minutes)
-        emailSender.send(EmailTemplates.passwordReset(to = user.email, code = code))
+        sendSafely(EmailTemplates.passwordReset(to = user.email, code = code))
     }
 
     /** Cambia la contraseña validando el código; invalida el código y cierra sesiones. */
@@ -87,6 +96,7 @@ class AuthService(
         users.updatePassword(user.id, PasswordHasher.hash(req.newPassword))
         passwordResetTokens.markUsed(tokenId)
         refreshTokens.revokeAllForUser(user.id)
+        sendSafely(EmailTemplates.passwordChanged(to = user.email, name = user.name.substringBefore(' ')))
     }
 
     private suspend fun issueFor(user: UserRow): AuthResponse {
