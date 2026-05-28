@@ -10,9 +10,6 @@ version = "0.1.0"
 
 application {
     mainClass.set("cl.frutapp.backend.ApplicationKt")
-    applicationDefaultJvmArgs = listOf(
-        "-Dio.ktor.development=${extra["io.ktor.development"] ?: "false"}"
-    )
 }
 
 repositories {
@@ -20,7 +17,7 @@ repositories {
 }
 
 dependencies {
-    implementation(projects.shared)
+    implementation(project(":shared"))
 
     // Ktor server
     implementation(libs.ktor.server.core)
