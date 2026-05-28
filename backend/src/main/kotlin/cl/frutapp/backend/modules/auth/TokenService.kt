@@ -51,10 +51,16 @@ class TokenService(private val config: JwtConfig) {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
     }
 
-    /** Hash determinista (SHA-256 hex) del refresh token, lo único que se persiste. */
+    /** Hash determinista (SHA-256 hex) de un token/código, lo único que se persiste. */
     fun hashRefreshToken(token: String): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(token.toByteArray())
         return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    /** Código numérico aleatorio (para recuperación de contraseña / verificación). */
+    fun generateNumericCode(length: Int = 6): String {
+        val rnd = SecureRandom()
+        return buildString { repeat(length) { append(rnd.nextInt(10)) } }
     }
 
     fun refreshExpiry(): Instant = Clock.System.now() + config.refreshTtlDays.days

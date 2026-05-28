@@ -1,10 +1,13 @@
 package cl.frutapp.backend.modules.auth
 
 import cl.frutapp.backend.plugins.JWT_AUTH
+import cl.frutapp.shared.dto.ForgotPasswordRequest
 import cl.frutapp.shared.dto.LoginRequest
 import cl.frutapp.shared.dto.LogoutRequest
+import cl.frutapp.shared.dto.MessageResponse
 import cl.frutapp.shared.dto.RefreshRequest
 import cl.frutapp.shared.dto.RegisterRequest
+import cl.frutapp.shared.dto.ResetPasswordRequest
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
 import io.ktor.server.auth.authenticate
@@ -31,6 +34,14 @@ fun Route.authRoutes(authService: AuthService) {
         post("/logout") {
             authService.logout(call.receive<LogoutRequest>())
             call.respond(HttpStatusCode.NoContent)
+        }
+        post("/forgot-password") {
+            authService.forgotPassword(call.receive<ForgotPasswordRequest>())
+            call.respond(HttpStatusCode.OK, MessageResponse("Si el correo está registrado, te enviamos un código."))
+        }
+        post("/reset-password") {
+            authService.resetPassword(call.receive<ResetPasswordRequest>())
+            call.respond(HttpStatusCode.OK, MessageResponse("Contraseña actualizada. Ya puedes iniciar sesión."))
         }
         authenticate(JWT_AUTH) {
             get("/me") {

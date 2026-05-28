@@ -27,3 +27,14 @@ object RefreshTokensTable : Table("refresh_token") {
     val createdAt = timestamp("created_at")
     override val primaryKey = PrimaryKey(id)
 }
+
+/** Códigos de recuperación de contraseña: se guarda solo el hash del código. */
+object PasswordResetTokensTable : Table("password_reset_token") {
+    val id = uuid("id")
+    val userId = uuid("user_id")
+    val codeHash = text("code_hash")
+    val expiresAt = timestamp("expires_at")
+    val usedAt = timestamp("used_at").nullable()
+    val createdAt = timestamp("created_at")
+    override val primaryKey = PrimaryKey(id)
+}

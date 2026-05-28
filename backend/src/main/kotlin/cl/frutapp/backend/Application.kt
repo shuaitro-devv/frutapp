@@ -1,8 +1,13 @@
 package cl.frutapp.backend
 
 import cl.frutapp.backend.config.JwtConfig
+import cl.frutapp.backend.config.MailConfig
 import cl.frutapp.backend.modules.auth.AuthService
+import cl.frutapp.backend.modules.auth.EmailSender
+import cl.frutapp.backend.modules.auth.LogEmailSender
+import cl.frutapp.backend.modules.auth.PasswordResetTokenRepository
 import cl.frutapp.backend.modules.auth.RefreshTokenRepository
+import cl.frutapp.backend.modules.auth.ResendEmailSender
 import cl.frutapp.backend.modules.auth.TokenService
 import cl.frutapp.backend.modules.auth.UserRepository
 import cl.frutapp.backend.modules.catalog.CatalogRepository
@@ -34,8 +39,23 @@ fun Application.module() {
     configureMonitoring()
     configureDatabases()
 
+    val mailConfig = MailConfig.from(environment.config)
+    val emailSender: EmailSender = if (mailConfig.enabled) {
+        environment.log.info("Correo: Resend habilitado (from={})", mailConfig.from)
+        ResendEmailSender(mailConfig.resendApiKey, mailConfig.from)
+    } else {
+        environment.log.info("Correo: modo demo (LogEmailSender). Define RESEND_API_KEY para enviar de verdad.")
+        LogEmailSender()
+    }
+
     val tokenService = TokenService(jwtConfig)
-    val authService = AuthService(UserRepository(), RefreshTokenRepository(), tokenService)
+    val authService = AuthService(
+        users = UserRepository(),
+        refreshTokens = RefreshTokenRepository(),
+        passwordResetTokens = PasswordResetTokenRepository(),
+        tokens = tokenService,
+        emailSender = emailSender
+    )
     val catalogService = CatalogService(CatalogRepository())
 
     configureSecurity(jwtConfig, tokenService)

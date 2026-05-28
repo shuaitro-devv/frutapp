@@ -30,6 +30,26 @@ data class LogoutRequest(
     val refreshToken: String
 )
 
+/** Solicitar código de recuperación de contraseña. */
+@Serializable
+data class ForgotPasswordRequest(
+    val email: String
+)
+
+/** Restablecer la contraseña con el código recibido por correo. */
+@Serializable
+data class ResetPasswordRequest(
+    val email: String,
+    val code: String,
+    val newPassword: String
+)
+
+/** Respuesta simple de operaciones sin payload (ej. forgot-password). */
+@Serializable
+data class MessageResponse(
+    val message: String
+)
+
 /** Vista pública de un usuario (nunca expone el hash). */
 @Serializable
 data class UserDto(

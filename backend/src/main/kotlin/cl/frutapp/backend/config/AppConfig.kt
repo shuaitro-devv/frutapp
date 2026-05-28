@@ -28,6 +28,30 @@ data class DbConfig(
     }
 }
 
+/**
+ * Config de correo (Resend). La API key se inyecta por env (RESEND_API_KEY); nunca va
+ * en código. Si la key viene vacía, el backend usa LogEmailSender (modo demo, sin envío).
+ *
+ * `from` por defecto usa el remitente de prueba de Resend (onboarding@resend.dev), que
+ * SOLO entrega al correo dueño de la cuenta. Al verificar un dominio se setea MAIL_FROM
+ * (p.ej. "FrutApp <no-reply@send.grandline.cl>") y entrega a cualquier destinatario.
+ */
+data class MailConfig(
+    val resendApiKey: String,
+    val from: String
+) {
+    val enabled: Boolean get() = resendApiKey.isNotBlank()
+
+    companion object {
+        private const val DEFAULT_FROM = "FrutApp <onboarding@resend.dev>"
+
+        fun from(config: ApplicationConfig) = MailConfig(
+            resendApiKey = config.propertyOrNull("mail.resendApiKey")?.getString().orEmpty(),
+            from = config.propertyOrNull("mail.from")?.getString()?.ifBlank { DEFAULT_FROM } ?: DEFAULT_FROM
+        )
+    }
+}
+
 /** Config de JWT (firma, claims y TTLs). El secret se inyecta por env en producción. */
 data class JwtConfig(
     val secret: String,

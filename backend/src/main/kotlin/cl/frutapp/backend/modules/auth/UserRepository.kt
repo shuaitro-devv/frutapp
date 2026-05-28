@@ -2,10 +2,12 @@ package cl.frutapp.backend.modules.auth
 
 import cl.frutapp.backend.db.dbQuery
 import cl.frutapp.shared.dto.UserDto
+import kotlinx.datetime.Clock
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.update
 import java.util.UUID
 
 /** Fila de usuario en memoria (incluye el hash, que nunca sale al cliente). */
@@ -54,6 +56,14 @@ class UserRepository {
             it[UsersTable.role] = role
         }
         UserRow(newId, name, email, phone, passwordHash, role)
+    }
+
+    suspend fun updatePassword(userId: UUID, passwordHash: String) = dbQuery {
+        UsersTable.update({ (UsersTable.id eq userId) and UsersTable.deletedAt.isNull() }) {
+            it[UsersTable.passwordHash] = passwordHash
+            it[UsersTable.updatedAt] = Clock.System.now()
+        }
+        Unit
     }
 
     private fun toRow(row: ResultRow) = UserRow(

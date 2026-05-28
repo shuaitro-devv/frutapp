@@ -128,6 +128,8 @@ jobs:
               -e DB_USER=frutapp \
               -e DB_PASSWORD='${{ secrets.POSTGRES_PASSWORD }}' \
               -e JWT_SECRET='${{ secrets.JWT_SECRET }}' \
+              -e RESEND_API_KEY='${{ secrets.RESEND_API_KEY }}' \
+              -e MAIL_FROM='FrutApp <no-reply@frutapp.grandline.cl>' \
               --label "traefik.enable=true" \
               --label "traefik.http.routers.frutapp-backend.rule=Host(\`frutapp-api.grandline.cl\`)" \
               --label "traefik.http.routers.frutapp-backend.entrypoints=websecure" \

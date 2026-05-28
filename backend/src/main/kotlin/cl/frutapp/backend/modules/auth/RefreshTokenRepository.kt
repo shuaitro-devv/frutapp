@@ -50,4 +50,13 @@ class RefreshTokenRepository {
             it[revokedAt] = Clock.System.now()
         }
     }
+
+    /** Revoca todas las sesiones del usuario (ej. tras cambiar la contraseña). */
+    suspend fun revokeAllForUser(userId: UUID): Int = dbQuery {
+        RefreshTokensTable.update({
+            (RefreshTokensTable.userId eq userId) and RefreshTokensTable.revokedAt.isNull()
+        }) {
+            it[revokedAt] = Clock.System.now()
+        }
+    }
 }

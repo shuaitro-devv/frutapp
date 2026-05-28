@@ -4,17 +4,23 @@ import cl.frutapp.backend.error.ConflictException
 import cl.frutapp.backend.error.UnauthorizedException
 import cl.frutapp.backend.error.ValidationException
 import cl.frutapp.shared.dto.AuthResponse
+import cl.frutapp.shared.dto.ForgotPasswordRequest
 import cl.frutapp.shared.dto.LoginRequest
 import cl.frutapp.shared.dto.LogoutRequest
 import cl.frutapp.shared.dto.RefreshRequest
 import cl.frutapp.shared.dto.RegisterRequest
+import cl.frutapp.shared.dto.ResetPasswordRequest
 import cl.frutapp.shared.dto.UserDto
+import kotlinx.datetime.Clock
 import java.util.UUID
+import kotlin.time.Duration.Companion.minutes
 
 class AuthService(
     private val users: UserRepository,
     private val refreshTokens: RefreshTokenRepository,
-    private val tokens: TokenService
+    private val passwordResetTokens: PasswordResetTokenRepository,
+    private val tokens: TokenService,
+    private val emailSender: EmailSender
 ) {
 
     suspend fun register(req: RegisterRequest): AuthResponse {
@@ -59,6 +65,28 @@ class AuthService(
     suspend fun me(userId: String): UserDto {
         val uuid = runCatching { UUID.fromString(userId) }.getOrNull() ?: throw UnauthorizedException()
         return (users.findById(uuid) ?: throw UnauthorizedException()).toDto()
+    }
+
+    /** Genera y "envía" un código de recuperación. No revela si el correo existe. */
+    suspend fun forgotPassword(req: ForgotPasswordRequest) {
+        val email = req.email.trim().lowercase()
+        val user = users.findByEmail(email) ?: return
+        passwordResetTokens.invalidateAllForUser(user.id)
+        val code = tokens.generateNumericCode()
+        passwordResetTokens.create(user.id, tokens.hashRefreshToken(code), Clock.System.now() + 30.minutes)
+        emailSender.send(EmailTemplates.passwordReset(to = user.email, code = code))
+    }
+
+    /** Cambia la contraseña validando el código; invalida el código y cierra sesiones. */
+    suspend fun resetPassword(req: ResetPasswordRequest) {
+        val email = normalizeEmail(req.email)
+        validatePassword(req.newPassword)
+        val user = users.findByEmail(email) ?: throw UnauthorizedException("Código inválido o expirado.")
+        val tokenId = passwordResetTokens.findValid(user.id, tokens.hashRefreshToken(req.code))
+            ?: throw UnauthorizedException("Código inválido o expirado.")
+        users.updatePassword(user.id, PasswordHasher.hash(req.newPassword))
+        passwordResetTokens.markUsed(tokenId)
+        refreshTokens.revokeAllForUser(user.id)
     }
 
     private suspend fun issueFor(user: UserRow): AuthResponse {

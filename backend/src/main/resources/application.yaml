@@ -19,6 +19,12 @@ db:
   password: "$DB_PASSWORD:frutapp"
   maxPoolSize: "$DB_MAX_POOL_SIZE:5"
 
+# Correo (Resend). RESEND_API_KEY se inyecta por env / GitHub secret; vacío => modo demo
+# (LogEmailSender, sin envío real). MAIL_FROM debe usar el dominio verificado en Resend.
+mail:
+  resendApiKey: "$RESEND_API_KEY:"
+  from: "$MAIL_FROM:FrutApp <onboarding@resend.dev>"
+
 jwt:
   secret: "$JWT_SECRET:dev-insecure-secret-cambiar-en-produccion"
   issuer: "$JWT_ISSUER:frutapp-api"
