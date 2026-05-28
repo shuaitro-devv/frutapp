@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.data.remote.AuthApi
 import cl.frutapp.app.ui.components.AuthHeaderText
 import cl.frutapp.app.ui.components.AuthScaffold
@@ -138,9 +137,8 @@ class RegisterScreen : Screen {
                                 )
                             )
                         }
-                            .onSuccess { resp ->
-                                TokenStore.save(resp.accessToken, resp.refreshToken, resp.user)
-                                navigator.push(VerifyCodeScreen(email = email.trim().ifBlank { "correo@ejemplo.com" }))
+                            .onSuccess {
+                                navigator.push(VerifyCodeScreen(email = email.trim()))
                             }
                             .onFailure {
                                 error = "No pudimos crear la cuenta. Revisa el correo (puede estar registrado) y la contraseña (mín. 6, con letras y números)."

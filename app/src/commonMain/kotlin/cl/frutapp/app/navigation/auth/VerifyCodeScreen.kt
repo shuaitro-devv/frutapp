@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,8 +31,13 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.TokenStore
+import cl.frutapp.app.data.remote.AuthApi
 import cl.frutapp.app.navigation.home.HomeScreen
 import cl.frutapp.app.ui.components.AuthHeaderText
+import cl.frutapp.shared.dto.ResendVerificationRequest
+import cl.frutapp.shared.dto.VerifyEmailRequest
+import kotlinx.coroutines.launch
 import cl.frutapp.app.ui.components.AuthScaffold
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
@@ -44,7 +50,10 @@ class VerifyCodeScreen(private val email: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val scope = rememberCoroutineScope()
         var code by remember { mutableStateOf("") }
+        var loading by remember { mutableStateOf(false) }
+        var error by remember { mutableStateOf<String?>(null) }
         var seconds by remember { mutableStateOf(45) }
         // Incrementar este trigger relanza el LaunchedEffect y reinicia el countdown
         // (con key=Unit el efecto no se relanzaba y "Reenviar" dejaba el contador congelado).
@@ -96,7 +105,10 @@ class VerifyCodeScreen(private val email: String) : Screen {
                         color = FrutAppColors.Brand600,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable { resendTrigger += 1 }
+                        modifier = Modifier.clickable {
+                            resendTrigger += 1
+                            scope.launch { runCatching { AuthApi().resendVerification(ResendVerificationRequest(email = email)) } }
+                        }
                     )
                 }
             }
@@ -111,10 +123,26 @@ class VerifyCodeScreen(private val email: String) : Screen {
                 }
             }
 
+            if (error != null) {
+                Text(error!!, color = FrutAppColors.Error, fontSize = 13.sp, modifier = Modifier.padding(top = 14.dp))
+            }
+
             FrutButtonPrimary(
-                text = "Verificar código",
-                onClick = { navigator.replaceAll(HomeScreen()) },
-                enabled = code.length == 6,
+                text = if (loading) "Verificando…" else "Verificar código",
+                onClick = {
+                    error = null
+                    loading = true
+                    scope.launch {
+                        runCatching { AuthApi().verifyEmail(VerifyEmailRequest(email = email, code = code)) }
+                            .onSuccess { resp ->
+                                TokenStore.save(resp.accessToken, resp.refreshToken, resp.user)
+                                navigator.replaceAll(HomeScreen())
+                            }
+                            .onFailure { error = "Código inválido o expirado. Revisa tu correo o reenvíalo." }
+                        loading = false
+                    }
+                },
+                enabled = code.length == 6 && !loading,
                 modifier = Modifier.padding(top = 20.dp)
             )
             FrutButtonOutline(
