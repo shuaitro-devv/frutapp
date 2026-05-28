@@ -70,3 +70,10 @@ ktor {
         archiveFileName.set("frutapp-backend.jar")
     }
 }
+
+// El fat jar de Ktor usa Shadow. Sin esto, Shadow PISA los META-INF/services en vez
+// de concatenarlos y Flyway pierde su resolver de migraciones SQL (el .sql "se detecta
+// pero no corre"). mergeServiceFiles() concatena los SPI de flyway-core + postgresql.
+tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
+    mergeServiceFiles()
+}
