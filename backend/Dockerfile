@@ -3,15 +3,19 @@
 FROM gradle:8.5-jdk17-alpine AS builder
 WORKDIR /app
 
-# Copiar archivos del monorepo necesarios para resolver dependencias
-COPY settings.gradle.kts gradle.properties ./
+# Copiar archivos del monorepo necesarios para resolver dependencias.
+# OJO: NO copiamos `app/` porque requiere Android SDK. El backend solo necesita shared + backend.
+COPY gradle.properties ./
 COPY build.gradle.kts ./
 COPY gradle/ ./gradle/
 COPY shared/ ./shared/
 COPY backend/ ./backend/
 
-# Construir fat jar
-RUN gradle :backend:buildFatJar --no-daemon
+# Usar el settings reducido (sin :app) para que Gradle no intente resolver Android plugin
+COPY backend/settings.backend.gradle.kts ./settings.gradle.kts
+
+# Construir fat jar — el plugin Ktor lo nombra "frutapp-backend.jar" según build.gradle.kts
+RUN gradle :backend:buildFatJar --no-daemon --stacktrace
 
 # === Stage 2: runtime ===
 FROM eclipse-temurin:17-jre-alpine AS runner
