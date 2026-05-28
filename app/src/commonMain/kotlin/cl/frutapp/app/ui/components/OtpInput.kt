@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -39,6 +40,8 @@ fun OtpInput(
         onValueChange = { new -> onValueChange(new.filter { it.isDigit() }.take(length)) },
         modifier = modifier.fillMaxWidth(),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        // El campo real es invisible (se dibuja como casillas); ocultamos su cursor.
+        cursorBrush = SolidColor(Color.Transparent),
         decorationBox = {
             Row(
                 modifier = Modifier.fillMaxWidth(),

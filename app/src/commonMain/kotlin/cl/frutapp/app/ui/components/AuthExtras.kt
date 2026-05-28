@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,14 +45,14 @@ fun AuthHeaderText(title: String, subtitle: String, modifier: Modifier = Modifie
 @Composable
 fun OrDivider(text: String = "o continúa con", modifier: Modifier = Modifier) {
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Divider(modifier = Modifier.weight(1f), color = FrutAppColors.Brand100)
+        HorizontalDivider(modifier = Modifier.weight(1f), color = FrutAppColors.Brand100)
         Text(
             text = text,
             color = FrutAppColors.InkMuted,
             fontSize = 13.sp,
             modifier = Modifier.padding(horizontal = 12.dp)
         )
-        Divider(modifier = Modifier.weight(1f), color = FrutAppColors.Brand100)
+        HorizontalDivider(modifier = Modifier.weight(1f), color = FrutAppColors.Brand100)
     }
 }
 

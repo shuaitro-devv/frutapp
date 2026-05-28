@@ -46,8 +46,12 @@ class VerifyCodeScreen(private val email: String) : Screen {
         val navigator = LocalNavigator.currentOrThrow
         var code by remember { mutableStateOf("") }
         var seconds by remember { mutableStateOf(45) }
+        // Incrementar este trigger relanza el LaunchedEffect y reinicia el countdown
+        // (con key=Unit el efecto no se relanzaba y "Reenviar" dejaba el contador congelado).
+        var resendTrigger by remember { mutableStateOf(0) }
 
-        LaunchedEffect(Unit) {
+        LaunchedEffect(resendTrigger) {
+            seconds = 45
             while (seconds > 0) {
                 delay(1000)
                 seconds -= 1
@@ -92,7 +96,7 @@ class VerifyCodeScreen(private val email: String) : Screen {
                         color = FrutAppColors.Brand600,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable { seconds = 45 }
+                        modifier = Modifier.clickable { resendTrigger += 1 }
                     )
                 }
             }
