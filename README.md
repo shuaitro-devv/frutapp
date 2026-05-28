@@ -2,7 +2,7 @@
 
 Monorepo Kotlin con:
 - **`shared/`** — data classes, sealed events, DTOs compartidos entre app y backend
-- **`backend/`** — API Ktor + Postgres (deploy en `api.frutapp.grandline.cl`)
+- **`backend/`** — API Ktor + Postgres (deploy en `frutapp-api.grandline.cl`)
 - **`app/`** — App móvil Kotlin Multiplatform + Compose Multiplatform (Android primero, iOS-ready)
 
 ## Stack
@@ -61,7 +61,7 @@ curl http://localhost:8080/v1/health
 
 ## Deploy
 
-El backend se despliega automáticamente a Contabo (`api.frutapp.grandline.cl`) al hacer push a `main` vía GitHub Actions.
+El backend se despliega automáticamente a Contabo (`frutapp-api.grandline.cl`) al hacer push a `main` vía GitHub Actions.
 
 ## Licencia
 

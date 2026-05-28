@@ -74,7 +74,7 @@ android {
         }
         release {
             isMinifyEnabled = false
-            buildConfigField("String", "API_BASE_URL", "\"https://api.frutapp.grandline.cl\"")
+            buildConfigField("String", "API_BASE_URL", "\"https://frutapp-api.grandline.cl\"")
             // signingConfig se configura al firmar para release
         }
     }
