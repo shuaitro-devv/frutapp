@@ -1,0 +1,5 @@
+# Copia este archivo a `local.properties` y ajusta los paths según tu máquina.
+# `local.properties` NO se commitea (está en .gitignore).
+
+# Ruta al Android SDK (Android Studio lo configura automáticamente al abrir el proyecto)
+# sdk.dir=C:\\Users\\TU_USUARIO\\AppData\\Local\\Android\\Sdk

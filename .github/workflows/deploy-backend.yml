@@ -1,0 +1,151 @@
+name: Deploy Backend to Production
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - 'shared/**'
+      - 'gradle/**'
+      - 'settings.gradle.kts'
+      - 'build.gradle.kts'
+      - 'gradle.properties'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}-backend
+  CONTAINER_NAME: frutapp-backend
+  HOST_RULE: api.frutapp.grandline.cl
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            set -e
+
+            echo "==> Login a GHCR"
+            echo ${{ secrets.GHCR_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            echo "==> Asegurar red docker 'web' (Traefik)"
+            docker network inspect web >/dev/null 2>&1 || docker network create web
+
+            echo "==> Asegurar red interna 'frutapp' (DB privada)"
+            docker network inspect frutapp >/dev/null 2>&1 || docker network create frutapp
+
+            echo "==> Pull nueva imagen backend"
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+            echo "==> Asegurar Postgres FrutApp (si aun no existe)"
+            if ! docker ps -a --format '{{.Names}}' | grep -q '^frutapp-postgres$'; then
+              docker run -d \
+                --name frutapp-postgres \
+                --restart unless-stopped \
+                --network frutapp \
+                -e POSTGRES_DB=frutapp \
+                -e POSTGRES_USER=frutapp \
+                -e POSTGRES_PASSWORD='${{ secrets.POSTGRES_PASSWORD }}' \
+                -v frutapp-postgres-data:/var/lib/postgresql/data \
+                postgres:16-alpine
+              echo "Postgres creado. Esperando 10s a que arranque..."
+              sleep 10
+            else
+              echo "Postgres ya existe, OK."
+            fi
+
+            echo "==> Parar y eliminar backend anterior"
+            docker stop frutapp-backend 2>/dev/null || true
+            docker rm frutapp-backend 2>/dev/null || true
+
+            echo "==> Lanzar nuevo backend"
+            docker run -d \
+              --name frutapp-backend \
+              --restart unless-stopped \
+              --network web \
+              -e APP_ENV=production \
+              -e DB_HOST=frutapp-postgres \
+              -e DB_PORT=5432 \
+              -e DB_NAME=frutapp \
+              -e DB_USER=frutapp \
+              -e DB_PASSWORD='${{ secrets.POSTGRES_PASSWORD }}' \
+              --label "traefik.enable=true" \
+              --label "traefik.http.routers.frutapp-backend.rule=Host(\`api.frutapp.grandline.cl\`)" \
+              --label "traefik.http.routers.frutapp-backend.entrypoints=websecure" \
+              --label "traefik.http.routers.frutapp-backend.tls.certresolver=letsencrypt" \
+              --label "traefik.http.services.frutapp-backend.loadbalancer.server.port=8080" \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+            echo "==> Conectar backend a red frutapp (para acceder a Postgres)"
+            docker network connect frutapp frutapp-backend
+
+            echo "==> Estado del contenedor"
+            docker ps --filter "name=frutapp-backend" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+            echo "==> Limpiar imagenes viejas"
+            docker image prune -f
+
+      - name: Verify deployment
+        if: always()
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            echo "==> docker ps -a (frutapp)"
+            docker ps -a --filter "name=frutapp" --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"
+
+            echo ""
+            echo "==> Esperar 10s para que arranque"
+            sleep 10
+
+            echo ""
+            echo "==> Logs del backend (ultimas 40 lineas)"
+            docker logs frutapp-backend --tail 40 2>&1 || echo "Container frutapp-backend no existe."

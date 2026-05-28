@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: frutapp-postgres-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: frutapp
+      POSTGRES_USER: frutapp
+      POSTGRES_PASSWORD: frutapp_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U frutapp -d frutapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # MinIO se agregará en Sprint 2+ cuando soportemos fotos
+  # minio:
+  #   image: minio/minio:latest
+  #   ...
