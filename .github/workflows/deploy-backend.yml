@@ -18,7 +18,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}-backend
   CONTAINER_NAME: frutapp-backend
-  HOST_RULE: api.frutapp.grandline.cl
+  HOST_RULE: frutapp-api.grandline.cl
 
 jobs:
   build-and-deploy:
@@ -128,7 +128,7 @@ jobs:
               -e DB_USER=frutapp \
               -e DB_PASSWORD='${{ secrets.POSTGRES_PASSWORD }}' \
               --label "traefik.enable=true" \
-              --label "traefik.http.routers.frutapp-backend.rule=Host(\`api.frutapp.grandline.cl\`)" \
+              --label "traefik.http.routers.frutapp-backend.rule=Host(\`frutapp-api.grandline.cl\`)" \
               --label "traefik.http.routers.frutapp-backend.entrypoints=websecure" \
               --label "traefik.http.routers.frutapp-backend.tls.certresolver=letsencrypt" \
               --label "traefik.http.services.frutapp-backend.loadbalancer.server.port=8080" \
