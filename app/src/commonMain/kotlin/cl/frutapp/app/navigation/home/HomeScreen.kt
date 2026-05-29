@@ -293,10 +293,12 @@ private fun HeroCarousel(onOfertas: () -> Unit, onFrutCoins: () -> Unit, modifie
         )
     }
     val realCount = slides.size
-    // Carrusel infinito: muchas páginas virtuales, arrancando en el medio (múltiplo de
-    // realCount para que la 1ra página sea el slide 0). page % realCount = slide real.
-    val startPage = remember(realCount) { val mid = Int.MAX_VALUE / 2; mid - (mid % realCount) }
-    val pagerState = rememberPagerState(initialPage = startPage, pageCount = { Int.MAX_VALUE })
+    // Carrusel "infinito": muchas páginas virtuales pero ACOTADAS (no Int.MAX_VALUE, que
+    // desborda el cálculo de offset del pager y cuelga la app). Arranca en el medio y
+    // mapea page % realCount = slide real.
+    val loops = 1000
+    val startPage = remember(realCount) { realCount * (loops / 2) }
+    val pagerState = rememberPagerState(initialPage = startPage, pageCount = { realCount * loops })
     // Auto-avance infinito (siempre hacia adelante, sin salto al volver al primero)
     LaunchedEffect(pagerState) {
         while (true) {
