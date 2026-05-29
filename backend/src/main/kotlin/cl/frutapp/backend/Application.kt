@@ -25,6 +25,8 @@ import cl.frutapp.backend.plugins.configureSerialization
 import cl.frutapp.backend.plugins.configureStatusPages
 import io.ktor.server.application.Application
 import io.ktor.server.netty.EngineMain
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Entrada principal del backend FrutApp.
@@ -67,4 +69,18 @@ fun Application.module() {
 
     configureSecurity(jwtConfig, tokenService)
     configureRouting(authService, catalogService, orderService)
+
+    // Demo: auto-avance de pedidos (gated por env DEMO_AUTO_ADVANCE). En producción real = false.
+    val demoAutoAdvance = environment.config.propertyOrNull("demo.autoAdvance")?.getString().toBoolean()
+    if (demoAutoAdvance) {
+        val seconds = environment.config.propertyOrNull("demo.autoAdvanceSeconds")?.getString()?.toLongOrNull() ?: 45L
+        environment.log.info("Demo: auto-avance de pedidos ACTIVADO (cada {}s)", seconds)
+        launch {
+            while (true) {
+                delay(seconds * 1000)
+                runCatching { orderService.autoAdvanceAll() }
+                    .onFailure { environment.log.warn("Auto-avance demo falló", it) }
+            }
+        }
+    }
 }

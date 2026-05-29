@@ -189,6 +189,15 @@ class OrderRepository {
             ?.let { OrderStatus.parse(it[OrdersTable.status]) }
     }
 
+    /** Pedidos activos (no borrados) con su estado, para el auto-avance de demo. */
+    suspend fun listActive(): List<Pair<UUID, OrderStatus>> = dbQuery {
+        OrdersTable.select { OrdersTable.deletedAt.isNull() }
+            .mapNotNull { row ->
+                val st = OrderStatus.parse(row[OrdersTable.status]) ?: return@mapNotNull null
+                row[OrdersTable.id] to st
+            }
+    }
+
     suspend fun applyTransition(
         id: UUID,
         from: OrderStatus,

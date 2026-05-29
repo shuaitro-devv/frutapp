@@ -25,6 +25,11 @@ mail:
   resendApiKey: "$RESEND_API_KEY:"
   from: "$MAIL_FROM:FrutApp <onboarding@resend.dev>"
 
+# Demo: auto-avance de pedidos por el camino feliz (solo QA/demo; en producción real = false).
+demo:
+  autoAdvance: "$DEMO_AUTO_ADVANCE:false"
+  autoAdvanceSeconds: "$DEMO_AUTO_ADVANCE_SECONDS:45"
+
 jwt:
   secret: "$JWT_SECRET:dev-insecure-secret-cambiar-en-produccion"
   issuer: "$JWT_ISSUER:frutapp-api"

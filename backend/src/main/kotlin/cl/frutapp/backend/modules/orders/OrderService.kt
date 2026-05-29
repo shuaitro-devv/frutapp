@@ -121,17 +121,34 @@ class OrderService(
         if (!OrderStatus.canTransition(from, to)) {
             throw ValidationException("Transición no permitida: $from → $to")
         }
+        applyStep(id, from, to, OrderActor.OPERADOR, req.nota)
+        return orders.findById(id) ?: throw NotFoundException("Pedido no encontrado.")
+    }
+
+    /**
+     * Auto-avance de DEMO: mueve cada pedido activo un paso por el camino feliz
+     * (PAGADO → … → ENTREGADO). Real (escribe historial con actor SISTEMA), gated por
+     * config; nunca toca las ramas de cancelación/devolución.
+     */
+    suspend fun autoAdvanceAll() {
+        orders.listActive().forEach { (id, from) ->
+            val to = OrderStatus.nextHappy(from) ?: return@forEach
+            if (OrderStatus.canTransition(from, to)) {
+                applyStep(id, from, to, OrderActor.SISTEMA, "Avance automático (demo)")
+            }
+        }
+    }
+
+    /** Aplica una transición ya validada, con los efectos de negocio (captura/reembolso). */
+    private suspend fun applyStep(id: UUID, from: OrderStatus, to: OrderStatus, actor: OrderActor, nota: String?) {
         // MVP: al confirmar stock se fija el total final (= estimado) y se captura el pago.
-        val totalFinal = if (to == OrderStatus.STOCK_CONFIRMADO) {
-            orders.findById(id)?.totalEstimado
-        } else null
+        val totalFinal = if (to == OrderStatus.STOCK_CONFIRMADO) orders.findById(id)?.totalEstimado else null
         val payment = when (to) {
             OrderStatus.STOCK_CONFIRMADO -> PaymentStatus.CAPTURADO
             OrderStatus.CANCELADO -> PaymentStatus.REEMBOLSADO
             else -> null
         }
-        orders.applyTransition(id, from, to, OrderActor.OPERADOR, req.nota, totalFinal, payment)
-        return orders.findById(id) ?: throw NotFoundException("Pedido no encontrado.")
+        orders.applyTransition(id, from, to, actor, nota, totalFinal, payment)
     }
 
     private fun parseUuid(value: String, msg: String): UUID =

@@ -32,6 +32,17 @@ enum class OrderStatus {
             to in (transitions[from] ?: emptySet())
 
         fun parse(value: String): OrderStatus? = entries.firstOrNull { it.name == value }
+
+        /** Siguiente estado del "camino feliz" (sin ramas de cancelación/devolución).
+         *  null = estado terminal o que no avanza solo. Lo usa el auto-avance de demo. */
+        fun nextHappy(from: OrderStatus): OrderStatus? = when (from) {
+            PAGADO -> EN_PICKING
+            EN_PICKING -> STOCK_CONFIRMADO
+            STOCK_CONFIRMADO -> FACTURADO
+            FACTURADO -> EN_DESPACHO
+            EN_DESPACHO -> ENTREGADO
+            else -> null
+        }
     }
 }
 
