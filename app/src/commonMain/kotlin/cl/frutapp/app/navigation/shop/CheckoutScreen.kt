@@ -43,6 +43,9 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.CartStore
+import cl.frutapp.app.data.Order
+import cl.frutapp.app.data.OrderEstado
+import cl.frutapp.app.data.OrdersStore
 import cl.frutapp.app.data.RewardsStore
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.ui.components.FrutButtonPrimary
@@ -99,6 +102,16 @@ class CheckoutScreen : Screen {
                             val numero = "#FRU-2026-${Random.nextInt(100000, 999999)}"
                             val coins = total / 100
                             RewardsStore.add(coins)
+                            OrdersStore.add(
+                                Order(
+                                    numero = numero,
+                                    fecha = "Hoy",
+                                    total = total,
+                                    estado = OrderEstado.EN_CURSO,
+                                    direccion = DIRECCION_DEMO,
+                                    entrega = ENTREGA_DEMO
+                                )
+                            )
                             CartStore.clear()
                             navigator.replace(
                                 OrderConfirmedScreen(
