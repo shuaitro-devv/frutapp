@@ -292,26 +292,30 @@ private fun HeroCarousel(onOfertas: () -> Unit, onFrutCoins: () -> Unit, modifie
             BannerSlide("Junta FrutCoins", "en cada compra", "Ver FrutCoins", Res.drawable.banner_frutcoins, 120.dp, FrutAppColors.Brand800, FrutAppColors.Brand400, onFrutCoins, fullBg = true)
         )
     }
-    val pagerState = rememberPagerState(pageCount = { slides.size })
-    // Auto-avance del carrusel
+    val realCount = slides.size
+    // Carrusel infinito: muchas páginas virtuales, arrancando en el medio (múltiplo de
+    // realCount para que la 1ra página sea el slide 0). page % realCount = slide real.
+    val startPage = remember(realCount) { val mid = Int.MAX_VALUE / 2; mid - (mid % realCount) }
+    val pagerState = rememberPagerState(initialPage = startPage, pageCount = { Int.MAX_VALUE })
+    // Auto-avance infinito (siempre hacia adelante, sin salto al volver al primero)
     LaunchedEffect(pagerState) {
         while (true) {
             delay(4500)
-            val next = (pagerState.currentPage + 1) % slides.size
-            pagerState.animateScrollToPage(next)
+            pagerState.animateScrollToPage(pagerState.currentPage + 1)
         }
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth()) { page ->
-            BannerSlideView(slides[page])
+            BannerSlideView(slides[page % realCount])
         }
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
             horizontalArrangement = Arrangement.Center
         ) {
-            repeat(slides.size) { i ->
-                val sel = pagerState.currentPage == i
+            val current = pagerState.currentPage % realCount
+            repeat(realCount) { i ->
+                val sel = current == i
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 3.dp)
