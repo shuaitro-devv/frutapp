@@ -42,6 +42,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.RewardsStore
+import cl.frutapp.app.navigation.recycle.ReciclaScreen
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.theme.FrutAppColors
@@ -50,7 +51,7 @@ import frutapp.app.generated.resources.frutcoin
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
 
-private data class FormaGanar(val icon: ImageVector, val titulo: String, val puntos: String)
+private data class FormaGanar(val icon: ImageVector, val titulo: String, val puntos: String, val onClick: () -> Unit = {})
 private data class Recompensa(val titulo: String, val costo: Int)
 private data class Desafio(val titulo: String, val actual: Int, val meta: Int)
 
@@ -64,7 +65,7 @@ class FrutCoinsScreen : Screen {
         val navigator = LocalNavigator.currentOrThrow
         val ganar = listOf(
             FormaGanar(Icons.Filled.ShoppingCart, "Por cada compra", "+50"),
-            FormaGanar(Icons.Filled.Recycling, "Reciclar envases", "+30"),
+            FormaGanar(Icons.Filled.Recycling, "Reciclar envases", "+30", onClick = { navigator.push(ReciclaScreen()) }),
             FormaGanar(Icons.Filled.RateReview, "Dejar una reseña", "+20"),
             FormaGanar(Icons.Filled.PersonAdd, "Referir un amigo", "+100")
         )
@@ -152,7 +153,7 @@ private fun SectionTitle(title: String, modifier: Modifier = Modifier) {
 @Composable
 private fun GanarRow(item: FormaGanar) {
     Row(
-        modifier = Modifier.fillMaxWidth().background(FrutAppColors.Brand50, RoundedCornerShape(14.dp)).padding(14.dp),
+        modifier = Modifier.fillMaxWidth().background(FrutAppColors.Brand50, RoundedCornerShape(14.dp)).clickable(onClick = item.onClick).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
