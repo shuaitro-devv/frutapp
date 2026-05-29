@@ -60,11 +60,25 @@ dependencies {
 
     // Tests
     testImplementation(libs.ktor.server.tests)
-    testImplementation("org.jetbrains.kotlin:kotlin-test")
+    testImplementation(kotlin("test-junit5"))
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    // BD efímera real (Postgres en Docker, descartable) para tests de integración.
+    testImplementation("org.testcontainers:postgresql:1.19.7")
 }
 
 kotlin {
     jvmToolchain(17)
+}
+
+tasks.test {
+    useJUnitPlatform()
+    // En Windows, Testcontainers a veces no autodetecta Docker Desktop: apuntamos al
+    // named pipe y desactivamos Ryuk (el reaper falla sobre npipe). En CI (Linux) no estorba.
+    environment("TESTCONTAINERS_RYUK_DISABLED", "true")
+    if (System.getProperty("os.name").lowercase().contains("win")) {
+        environment("DOCKER_HOST", "npipe:////./pipe/docker_engine")
+    }
 }
 
 ktor {

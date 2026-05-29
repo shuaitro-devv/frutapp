@@ -1,0 +1,50 @@
+name: Backend Tests
+
+# Corre la suite de integración del backend en cada push a main / PR que toque backend.
+# En el runner Linux de GitHub, Testcontainers levanta un Postgres efímero solo (Docker
+# viene instalado), corre Flyway y los tests, y lo destruye → cero data basura.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'shared/**'
+      - 'gradle/**'
+      - 'settings.gradle.kts'
+      - 'build.gradle.kts'
+      - 'gradle.properties'
+      - '.github/workflows/test-backend.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'shared/**'
+      - 'gradle/**'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Run backend tests (Postgres efímero via Testcontainers)
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :backend:test --no-daemon --console=plain
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-report
+          path: backend/build/reports/tests/test
+          if-no-files-found: ignore
