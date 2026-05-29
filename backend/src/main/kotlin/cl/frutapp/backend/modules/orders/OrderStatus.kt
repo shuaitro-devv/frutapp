@@ -31,7 +31,27 @@ enum class OrderStatus {
         fun canTransition(from: OrderStatus, to: OrderStatus): Boolean =
             to in (transitions[from] ?: emptySet())
 
+        fun nextStates(from: OrderStatus): Set<OrderStatus> = transitions[from] ?: emptySet()
+
         fun parse(value: String): OrderStatus? = entries.firstOrNull { it.name == value }
+
+        /** Permiso requerido para mover (manualmente, back office) un pedido HACIA `to`.
+         *  null = transición de sistema (no es una acción manual). */
+        fun permissionFor(to: OrderStatus): String? = when (to) {
+            EN_PICKING -> "order:pick"
+            STOCK_CONFIRMADO -> "order:confirm_stock"
+            FACTURADO -> "order:invoice"
+            EN_DESPACHO -> "order:dispatch"
+            ENTREGADO -> "order:deliver"
+            CANCELADO -> "order:cancel"
+            DEVOLUCION -> "order:cancel"
+            else -> null // CREADO/PAGADO los hace el sistema
+        }
+
+        /** Acciones que un llamante con `permissions` puede ejecutar sobre un pedido en
+         *  estado `from` = próximos estados válidos para los que tiene el permiso. */
+        fun allowedActions(from: OrderStatus, permissions: Set<String>): List<String> =
+            nextStates(from).filter { to -> permissionFor(to)?.let { it in permissions } == true }.map { it.name }
 
         /** Siguiente estado del "camino feliz" (sin ramas de cancelación/devolución).
          *  null = estado terminal o que no avanza solo. Lo usa el auto-avance de demo. */

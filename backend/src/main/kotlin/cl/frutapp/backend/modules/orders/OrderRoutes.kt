@@ -1,7 +1,9 @@
 package cl.frutapp.backend.modules.orders
 
 import cl.frutapp.backend.error.UnauthorizedException
+import cl.frutapp.backend.modules.rbac.PermissionCache
 import cl.frutapp.backend.modules.rbac.hasPermission
+import cl.frutapp.backend.modules.rbac.roles
 import cl.frutapp.backend.plugins.JWT_AUTH
 import cl.frutapp.shared.dto.CreateOrderRequest
 import cl.frutapp.shared.dto.TransitionRequest
@@ -32,7 +34,10 @@ fun Route.orderRoutes(orderService: OrderService) {
                 call.respond(orderService.list(call.userId()))
             }
             get("/{id}") {
-                call.respond(orderService.detail(call.userId(), call.parameters["id"].orEmpty()))
+                val dto = orderService.detail(call.userId(), call.parameters["id"].orEmpty())
+                val perms = PermissionCache.permissionsForRoles(call.roles())
+                val actions = OrderStatus.parse(dto.status)?.let { OrderStatus.allowedActions(it, perms) } ?: emptyList()
+                call.respond(dto.copy(allowedActions = actions))
             }
         }
 
@@ -40,13 +45,20 @@ fun Route.orderRoutes(orderService: OrderService) {
             call.respond(orderService.frutCoinsOf(call.userId()))
         }
 
-        // Back office (futura web): requiere el permiso order:transition (admin/picker/repartidor).
+        // Back office (futura web): requiere el permiso ESPECÍFICO del estado destino
+        // (picker -> EN_PICKING, repartidor -> EN_DESPACHO/ENTREGADO, etc.). Estado inválido
+        // lo maneja el servicio (422).
         post("/v1/admin/orders/{id}/transition") {
-            if (!call.hasPermission("order:transition")) {
-                call.respond(HttpStatusCode.Forbidden)
-                return@post
+            val req = call.receive<TransitionRequest>()
+            val to = OrderStatus.parse(req.toStatus)
+            if (to != null) {
+                val perm = OrderStatus.permissionFor(to)
+                if (perm == null || !call.hasPermission(perm)) {
+                    call.respond(HttpStatusCode.Forbidden)
+                    return@post
+                }
             }
-            call.respond(orderService.transition(call.parameters["id"].orEmpty(), call.receive<TransitionRequest>()))
+            call.respond(orderService.transition(call.parameters["id"].orEmpty(), req))
         }
     }
 }

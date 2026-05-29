@@ -70,7 +70,10 @@ data class OrderDto(
     val items: List<OrderItemDto>,
     val fulfillmentType: String = "DELIVERY",
     val sucursal: String? = null,
-    val payments: List<OrderPaymentDto> = emptyList()
+    val payments: List<OrderPaymentDto> = emptyList(),
+    /** Acciones que el llamante puede ejecutar (estado × sus permisos). Vacío para el
+     *  cliente; lo usa el back office para mostrar solo los botones válidos. */
+    val allowedActions: List<String> = emptyList()
 )
 
 @Serializable

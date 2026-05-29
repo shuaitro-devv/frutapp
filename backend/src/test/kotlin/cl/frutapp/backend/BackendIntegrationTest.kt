@@ -21,6 +21,7 @@ import cl.frutapp.backend.modules.catalog.CatalogRepository
 import cl.frutapp.backend.modules.orders.FrutCoinsRepository
 import cl.frutapp.backend.modules.orders.OrderRepository
 import cl.frutapp.backend.modules.orders.OrderService
+import cl.frutapp.backend.modules.orders.OrderStatus
 import cl.frutapp.backend.modules.rbac.PermissionCache
 import cl.frutapp.backend.modules.rbac.RbacRepository
 import cl.frutapp.shared.dto.AdminCreateUserRequest
@@ -245,6 +246,17 @@ class BackendIntegrationTest {
         val created = adminUsers.createUser(AdminCreateUserRequest("Staff Dos", email, null, listOf("picker")))
         val after = adminUsers.setRoles(created.id, SetRolesRequest(add = listOf("repartidor"), remove = listOf("picker")))
         assertEquals(setOf("repartidor"), after.roles.toSet())
+    }
+
+    @Test
+    fun `allowedActions segun permisos del rol`() {
+        val admin = PermissionCache.permissionsForRoles(listOf("admin"))
+        val picker = PermissionCache.permissionsForRoles(listOf("picker"))
+        val cliente = PermissionCache.permissionsForRoles(listOf("cliente"))
+        // desde PAGADO: admin -> EN_PICKING + CANCELADO; picker -> solo EN_PICKING; cliente -> nada
+        assertEquals(setOf("EN_PICKING", "CANCELADO"), OrderStatus.allowedActions(OrderStatus.PAGADO, admin).toSet())
+        assertEquals(setOf("EN_PICKING"), OrderStatus.allowedActions(OrderStatus.PAGADO, picker).toSet())
+        assertTrue(OrderStatus.allowedActions(OrderStatus.PAGADO, cliente).isEmpty())
     }
 
     @Test
