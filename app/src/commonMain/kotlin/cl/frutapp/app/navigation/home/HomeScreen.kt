@@ -23,7 +23,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocalOffer
+import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Recycling
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -58,6 +61,8 @@ import cl.frutapp.app.navigation.catalog.CatalogScreen
 import cl.frutapp.app.navigation.offers.OfertasScreen
 import cl.frutapp.app.navigation.orders.MisPedidosScreen
 import cl.frutapp.app.navigation.profile.ProfileScreen
+import cl.frutapp.app.navigation.recycle.ReciclaScreen
+import cl.frutapp.app.navigation.rewards.FrutCoinsScreen
 import cl.frutapp.app.navigation.shop.CartScreen
 import cl.frutapp.app.navigation.shop.ProductDetailScreen
 import cl.frutapp.app.ui.components.FrutBottomNav
@@ -115,6 +120,14 @@ class HomeScreen : Screen {
                 item { HomeHeader() }
                 item { SearchBarMock(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) }
                 item { HeroBanner(modifier = Modifier.padding(horizontal = 20.dp), onClick = { navigator.push(OfertasScreen()) }) }
+                item {
+                    QuickAccess(
+                        onOfertas = { navigator.push(OfertasScreen()) },
+                        onFrutCoins = { navigator.push(FrutCoinsScreen()) },
+                        onRecicla = { navigator.push(ReciclaScreen()) },
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)
+                    )
+                }
                 item { SectionHeader("Categorías", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 4.dp)) }
                 item { CategoriesRow(modifier = Modifier.padding(vertical = 8.dp)) }
                 item { SectionHeader("Productos destacados", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp)) }
@@ -176,6 +189,46 @@ private fun HeaderIcon(icon: androidx.compose.ui.graphics.vector.ImageVector) {
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(22.dp))
+    }
+}
+
+@Composable
+private fun QuickAccess(
+    onOfertas: () -> Unit,
+    onFrutCoins: () -> Unit,
+    onRecicla: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        QuickItem("Ofertas", Icons.Default.LocalOffer, FrutAppColors.Brand400, onOfertas, Modifier.weight(1f))
+        QuickItem("FrutCoins", Icons.Default.MonetizationOn, FrutAppColors.AmberCoin, onFrutCoins, Modifier.weight(1f))
+        QuickItem("Recicla", Icons.Default.Recycling, FrutAppColors.Brand600, onRecicla, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun QuickItem(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(FrutAppColors.Brand50)
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier.size(40.dp).background(Color.White, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
+        }
+        Text(label, style = MaterialTheme.typography.labelMedium, color = FrutAppColors.Brand800, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
     }
 }
 
