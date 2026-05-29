@@ -77,6 +77,7 @@ import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.components.ProductCard
 import cl.frutapp.app.ui.theme.FrutAppColors
 import frutapp.app.generated.resources.Res
+import frutapp.app.generated.resources.banner_fruit
 import frutapp.app.generated.resources.canasta_frutas
 import frutapp.app.generated.resources.cilantro
 import frutapp.app.generated.resources.frutcoin
@@ -278,7 +279,8 @@ private data class BannerSlide(
     val imageSize: Dp,
     val c1: Color,
     val c2: Color,
-    val onClick: () -> Unit
+    val onClick: () -> Unit,
+    val fullBg: Boolean = false
 )
 
 @Composable
@@ -286,7 +288,7 @@ private fun HeroCarousel(onOfertas: () -> Unit, onFrutCoins: () -> Unit, modifie
     val slides = remember(onOfertas, onFrutCoins) {
         listOf(
             BannerSlide("Frescura que se nota,", "calidad que te acompaña", "Ver ofertas", Res.drawable.canasta_frutas, 180.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas),
-            BannerSlide("Hasta 40% de", "descuento esta semana", "Ver ofertas", Res.drawable.manzana_roja, 150.dp, FrutAppColors.Brand600, FrutAppColors.Brand400, onOfertas),
+            BannerSlide("Hasta 40% de", "descuento esta semana", "Ver ofertas", Res.drawable.banner_fruit, 150.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas, fullBg = true),
             BannerSlide("Junta FrutCoins", "en cada compra", "Ver FrutCoins", Res.drawable.frutcoin, 120.dp, FrutAppColors.Brand800, FrutAppColors.Brand400, onFrutCoins)
         )
     }
@@ -329,27 +331,42 @@ private fun BannerSlideView(slide: BannerSlide) {
             .fillMaxWidth()
             .height(165.dp)
             .clip(RoundedCornerShape(22.dp))
-            .background(Brush.horizontalGradient(listOf(slide.c1, slide.c2)))
             .clickable(onClick = slide.onClick)
     ) {
-        Image(
-            painter = painterResource(slide.image),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.align(Alignment.BottomEnd).offset(x = 14.dp).size(slide.imageSize)
-        )
-        Image(
-            painter = painterResource(Res.drawable.hoja_decorativa),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.align(Alignment.TopEnd).offset(x = (-6).dp, y = (-8).dp).size(58.dp).rotate(25f).alpha(0.9f)
-        )
-        Image(
-            painter = painterResource(Res.drawable.hoja_decorativa),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.align(Alignment.BottomStart).offset(x = (-12).dp, y = 10.dp).size(48.dp).rotate(205f).alpha(0.45f)
-        )
+        if (slide.fullBg) {
+            // Imagen de banner completa (sin transparencia) como fondo + velo para el texto
+            Image(
+                painter = painterResource(slide.image),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize()
+            )
+            Box(
+                modifier = Modifier.matchParentSize().background(
+                    Brush.horizontalGradient(listOf(slide.c1.copy(alpha = 0.92f), slide.c1.copy(alpha = 0.10f)))
+                )
+            )
+        } else {
+            Box(modifier = Modifier.matchParentSize().background(Brush.horizontalGradient(listOf(slide.c1, slide.c2))))
+            Image(
+                painter = painterResource(slide.image),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.align(Alignment.BottomEnd).offset(x = 14.dp).size(slide.imageSize)
+            )
+            Image(
+                painter = painterResource(Res.drawable.hoja_decorativa),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.align(Alignment.TopEnd).offset(x = (-6).dp, y = (-8).dp).size(58.dp).rotate(25f).alpha(0.9f)
+            )
+            Image(
+                painter = painterResource(Res.drawable.hoja_decorativa),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.align(Alignment.BottomStart).offset(x = (-12).dp, y = 10.dp).size(48.dp).rotate(205f).alpha(0.45f)
+            )
+        }
         Column(
             modifier = Modifier.align(Alignment.CenterStart).padding(start = 22.dp, end = 8.dp).fillMaxWidth(0.6f)
         ) {
