@@ -73,12 +73,10 @@ kotlin {
 
 tasks.test {
     useJUnitPlatform()
-    // En Windows, Testcontainers a veces no autodetecta Docker Desktop: apuntamos al
-    // named pipe y desactivamos Ryuk (el reaper falla sobre npipe). En CI (Linux) no estorba.
+    // Local (Windows): se usa un Postgres efímero por CLI vía TEST_DB_* (ver
+    // scripts/run-backend-tests.ps1), porque Testcontainers no autodetecta Docker Desktop.
+    // CI (Linux): Testcontainers funciona solo. Ryuk off evita el reaper sobre npipe.
     environment("TESTCONTAINERS_RYUK_DISABLED", "true")
-    if (System.getProperty("os.name").lowercase().contains("win")) {
-        environment("DOCKER_HOST", "npipe:////./pipe/docker_engine")
-    }
 }
 
 ktor {

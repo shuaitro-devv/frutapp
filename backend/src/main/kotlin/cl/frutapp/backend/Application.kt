@@ -18,6 +18,8 @@ import cl.frutapp.backend.modules.catalog.CatalogService
 import cl.frutapp.backend.modules.orders.FrutCoinsRepository
 import cl.frutapp.backend.modules.orders.OrderRepository
 import cl.frutapp.backend.modules.orders.OrderService
+import cl.frutapp.backend.modules.rbac.PermissionCache
+import cl.frutapp.backend.modules.rbac.RbacRepository
 import cl.frutapp.backend.plugins.configureCors
 import cl.frutapp.backend.plugins.configureDatabases
 import cl.frutapp.backend.plugins.configureMonitoring
@@ -51,9 +53,12 @@ fun Application.module() {
     // Config de negocio desde BD (app_config): carga el caché antes de servir y luego
     // lo refresca periódicamente (cambiar un parámetro = editar la fila, sin redeploy).
     val configRepository = ConfigRepository()
+    val rbacRepository = RbacRepository()
     runBlocking {
         runCatching { ConfigCache.refresh(configRepository) }
             .onFailure { environment.log.warn("Carga inicial de config falló (uso defaults)", it) }
+        runCatching { PermissionCache.refresh(rbacRepository) }
+            .onFailure { environment.log.warn("Carga inicial de permisos falló", it) }
     }
 
     val mailConfig = MailConfig.from(environment.config)
@@ -72,7 +77,8 @@ fun Application.module() {
         passwordResetTokens = PasswordResetTokenRepository(),
         emailVerificationTokens = EmailVerificationTokenRepository(),
         tokens = tokenService,
-        emailSender = emailSender
+        emailSender = emailSender,
+        rbac = rbacRepository
     )
     val catalogRepository = CatalogRepository()
     val catalogService = CatalogService(catalogRepository)
@@ -87,6 +93,8 @@ fun Application.module() {
             delay(60_000)
             runCatching { ConfigCache.refresh(configRepository) }
                 .onFailure { environment.log.warn("Refresh de config falló", it) }
+            runCatching { PermissionCache.refresh(rbacRepository) }
+                .onFailure { environment.log.warn("Refresh de permisos falló", it) }
         }
     }
 

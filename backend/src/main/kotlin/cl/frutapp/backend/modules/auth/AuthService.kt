@@ -24,7 +24,8 @@ class AuthService(
     private val passwordResetTokens: PasswordResetTokenRepository,
     private val emailVerificationTokens: EmailVerificationTokenRepository,
     private val tokens: TokenService,
-    private val emailSender: EmailSender
+    private val emailSender: EmailSender,
+    private val rbac: cl.frutapp.backend.modules.rbac.RbacRepository
 ) {
     private val logger = LoggerFactory.getLogger(AuthService::class.java)
 
@@ -55,6 +56,7 @@ class AuthService(
             role = "CUSTOMER",
             consentVersion = req.consentVersion
         )
+        rbac.assignRole(user.id, "cliente")
         sendVerificationCode(user)
     }
 
@@ -147,7 +149,8 @@ class AuthService(
     }
 
     private suspend fun issueFor(user: UserRow): AuthResponse {
-        val access = tokens.issueAccessToken(user.id, user.role)
+        val roles = rbac.rolesOf(user.id).ifEmpty { listOf("cliente") }
+        val access = tokens.issueAccessToken(user.id, roles)
         val refresh = tokens.generateRefreshToken()
         refreshTokens.create(user.id, tokens.hashRefreshToken(refresh), tokens.refreshExpiry())
         return AuthResponse(

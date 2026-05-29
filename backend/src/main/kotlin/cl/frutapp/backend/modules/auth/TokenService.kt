@@ -34,13 +34,15 @@ class TokenService(private val config: JwtConfig) {
 
     val accessTtlSeconds: Long get() = config.accessTtlMinutes * 60
 
-    fun issueAccessToken(userId: UUID, role: String): String {
+    fun issueAccessToken(userId: UUID, roles: List<String>): String {
         val now = java.time.Instant.now()
         return JWT.create()
             .withIssuer(config.issuer)
             .withAudience(config.audience)
             .withSubject(userId.toString())
-            .withClaim("role", role)
+            .withArrayClaim("roles", roles.toTypedArray())
+            // claim `role` legacy (primer rol) por compat con código que aún lo lea; quitar luego.
+            .withClaim("role", roles.firstOrNull() ?: "cliente")
             .withIssuedAt(Date.from(now))
             .withExpiresAt(Date.from(now.plusSeconds(config.accessTtlMinutes.minutes.inWholeSeconds)))
             .sign(algorithm)

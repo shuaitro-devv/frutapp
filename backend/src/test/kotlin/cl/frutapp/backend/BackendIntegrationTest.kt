@@ -20,6 +20,8 @@ import cl.frutapp.backend.modules.catalog.CatalogRepository
 import cl.frutapp.backend.modules.orders.FrutCoinsRepository
 import cl.frutapp.backend.modules.orders.OrderRepository
 import cl.frutapp.backend.modules.orders.OrderService
+import cl.frutapp.backend.modules.rbac.PermissionCache
+import cl.frutapp.backend.modules.rbac.RbacRepository
 import cl.frutapp.shared.dto.CreateOrderRequest
 import cl.frutapp.shared.dto.LoginRequest
 import cl.frutapp.shared.dto.OrderItemRequest
@@ -35,6 +37,7 @@ import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -50,12 +53,13 @@ class BackendIntegrationTest {
     }
 
     private val users = UserRepository()
+    private val rbac = RbacRepository()
     private val tokenService = TokenService(
         JwtConfig("test-secret-no-prod-1234567890", "frutapp-api", "frutapp-app", "frutapp", 15L, 60L)
     )
     private val auth = AuthService(
         users, RefreshTokenRepository(), PasswordResetTokenRepository(),
-        EmailVerificationTokenRepository(), tokenService, LogEmailSender()
+        EmailVerificationTokenRepository(), tokenService, LogEmailSender(), rbac
     )
     private val catalog = CatalogRepository()
     private val frutCoins = FrutCoinsRepository()
@@ -80,7 +84,10 @@ class BackendIntegrationTest {
             DbConfig(pg.host, pg.firstMappedPort, pg.databaseName, pg.username, pg.password, 3)
         }
         DatabaseFactory.init(dbConfig)
-        runBlocking { ConfigCache.refresh(ConfigRepository()) }
+        runBlocking {
+            ConfigCache.refresh(ConfigRepository())
+            PermissionCache.refresh(rbac)
+        }
     }
 
     @AfterAll
@@ -206,5 +213,21 @@ class BackendIntegrationTest {
         orders.autoAdvanceAll()
         val after = orders.detail(u.id, o.id)
         assertEquals("EN_PICKING", after.status)
+    }
+
+    @Test
+    fun `usuario registrado obtiene rol cliente`() = runBlocking {
+        val u = registerVerified()
+        assertTrue(rbac.rolesOf(u.id).contains("cliente"))
+    }
+
+    @Test
+    fun `permisos se resuelven por rol`() {
+        // cliente: puede crear pedidos, NO avanzar estados
+        assertTrue(PermissionCache.has(listOf("cliente"), "order:create"))
+        assertFalse(PermissionCache.has(listOf("cliente"), "order:transition"))
+        // admin y picker: sí pueden avanzar estados
+        assertTrue(PermissionCache.has(listOf("admin"), "order:transition"))
+        assertTrue(PermissionCache.has(listOf("picker"), "order:transition"))
     }
 }

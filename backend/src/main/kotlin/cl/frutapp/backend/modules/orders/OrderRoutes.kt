@@ -1,6 +1,7 @@
 package cl.frutapp.backend.modules.orders
 
 import cl.frutapp.backend.error.UnauthorizedException
+import cl.frutapp.backend.modules.rbac.hasPermission
 import cl.frutapp.backend.plugins.JWT_AUTH
 import cl.frutapp.shared.dto.CreateOrderRequest
 import cl.frutapp.shared.dto.TransitionRequest
@@ -39,9 +40,9 @@ fun Route.orderRoutes(orderService: OrderService) {
             call.respond(orderService.frutCoinsOf(call.userId()))
         }
 
-        // Back office (futura web): solo rol OPERADOR/ADMIN. No es parte de la app cliente.
+        // Back office (futura web): requiere el permiso order:transition (admin/picker/repartidor).
         post("/v1/admin/orders/{id}/transition") {
-            if (!call.isOperator()) {
+            if (!call.hasPermission("order:transition")) {
                 call.respond(HttpStatusCode.Forbidden)
                 return@post
             }
@@ -54,9 +55,4 @@ fun Route.orderRoutes(orderService: OrderService) {
 private fun ApplicationCall.userId(): UUID {
     val sub = principal<JWTPrincipal>()?.subject ?: throw UnauthorizedException()
     return runCatching { UUID.fromString(sub) }.getOrNull() ?: throw UnauthorizedException()
-}
-
-private fun ApplicationCall.isOperator(): Boolean {
-    val role = principal<JWTPrincipal>()?.payload?.getClaim("role")?.asString()
-    return role == "OPERATOR" || role == "ADMIN"
 }
