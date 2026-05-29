@@ -118,6 +118,39 @@ object EmailTemplates {
         return Email(to = to, subject = subject, html = baseLayout("Contraseña actualizada - FrutApp", content), text = text)
     }
 
+    /** Invitación a un miembro del equipo: el admin creó su cuenta; fija su contraseña con el código. */
+    fun invitation(to: String, name: String, code: String): Email {
+        val subject = "Te sumaron al equipo FrutApp · fija tu contraseña"
+        val text = buildString {
+            appendLine("¡Hola, $name! Te crearon una cuenta de equipo en FrutApp.")
+            appendLine("Tu código para fijar tu contraseña es: $code")
+            appendLine("Vence en 7 días. Úsalo junto a tu correo para definir tu clave e ingresar.")
+        }
+        val content = """
+            <h1 style="margin:0 0 12px;color:#27500A;font-size:28px;line-height:1.25;font-weight:800;">
+              ¡Bienvenido al equipo!
+            </h1>
+            <p style="margin:0 auto 26px;max-width:400px;color:#4B5563;font-size:16px;line-height:1.55;">
+              ¡Hola, $name! Te crearon una cuenta de equipo en FrutApp. Usa este código para fijar tu contraseña e ingresar.
+            </p>
+
+            <table role="presentation" cellspacing="0" cellpadding="0" align="center" style="margin:0 auto 26px;">
+              <tr>
+                <td style="background-color:#EAF3DE;border:1px solid #CFE7BF;border-radius:18px;padding:18px 28px;">
+                  <span style="display:block;color:#27500A;font-size:34px;line-height:1;font-weight:800;letter-spacing:10px;">$code</span>
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:0 0 24px;color:#6B7280;font-size:14px;line-height:1.5;">
+              Este código vence en <strong style="color:#27500A;">7 días</strong>.
+            </p>
+
+            ${noticeBox("¿No esperabas esto?", "Si crees que es un error, ignora este correo: la cuenta no se podrá usar hasta fijar una contraseña.")}
+        """.trimIndent()
+        return Email(to = to, subject = subject, html = baseLayout("Invitación al equipo - FrutApp", content), text = text)
+    }
+
     /** Caja de aviso reutilizable (verde suave) para destacar un mensaje dentro del content. */
     private fun noticeBox(title: String, body: String): String = """
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#F6FBF2;border:1px solid #DDEED3;border-radius:16px;">

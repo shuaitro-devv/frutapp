@@ -1,6 +1,8 @@
 package cl.frutapp.backend.plugins
 
 import cl.frutapp.backend.config.configRoutes
+import cl.frutapp.backend.modules.admin.AdminUserService
+import cl.frutapp.backend.modules.admin.adminUserRoutes
 import cl.frutapp.backend.modules.auth.AuthService
 import cl.frutapp.backend.modules.auth.authRoutes
 import cl.frutapp.backend.modules.catalog.CatalogService
@@ -14,7 +16,8 @@ import io.ktor.server.routing.routing
 fun Application.configureRouting(
     authService: AuthService,
     catalogService: CatalogService,
-    orderService: OrderService
+    orderService: OrderService,
+    adminUserService: AdminUserService
 ) {
     routing {
         healthRoutes()
@@ -22,5 +25,6 @@ fun Application.configureRouting(
         catalogRoutes(catalogService)
         orderRoutes(orderService)
         configRoutes()
+        adminUserRoutes(adminUserService)
     }
 }

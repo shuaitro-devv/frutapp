@@ -8,6 +8,7 @@ import cl.frutapp.backend.config.JwtConfig
 import cl.frutapp.backend.db.DatabaseFactory
 import cl.frutapp.backend.error.UnauthorizedException
 import cl.frutapp.backend.error.ValidationException
+import cl.frutapp.backend.modules.admin.AdminUserService
 import cl.frutapp.backend.modules.auth.AuthService
 import cl.frutapp.backend.modules.auth.EmailVerificationTokenRepository
 import cl.frutapp.backend.modules.auth.LogEmailSender
@@ -22,8 +23,10 @@ import cl.frutapp.backend.modules.orders.OrderRepository
 import cl.frutapp.backend.modules.orders.OrderService
 import cl.frutapp.backend.modules.rbac.PermissionCache
 import cl.frutapp.backend.modules.rbac.RbacRepository
+import cl.frutapp.shared.dto.AdminCreateUserRequest
 import cl.frutapp.shared.dto.CreateOrderRequest
 import cl.frutapp.shared.dto.LoginRequest
+import cl.frutapp.shared.dto.SetRolesRequest
 import cl.frutapp.shared.dto.OrderItemRequest
 import cl.frutapp.shared.dto.PaymentInput
 import cl.frutapp.shared.dto.RegisterRequest
@@ -64,6 +67,7 @@ class BackendIntegrationTest {
     private val catalog = CatalogRepository()
     private val frutCoins = FrutCoinsRepository()
     private val orders = OrderService(OrderRepository(), catalog, frutCoins)
+    private val adminUsers = AdminUserService(users, rbac, PasswordResetTokenRepository(), tokenService, LogEmailSender())
 
     @BeforeAll
     fun setup() {
@@ -219,6 +223,28 @@ class BackendIntegrationTest {
     fun `usuario registrado obtiene rol cliente`() = runBlocking {
         val u = registerVerified()
         assertTrue(rbac.rolesOf(u.id).contains("cliente"))
+    }
+
+    @Test
+    fun `admin crea staff con rol e invitacion`() {
+        runBlocking {
+            val email = "staff${System.nanoTime()}@frutapp.local"
+            val dto = adminUsers.createUser(AdminCreateUserRequest("Picker Uno", email, null, listOf("picker")))
+            assertTrue(dto.roles.contains("picker"))
+            val u = users.findByEmail(email)!!
+            assertTrue(u.emailVerified)                     // creado por admin -> verificado
+            assertEquals(listOf("picker"), rbac.rolesOf(u.id))
+            // contraseña aleatoria: no puede loguear hasta fijarla por invitación
+            assertFailsWith<UnauthorizedException> { auth.login(LoginRequest(email, "abc123")) }
+        }
+    }
+
+    @Test
+    fun `admin agrega y quita roles`() = runBlocking {
+        val email = "staff2${System.nanoTime()}@frutapp.local"
+        val created = adminUsers.createUser(AdminCreateUserRequest("Staff Dos", email, null, listOf("picker")))
+        val after = adminUsers.setRoles(created.id, SetRolesRequest(add = listOf("repartidor"), remove = listOf("picker")))
+        assertEquals(setOf("repartidor"), after.roles.toSet())
     }
 
     @Test

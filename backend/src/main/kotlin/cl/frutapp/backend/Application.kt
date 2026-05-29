@@ -12,6 +12,7 @@ import cl.frutapp.backend.modules.auth.PasswordResetTokenRepository
 import cl.frutapp.backend.modules.auth.RefreshTokenRepository
 import cl.frutapp.backend.modules.auth.ResendEmailSender
 import cl.frutapp.backend.modules.auth.TokenService
+import cl.frutapp.backend.modules.admin.AdminUserService
 import cl.frutapp.backend.modules.auth.UserRepository
 import cl.frutapp.backend.modules.catalog.CatalogRepository
 import cl.frutapp.backend.modules.catalog.CatalogService
@@ -83,9 +84,12 @@ fun Application.module() {
     val catalogRepository = CatalogRepository()
     val catalogService = CatalogService(catalogRepository)
     val orderService = OrderService(OrderRepository(), catalogRepository, FrutCoinsRepository())
+    val adminUserService = AdminUserService(
+        UserRepository(), rbacRepository, PasswordResetTokenRepository(), tokenService, emailSender
+    )
 
     configureSecurity(jwtConfig, tokenService)
-    configureRouting(authService, catalogService, orderService)
+    configureRouting(authService, catalogService, orderService, adminUserService)
 
     // Refresca la config de negocio cada 60s (cambios en app_config sin redeploy).
     launch {
