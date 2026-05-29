@@ -131,6 +131,7 @@ jobs:
               -e RESEND_API_KEY='${{ secrets.RESEND_API_KEY }}' \
               -e MAIL_FROM='FrutApp <no-reply@frutapp.grandline.cl>' \
               -e DEMO_AUTO_ADVANCE='true' \
+              -e DEMO_AUTO_ADVANCE_SECONDS='15' \
               -v frutapp-logs:/app/logs \
               --label "traefik.enable=true" \
               --label "traefik.http.routers.frutapp-backend.rule=Host(\`frutapp-api.grandline.cl\`)" \
