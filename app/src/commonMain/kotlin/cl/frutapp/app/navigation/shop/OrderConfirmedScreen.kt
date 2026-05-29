@@ -108,7 +108,10 @@ class OrderConfirmedScreen(
                 }
 
                 Column(modifier = Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    FrutButtonPrimary(text = "Ver mi pedido", onClick = { navigator.popUntilRoot() })
+                    FrutButtonPrimary(
+                        text = "Ver mi pedido",
+                        onClick = { navigator.replace(OrderTrackingScreen(numero = numero, total = total, direccion = direccion, entrega = entrega)) }
+                    )
                     FrutButtonOutline(text = "Seguir comprando", onClick = { navigator.popUntilRoot() })
                     Spacer(Modifier.height(20.dp))
                 }
