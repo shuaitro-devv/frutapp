@@ -54,13 +54,18 @@ import cl.frutapp.app.data.CartStore
 import cl.frutapp.app.data.ClientInfo
 import cl.frutapp.app.data.RewardsStore
 import cl.frutapp.app.data.formatClp
+import cl.frutapp.app.data.remote.CatalogApi
 import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.ui.components.FrutButtonPrimary
+import cl.frutapp.app.ui.components.FrutLoader
 import cl.frutapp.app.ui.theme.FrutAppColors
 import cl.frutapp.shared.dto.ClientContextDto
 import cl.frutapp.shared.dto.CreateOrderRequest
 import cl.frutapp.shared.dto.OrderItemRequest
 import cl.frutapp.shared.dto.PaymentInput
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 
@@ -91,6 +96,7 @@ class CheckoutScreen : Screen {
         val scope = rememberCoroutineScope()
         var loading by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
+        var mensajePagando by remember { mutableStateOf("Confirmando tu pedido…") }
 
         // Saldo de FrutCoins (para ofrecer pagar con ellos). Fuente de verdad: backend.
         LaunchedEffect(Unit) {
@@ -147,54 +153,104 @@ class CheckoutScreen : Screen {
                         onClick = {
                             error = null
                             loading = true
+                            mensajePagando = "Confirmando tu pedido…"
                             scope.launch {
-                                runCatching {
-                                    // El backend re-precia y calcula todo; el front solo manda qué quiere.
-                                    val pagos = buildList {
-                                        if (usarCoins && RewardsStore.balance > 0) {
-                                            add(PaymentInput(method = "FRUTCOINS", monto = RewardsStore.balance))
+                                coroutineScope {
+                                    val apiJob = async {
+                                        runCatching {
+                                            // El backend re-precia y calcula todo; el front solo manda qué quiere.
+                                            // Si algún ítem trae un slug del DemoCatalog (no UUID), lo resolvemos
+                                            // al uuid real del backend por nombre — el backend valida UUID estricto.
+                                            val items = CartStore.items.toList()
+                                            val porNombre = if (items.any { !it.producto.id.isUuidLike() }) {
+                                                CatalogApi().products().associateBy { it.name.trim().lowercase() }
+                                            } else emptyMap()
+                                            val orderItems = items.map { ci ->
+                                                val id = if (ci.producto.id.isUuidLike()) ci.producto.id
+                                                    else porNombre[ci.producto.nombre.trim().lowercase()]?.id
+                                                        ?: error("Producto no disponible en el catálogo: ${ci.producto.nombre}")
+                                                OrderItemRequest(productId = id, cantidad = ci.cantidad, gramos = ci.gramos)
+                                            }
+                                            val pagos = buildList {
+                                                if (usarCoins && RewardsStore.balance > 0) {
+                                                    add(PaymentInput(method = "FRUTCOINS", monto = RewardsStore.balance))
+                                                }
+                                                add(PaymentInput(method = metodos[metodoSel].code))
+                                            }
+                                            OrderApi().create(
+                                                CreateOrderRequest(
+                                                    items = orderItems,
+                                                    fulfillmentType = if (esRetiro) "RETIRO" else "DELIVERY",
+                                                    sucursal = if (esRetiro) SUCURSAL_DEMO else null,
+                                                    direccion = if (esRetiro) null else direccion.trim().ifBlank { null },
+                                                    payments = pagos,
+                                                    context = ClientContextDto(
+                                                        channel = ClientInfo.channel,
+                                                        appVersion = ClientInfo.appVersion,
+                                                        deviceModel = ClientInfo.deviceModel,
+                                                        osVersion = ClientInfo.osVersion,
+                                                        locale = ClientInfo.locale
+                                                    )
+                                                )
+                                            )
                                         }
-                                        add(PaymentInput(method = metodos[metodoSel].code))
                                     }
-                                    OrderApi().create(
-                                        CreateOrderRequest(
-                                            items = CartStore.items.map {
-                                                OrderItemRequest(productId = it.producto.id, cantidad = it.cantidad, gramos = it.gramos)
-                                            },
-                                            fulfillmentType = if (esRetiro) "RETIRO" else "DELIVERY",
-                                            sucursal = if (esRetiro) SUCURSAL_DEMO else null,
-                                            direccion = if (esRetiro) null else direccion.trim().ifBlank { null },
-                                            payments = pagos,
-                                            context = ClientContextDto(
-                                                channel = ClientInfo.channel,
-                                                appVersion = ClientInfo.appVersion,
-                                                deviceModel = ClientInfo.deviceModel,
-                                                osVersion = ClientInfo.osVersion,
-                                                locale = ClientInfo.locale
+                                    // Mensajes rotativos mientras la API trabaja (para que sienta "vivo").
+                                    launch {
+                                        listOf("Reservando frescos en feria…", "Coordinando con tu feriante…").forEach { m ->
+                                            delay(900)
+                                            if (!apiJob.isCompleted) mensajePagando = m
+                                        }
+                                    }
+                                    delay(1500) // duración mínima de la animación
+                                    apiJob.await().onSuccess { dto ->
+                                        CartStore.clear()
+                                        navigator.replace(
+                                            OrderConfirmedScreen(
+                                                orderId = dto.id,
+                                                numero = dto.numero,
+                                                total = dto.totalFinal ?: dto.totalEstimado,
+                                                coins = dto.frutcoinsGanadas,
+                                                direccion = dto.direccion,
+                                                entrega = dto.entrega,
+                                                fulfillmentType = dto.fulfillmentType,
+                                                payments = dto.payments
                                             )
                                         )
-                                    )
-                                }.onSuccess { dto ->
-                                    CartStore.clear()
-                                    navigator.replace(
-                                        OrderConfirmedScreen(
-                                            orderId = dto.id,
-                                            numero = dto.numero,
-                                            total = dto.totalFinal ?: dto.totalEstimado,
-                                            coins = dto.frutcoinsGanadas,
-                                            direccion = dto.direccion,
-                                            entrega = dto.entrega,
-                                            fulfillmentType = dto.fulfillmentType,
-                                            payments = dto.payments
-                                        )
-                                    )
-                                }.onFailure {
-                                    error = "No pudimos crear el pedido. Revisa tu conexión e inténtalo de nuevo."
+                                    }.onFailure { e ->
+                                        error = "No pudimos crear el pedido. ${e.message ?: "Intenta de nuevo."}"
+                                        loading = false
+                                    }
                                 }
-                                loading = false
                             }
                         }
                     )
+                }
+            }
+
+            // Overlay "Pagando…": cubre el checkout durante el proceso para que se sienta
+            // como una transición intencional (no un spinner pelado).
+            if (loading) {
+                Box(
+                    modifier = Modifier.fillMaxSize().background(Color.White),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        FrutLoader(dotSize = 18.dp)
+                        Spacer(Modifier.height(28.dp))
+                        Text(
+                            mensajePagando,
+                            color = FrutAppColors.Brand800,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            "Procesando tu pedido de forma segura.",
+                            color = FrutAppColors.InkMuted,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
                 }
             }
         }
@@ -436,3 +492,9 @@ private fun PayOption(method: PayMethod, selected: Boolean, onClick: () -> Unit)
         }
     }
 }
+
+/** UUID v4 tiene 36 chars con guiones en posiciones 8,13,18,23. Permite distinguir un
+ *  uuid del backend de un slug del [DemoCatalog] (ej. "tomate", "palta-hass") sin
+ *  depender de java.util.UUID (que no está en commonMain). */
+private fun String.isUuidLike(): Boolean =
+    length == 36 && this[8] == '-' && this[13] == '-' && this[18] == '-' && this[23] == '-'
