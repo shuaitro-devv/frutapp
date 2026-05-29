@@ -1,8 +1,9 @@
-@file:OptIn(ExperimentalResourceApi::class)
+@file:OptIn(ExperimentalResourceApi::class, ExperimentalFoundationApi::class)
 
 package cl.frutapp.app.navigation.home
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +22,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -48,6 +51,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -75,11 +79,13 @@ import cl.frutapp.app.ui.theme.FrutAppColors
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.canasta_frutas
 import frutapp.app.generated.resources.cilantro
+import frutapp.app.generated.resources.frutcoin
 import frutapp.app.generated.resources.hoja_decorativa
 import frutapp.app.generated.resources.lechuga
 import frutapp.app.generated.resources.manzana_roja
 import frutapp.app.generated.resources.zanahoria
 import org.jetbrains.compose.resources.DrawableResource
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
 
@@ -123,7 +129,13 @@ class HomeScreen : Screen {
             ) {
                 item { HomeHeader() }
                 item { SearchBarMock(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) }
-                item { HeroBanner(modifier = Modifier.padding(horizontal = 20.dp), onClick = { navigator.push(OfertasScreen()) }) }
+                item {
+                    HeroCarousel(
+                        onOfertas = { navigator.push(OfertasScreen()) },
+                        onFrutCoins = { navigator.push(FrutCoinsScreen()) },
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+                    )
+                }
                 item {
                     QuickAccess(
                         onOfertas = { navigator.push(OfertasScreen()) },
@@ -258,84 +270,100 @@ private fun SearchBarMock(modifier: Modifier = Modifier) {
     }
 }
 
+private data class BannerSlide(
+    val titulo1: String,
+    val titulo2: String,
+    val cta: String,
+    val image: DrawableResource,
+    val imageSize: Dp,
+    val c1: Color,
+    val c2: Color,
+    val onClick: () -> Unit
+)
+
 @Composable
-private fun HeroBanner(modifier: Modifier = Modifier, onClick: () -> Unit = {}) {
+private fun HeroCarousel(onOfertas: () -> Unit, onFrutCoins: () -> Unit, modifier: Modifier = Modifier) {
+    val slides = remember(onOfertas, onFrutCoins) {
+        listOf(
+            BannerSlide("Frescura que se nota,", "calidad que te acompaña", "Ver ofertas", Res.drawable.canasta_frutas, 180.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas),
+            BannerSlide("Hasta 40% de", "descuento esta semana", "Ver ofertas", Res.drawable.manzana_roja, 150.dp, FrutAppColors.Brand600, FrutAppColors.Brand400, onOfertas),
+            BannerSlide("Junta FrutCoins", "en cada compra", "Ver FrutCoins", Res.drawable.frutcoin, 120.dp, FrutAppColors.Brand800, FrutAppColors.Brand400, onFrutCoins)
+        )
+    }
+    val pagerState = rememberPagerState(pageCount = { slides.size })
+    // Auto-avance del carrusel
+    LaunchedEffect(pagerState) {
+        while (true) {
+            delay(4500)
+            val next = (pagerState.currentPage + 1) % slides.size
+            pagerState.animateScrollToPage(next)
+        }
+    }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth()) { page ->
+            BannerSlideView(slides[page])
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            repeat(slides.size) { i ->
+                val sel = pagerState.currentPage == i
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 3.dp)
+                        .size(if (sel) 9.dp else 7.dp)
+                        .clip(CircleShape)
+                        .background(if (sel) FrutAppColors.Brand600 else FrutAppColors.Brand100)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BannerSlideView(slide: BannerSlide) {
     Box(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .height(165.dp)
             .clip(RoundedCornerShape(22.dp))
-            .background(
-                Brush.horizontalGradient(listOf(FrutAppColors.Brand800, FrutAppColors.Brand600))
-            )
-            .clickable(onClick = onClick)
+            .background(Brush.horizontalGradient(listOf(slide.c1, slide.c2)))
+            .clickable(onClick = slide.onClick)
     ) {
-        // Canasta sangrando por el borde derecho (imagen transparente)
         Image(
-            painter = painterResource(Res.drawable.canasta_frutas),
+            painter = painterResource(slide.image),
             contentDescription = null,
             contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .offset(x = 14.dp)
-                .size(180.dp)
-        )
-        // Hojas decorativas flotando (como el mockup)
-        Image(
-            painter = painterResource(Res.drawable.hoja_decorativa),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = (-6).dp, y = (-8).dp)
-                .size(58.dp)
-                .rotate(25f)
-                .alpha(0.9f)
+            modifier = Modifier.align(Alignment.BottomEnd).offset(x = 14.dp).size(slide.imageSize)
         )
         Image(
             painter = painterResource(Res.drawable.hoja_decorativa),
             contentDescription = null,
             contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .offset(x = (-12).dp, y = 10.dp)
-                .size(48.dp)
-                .rotate(205f)
-                .alpha(0.45f)
+            modifier = Modifier.align(Alignment.TopEnd).offset(x = (-6).dp, y = (-8).dp).size(58.dp).rotate(25f).alpha(0.9f)
         )
-        // Texto + CTA
+        Image(
+            painter = painterResource(Res.drawable.hoja_decorativa),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.align(Alignment.BottomStart).offset(x = (-12).dp, y = 10.dp).size(48.dp).rotate(205f).alpha(0.45f)
+        )
         Column(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .padding(start = 22.dp, end = 8.dp)
-                .fillMaxWidth(0.6f)
+            modifier = Modifier.align(Alignment.CenterStart).padding(start = 22.dp, end = 8.dp).fillMaxWidth(0.6f)
         ) {
-            Text(
-                text = "Frescura que se nota,",
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "calidad que te acompaña",
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
+            Text(slide.titulo1, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
+            Text(slide.titulo2, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
             Box(
                 modifier = Modifier
                     .padding(top = 14.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(Color.White)
-                    .clickable(onClick = onClick)
+                    .clickable(onClick = slide.onClick)
                     .padding(horizontal = 18.dp, vertical = 9.dp)
             ) {
-                Text(
-                    text = "Ver ofertas",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = FrutAppColors.Brand600,
-                    fontWeight = FontWeight.Bold
-                )
+                Text(slide.cta, style = MaterialTheme.typography.labelLarge, color = FrutAppColors.Brand600, fontWeight = FontWeight.Bold)
             }
         }
     }
