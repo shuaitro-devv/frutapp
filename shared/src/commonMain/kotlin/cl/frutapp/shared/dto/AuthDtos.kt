@@ -8,7 +8,9 @@ data class RegisterRequest(
     val name: String,
     val email: String,
     val phone: String? = null,
-    val password: String
+    val password: String,
+    /** Versión de T&C/Política aceptada al registrarse (para registrar el consentimiento). */
+    val consentVersion: String? = null
 )
 
 /** Cuerpo de login. */

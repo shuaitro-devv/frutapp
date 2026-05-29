@@ -12,6 +12,8 @@ object UsersTable : Table("app_user") {
     val passwordHash = text("password_hash")
     val role = text("role")
     val emailVerified = bool("email_verified")
+    val consentVersion = text("consent_version").nullable()
+    val consentAt = timestamp("consent_at").nullable()
     val createdAt = timestamp("created_at")
     val updatedAt = timestamp("updated_at")
     val deletedAt = timestamp("deleted_at").nullable()

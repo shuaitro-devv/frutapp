@@ -52,7 +52,8 @@ class AuthService(
             email = email,
             phone = req.phone?.trim()?.ifBlank { null },
             passwordHash = PasswordHasher.hash(req.password),
-            role = "CUSTOMER"
+            role = "CUSTOMER",
+            consentVersion = req.consentVersion
         )
         sendVerificationCode(user)
     }

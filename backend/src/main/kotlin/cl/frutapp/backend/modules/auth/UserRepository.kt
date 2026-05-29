@@ -45,7 +45,8 @@ class UserRepository {
         email: String,
         phone: String?,
         passwordHash: String,
-        role: String
+        role: String,
+        consentVersion: String? = null
     ): UserRow = dbQuery {
         val newId = UUID.randomUUID()
         UsersTable.insert {
@@ -56,6 +57,10 @@ class UserRepository {
             it[UsersTable.passwordHash] = passwordHash
             it[UsersTable.role] = role
             it[UsersTable.emailVerified] = false
+            if (consentVersion != null) {
+                it[UsersTable.consentVersion] = consentVersion
+                it[UsersTable.consentAt] = Clock.System.now()
+            }
         }
         UserRow(newId, name, email, phone, passwordHash, role, emailVerified = false)
     }
