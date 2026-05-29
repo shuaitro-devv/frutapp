@@ -19,6 +19,7 @@ object FrutAppColors {
     val AmberSoft = Color(0xFFFAEEDA)
 
     val Cream = Color(0xFFF1EFE8)
+    val Background = Color(0xFFFAF8F1)
     val Ink = Color(0xFF1F2A14)
     val InkMuted = Color(0xFF5C6B4A)
     val InkSoft = Color(0xFF8A9377)

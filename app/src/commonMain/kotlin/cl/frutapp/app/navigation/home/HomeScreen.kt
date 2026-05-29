@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -122,10 +123,12 @@ class HomeScreen : Screen {
                     }
                 )
             },
-            containerColor = Color.White
+            containerColor = FrutAppColors.Background
         ) { innerPadding ->
+            Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            HomeLeaves()
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 item { HomeHeader() }
@@ -168,8 +171,25 @@ class HomeScreen : Screen {
                     }
                 }
             }
+            }
         }
     }
+}
+
+@Composable
+private fun BoxScope.HomeLeaves() {
+    Image(
+        painter = painterResource(Res.drawable.hoja_decorativa),
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        modifier = Modifier.align(Alignment.TopStart).offset(x = (-28).dp, y = (-18).dp).size(96.dp).rotate(35f).alpha(0.4f)
+    )
+    Image(
+        painter = painterResource(Res.drawable.hoja_decorativa),
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        modifier = Modifier.align(Alignment.TopEnd).offset(x = 26.dp, y = (-28).dp).size(84.dp).rotate(155f).alpha(0.4f)
+    )
 }
 
 @Composable
