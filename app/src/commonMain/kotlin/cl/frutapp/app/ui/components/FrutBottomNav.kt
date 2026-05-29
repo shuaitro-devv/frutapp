@@ -1,6 +1,7 @@
 package cl.frutapp.app.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +34,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cl.frutapp.app.data.CartStore
 import cl.frutapp.app.ui.theme.FrutAppColors
 
 enum class FrutTab { INICIO, EXPLORAR, CARRITO, PEDIDOS, PERFIL }
@@ -91,16 +93,35 @@ private fun NavItem(
 
 @Composable
 private fun CartItem(selected: Boolean, onClick: () -> Unit) {
+    val count = CartStore.cantidadTotal
     Column(
         modifier = Modifier.size(width = 60.dp, height = 56.dp).clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Box(
-            modifier = Modifier.size(46.dp).background(FrutAppColors.Brand400, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Filled.ShoppingCart, contentDescription = "Carrito", tint = Color.White, modifier = Modifier.size(24.dp))
+        Box(contentAlignment = Alignment.TopEnd) {
+            Box(
+                modifier = Modifier.size(46.dp).background(FrutAppColors.Brand400, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.ShoppingCart, contentDescription = "Carrito", tint = Color.White, modifier = Modifier.size(24.dp))
+            }
+            if (count > 0) {
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .background(FrutAppColors.Error, CircleShape)
+                        .border(2.dp, Color.White, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (count > 9) "9+" else "$count",
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
     }
 }
