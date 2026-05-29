@@ -354,6 +354,8 @@ private fun ReviewsSection(producto: Producto, onVerTodas: () -> Unit) {
     var escribiendo by rememberSaveable(producto.id) { mutableStateOf(false) }
     var estrellas by rememberSaveable(producto.id) { mutableStateOf(5) }
     var texto by rememberSaveable(producto.id) { mutableStateOf("") }
+    // null = estamos creando una reseña nueva; con id = estamos editando esa reseña.
+    var editandoId by rememberSaveable(producto.id) { mutableStateOf<Int?>(null) }
     val autor = TokenStore.user?.name?.takeIf { it.isNotBlank() } ?: "Tú"
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
@@ -375,24 +377,42 @@ private fun ReviewsSection(producto: Producto, onVerTodas: () -> Unit) {
 
         if (escribiendo) {
             EscribirResenaForm(
+                modoEdicion = editandoId != null,
                 estrellas = estrellas,
                 onEstrellas = { estrellas = it },
                 texto = texto,
                 onTexto = { texto = it },
-                onPublicar = {
-                    ResenasStore.agregar(producto.id, autor, estrellas, texto)
+                onConfirmar = {
+                    val id = editandoId
+                    if (id != null) {
+                        ResenasStore.editar(producto.id, id, estrellas, texto)
+                        showToast("Reseña actualizada")
+                    } else {
+                        ResenasStore.agregar(producto.id, autor, estrellas, texto)
+                        showToast("¡Gracias por tu reseña!")
+                    }
                     texto = ""
                     estrellas = 5
+                    editandoId = null
                     escribiendo = false
-                    showToast("¡Gracias por tu reseña!")
                 },
-                onCancelar = { escribiendo = false }
+                onCancelar = {
+                    texto = ""
+                    estrellas = 5
+                    editandoId = null
+                    escribiendo = false
+                }
             )
         } else {
             Box(
                 modifier = Modifier.fillMaxWidth().padding(top = 14.dp)
                     .border(1.dp, FrutAppColors.Brand400, RoundedCornerShape(12.dp))
-                    .clickable { escribiendo = true }
+                    .clickable {
+                        editandoId = null
+                        estrellas = 5
+                        texto = ""
+                        escribiendo = true
+                    }
                     .padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -403,24 +423,37 @@ private fun ReviewsSection(producto: Producto, onVerTodas: () -> Unit) {
             }
         }
 
-        resenas.forEach { ReviewCard(it) }
+        resenas.forEach { r ->
+            ReviewCard(
+                r = r,
+                onEditar = if (r.propia) {
+                    {
+                        editandoId = r.id
+                        estrellas = r.estrellas
+                        texto = r.texto
+                        escribiendo = true
+                    }
+                } else null
+            )
+        }
     }
 }
 
 @Composable
 private fun EscribirResenaForm(
+    modoEdicion: Boolean,
     estrellas: Int,
     onEstrellas: (Int) -> Unit,
     texto: String,
     onTexto: (String) -> Unit,
-    onPublicar: () -> Unit,
+    onConfirmar: () -> Unit,
     onCancelar: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 14.dp)
             .border(1.dp, FrutAppColors.Brand100, RoundedCornerShape(16.dp)).padding(16.dp)
     ) {
-        Text("Tu calificación", color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Text(if (modoEdicion) "Edita tu reseña" else "Tu calificación", color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         StarSelector(rating = estrellas, onRating = onEstrellas)
         Spacer(Modifier.height(12.dp))
         Box(
@@ -441,7 +474,7 @@ private fun EscribirResenaForm(
             )
         }
         Spacer(Modifier.height(14.dp))
-        FrutButtonPrimary(text = "Publicar reseña", onClick = onPublicar, enabled = texto.isNotBlank())
+        FrutButtonPrimary(text = if (modoEdicion) "Guardar cambios" else "Publicar reseña", onClick = onConfirmar, enabled = texto.isNotBlank())
         Text(
             "Cancelar",
             color = FrutAppColors.InkSoft,
@@ -482,7 +515,7 @@ private fun StarRow(rating: Double, starSize: Dp) {
 }
 
 @Composable
-private fun ReviewCard(r: Resena) {
+private fun ReviewCard(r: Resena, onEditar: (() -> Unit)? = null) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
             .background(FrutAppColors.Brand50, RoundedCornerShape(14.dp)).padding(14.dp)
@@ -495,12 +528,30 @@ private fun ReviewCard(r: Resena) {
                 Text(r.nombre.take(1), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
             Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
-                Text(r.nombre, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(r.nombre, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    if (r.propia) {
+                        Box(modifier = Modifier.padding(start = 6.dp).background(FrutAppColors.Brand400, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 1.dp)) {
+                            Text("Tú", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
                 StarRow(r.estrellas.toDouble(), starSize = 13.dp)
             }
             Text(r.fecha, color = FrutAppColors.InkSoft, fontSize = 11.sp)
         }
-        Text(r.texto, color = FrutAppColors.Ink, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+        if (r.texto.isNotBlank()) {
+            Text(r.texto, color = FrutAppColors.Ink, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+        }
+        if (onEditar != null) {
+            Text(
+                "Editar",
+                color = FrutAppColors.Brand600,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 8.dp).clickable(onClick = onEditar)
+            )
+        }
     }
 }
 
