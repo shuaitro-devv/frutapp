@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
 import cl.frutapp.app.ui.theme.FrutAppShapes
 import org.jetbrains.compose.resources.DrawableResource
@@ -134,6 +135,7 @@ fun ProductCard(
                             .background(if (added) FrutAppColors.Brand600 else FrutAppColors.Brand400, CircleShape)
                             .clickable {
                                 onAdd()
+                                showToast("Agregado al carrito")
                                 addJob?.cancel()
                                 addJob = scope.launch {
                                     added = true

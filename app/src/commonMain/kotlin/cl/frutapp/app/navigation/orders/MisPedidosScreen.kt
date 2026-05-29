@@ -22,7 +22,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,6 +47,7 @@ import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.navigation.shop.OrderTrackingScreen
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
+import cl.frutapp.app.ui.components.OrderListSkeleton
 import cl.frutapp.app.ui.theme.FrutAppColors
 import cl.frutapp.shared.dto.OrderSummaryDto
 import frutapp.app.generated.resources.Res
@@ -100,9 +100,7 @@ class MisPedidosScreen : Screen {
 
                 when {
                     error -> Center("No pudimos cargar tus pedidos.", Modifier.weight(1f))
-                    pedidos == null -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = FrutAppColors.Brand400)
-                    }
+                    pedidos == null -> OrderListSkeleton(Modifier.weight(1f).padding(top = 6.dp))
                     visibles.isEmpty() -> Center("No tienes pedidos en esta categoría.", Modifier.weight(1f))
                     else -> LazyColumn(
                         modifier = Modifier.weight(1f),

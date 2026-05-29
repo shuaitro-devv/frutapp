@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Storefront
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,6 +50,7 @@ import cl.frutapp.app.data.paymentMethodLabel
 import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
+import cl.frutapp.app.ui.components.SkeletonBox
 import cl.frutapp.app.ui.theme.FrutAppColors
 import cl.frutapp.shared.dto.OrderDto
 import kotlinx.coroutines.delay
@@ -92,8 +92,15 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
                 val o = order
                 when {
                     error -> Centered("No pudimos cargar el pedido.")
-                    o == null -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = FrutAppColors.Brand400)
+                    o == null -> Column(modifier = Modifier.weight(1f).padding(20.dp)) {
+                        SkeletonBox(Modifier.fillMaxWidth(0.5f).height(18.dp))
+                        Spacer(Modifier.height(16.dp))
+                        SkeletonBox(Modifier.fillMaxWidth().height(150.dp), RoundedCornerShape(20.dp))
+                        Spacer(Modifier.height(20.dp))
+                        repeat(4) {
+                            SkeletonBox(Modifier.fillMaxWidth(0.7f).height(16.dp))
+                            Spacer(Modifier.height(12.dp))
+                        }
                     }
                     else -> Detail(o, modifier = Modifier.weight(1f))
                 }

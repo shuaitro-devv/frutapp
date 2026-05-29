@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxSize
 import cafe.adriel.voyager.navigator.Navigator
+import cafe.adriel.voyager.transitions.SlideTransition
 import cl.frutapp.app.navigation.SplashScreen
 import cl.frutapp.app.ui.theme.FrutAppTheme
 
@@ -12,9 +13,8 @@ import cl.frutapp.app.ui.theme.FrutAppTheme
 fun App() {
     FrutAppTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
-            // Voyager Navigator: el grafo de navegación arranca en Splash.
-            // Cada pantalla se irá agregando a medida que lleguen los mockups.
-            Navigator(SplashScreen())
+            // Voyager Navigator con transición deslizante entre pantallas (sensación app nativa).
+            Navigator(SplashScreen()) { navigator -> SlideTransition(navigator) }
         }
     }
 }
