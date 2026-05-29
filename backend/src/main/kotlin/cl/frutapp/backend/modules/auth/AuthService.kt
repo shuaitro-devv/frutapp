@@ -28,6 +28,10 @@ class AuthService(
 ) {
     private val logger = LoggerFactory.getLogger(AuthService::class.java)
 
+    /** Hash bcrypt fijo para igualar el tiempo de login cuando el usuario NO existe
+     *  (evita el oráculo de enumeración por timing). Se calcula una sola vez. */
+    private val dummyHash: String by lazy { PasswordHasher.hash("frutapp-timing-dummy") }
+
     /** Envía un correo sin tumbar el flujo principal si el proveedor falla. */
     private suspend fun sendSafely(email: Email) {
         runCatching { emailSender.send(email) }
@@ -58,11 +62,13 @@ class AuthService(
     suspend fun verifyEmail(req: VerifyEmailRequest): AuthResponse {
         val email = normalizeEmail(req.email)
         val user = users.findByEmail(email) ?: throw UnauthorizedException("Código inválido o expirado.")
-        if (user.emailVerified) return issueFor(user)
-        val tokenId = emailVerificationTokens.findValid(user.id, tokens.hashRefreshToken(req.code))
+        // Ya verificado: NO emitir tokens sin código (evita tomar la cuenta sabiendo el correo).
+        if (user.emailVerified) throw UnauthorizedException("Código inválido o expirado.")
+        val tokenId = emailVerificationTokens.findValid(user.id, tokens.hashCode(req.code))
             ?: throw UnauthorizedException("Código inválido o expirado.")
+        // Consumo atómico: si otra request ya lo usó, falla (no doble uso).
+        if (!emailVerificationTokens.consume(tokenId)) throw UnauthorizedException("Código inválido o expirado.")
         users.markEmailVerified(user.id)
-        emailVerificationTokens.markUsed(tokenId)
         sendSafely(EmailTemplates.welcome(to = user.email, name = user.name.substringBefore(' ')))
         return issueFor(user)
     }
@@ -77,7 +83,12 @@ class AuthService(
 
     suspend fun login(req: LoginRequest): AuthResponse {
         val email = normalizeEmail(req.email)
-        val user = users.findByEmail(email) ?: throw UnauthorizedException()
+        val user = users.findByEmail(email)
+        if (user == null) {
+            // Gasta el mismo tiempo de bcrypt aunque el usuario no exista (anti-enumeración).
+            PasswordHasher.verify(req.password, dummyHash)
+            throw UnauthorizedException()
+        }
         if (!PasswordHasher.verify(req.password, user.passwordHash)) throw UnauthorizedException()
         if (!user.emailVerified) throw UnauthorizedException("Verifica tu correo para iniciar sesión.")
         return issueFor(user)
@@ -87,7 +98,7 @@ class AuthService(
     private suspend fun sendVerificationCode(user: UserRow) {
         emailVerificationTokens.invalidateAllForUser(user.id)
         val code = tokens.generateNumericCode()
-        emailVerificationTokens.create(user.id, tokens.hashRefreshToken(code), Clock.System.now() + 30.minutes)
+        emailVerificationTokens.create(user.id, tokens.hashCode(code), Clock.System.now() + 30.minutes)
         sendSafely(EmailTemplates.emailVerification(to = user.email, name = user.name.substringBefore(' '), code = code))
     }
 
@@ -117,7 +128,7 @@ class AuthService(
         val user = users.findByEmail(email) ?: return
         passwordResetTokens.invalidateAllForUser(user.id)
         val code = tokens.generateNumericCode()
-        passwordResetTokens.create(user.id, tokens.hashRefreshToken(code), Clock.System.now() + 30.minutes)
+        passwordResetTokens.create(user.id, tokens.hashCode(code), Clock.System.now() + 30.minutes)
         sendSafely(EmailTemplates.passwordReset(to = user.email, code = code))
     }
 
@@ -126,10 +137,10 @@ class AuthService(
         val email = normalizeEmail(req.email)
         validatePassword(req.newPassword)
         val user = users.findByEmail(email) ?: throw UnauthorizedException("Código inválido o expirado.")
-        val tokenId = passwordResetTokens.findValid(user.id, tokens.hashRefreshToken(req.code))
+        val tokenId = passwordResetTokens.findValid(user.id, tokens.hashCode(req.code))
             ?: throw UnauthorizedException("Código inválido o expirado.")
+        if (!passwordResetTokens.consume(tokenId)) throw UnauthorizedException("Código inválido o expirado.")
         users.updatePassword(user.id, PasswordHasher.hash(req.newPassword))
-        passwordResetTokens.markUsed(tokenId)
         refreshTokens.revokeAllForUser(user.id)
         sendSafely(EmailTemplates.passwordChanged(to = user.email, name = user.name.substringBefore(' ')))
     }

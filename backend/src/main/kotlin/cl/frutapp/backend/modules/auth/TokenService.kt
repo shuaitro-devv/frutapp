@@ -11,6 +11,8 @@ import java.security.SecureRandom
 import java.util.Base64
 import java.util.Date
 import java.util.UUID
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 
@@ -51,10 +53,21 @@ class TokenService(private val config: JwtConfig) {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
     }
 
-    /** Hash determinista (SHA-256 hex) de un token/código, lo único que se persiste. */
+    /** Hash determinista (SHA-256 hex) de un refresh token (256 bits aleatorios). */
     fun hashRefreshToken(token: String): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(token.toByteArray())
         return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    /**
+     * Hash con pepper (HMAC-SHA256 con el secreto del servidor) para códigos CORTOS
+     * (6 dígitos). Sin el pepper, un SHA-256 simple de 10^6 combinaciones es
+     * pre-computable si se filtra la tabla; con HMAC el atacante necesita además el secreto.
+     */
+    fun hashCode(code: String): String {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(config.secret.toByteArray(), "HmacSHA256"))
+        return mac.doFinal(code.toByteArray()).joinToString("") { "%02x".format(it) }
     }
 
     /** Código numérico aleatorio (para recuperación de contraseña / verificación). */

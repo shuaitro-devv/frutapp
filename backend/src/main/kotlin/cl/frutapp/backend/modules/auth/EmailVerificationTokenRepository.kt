@@ -34,11 +34,14 @@ class EmailVerificationTokenRepository {
             .singleOrNull()
     }
 
-    suspend fun markUsed(id: UUID) = dbQuery {
-        EmailVerificationTokensTable.update({ EmailVerificationTokensTable.id eq id }) {
+    /** Consume el token de forma atómica: lo marca usado SOLO si seguía sin usar.
+     *  Devuelve true si este llamado lo consumió (evita doble uso en carrera). */
+    suspend fun consume(id: UUID): Boolean = dbQuery {
+        EmailVerificationTokensTable.update({
+            (EmailVerificationTokensTable.id eq id) and EmailVerificationTokensTable.usedAt.isNull()
+        }) {
             it[usedAt] = Clock.System.now()
-        }
-        Unit
+        } == 1
     }
 
     /** Invalida códigos previos del usuario (al reenviar uno nuevo). */

@@ -34,11 +34,14 @@ class PasswordResetTokenRepository {
             .singleOrNull()
     }
 
-    suspend fun markUsed(id: UUID) = dbQuery {
-        PasswordResetTokensTable.update({ PasswordResetTokensTable.id eq id }) {
+    /** Consume el token de forma atómica: lo marca usado SOLO si seguía sin usar.
+     *  Devuelve true si este llamado lo consumió (evita doble uso en carrera). */
+    suspend fun consume(id: UUID): Boolean = dbQuery {
+        PasswordResetTokensTable.update({
+            (PasswordResetTokensTable.id eq id) and PasswordResetTokensTable.usedAt.isNull()
+        }) {
             it[usedAt] = Clock.System.now()
-        }
-        Unit
+        } == 1
     }
 
     /** Invalida códigos previos del usuario (al pedir uno nuevo). */
