@@ -25,9 +25,14 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,19 +49,24 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.CartStore
+import cl.frutapp.app.data.ClientInfo
+import cl.frutapp.app.data.RewardsStore
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.theme.FrutAppColors
+import cl.frutapp.shared.dto.ClientContextDto
 import cl.frutapp.shared.dto.CreateOrderRequest
 import cl.frutapp.shared.dto.OrderItemRequest
+import cl.frutapp.shared.dto.PaymentInput
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 
-private data class PayMethod(val label: String, val icon: ImageVector)
+private data class PayMethod(val label: String, val icon: ImageVector, val code: String)
 
 private const val DIRECCION_DEMO = "Av. Siempre Viva 742, Santiago"
 private const val ENTREGA_DEMO = "Hoy 10:00 - 12:00"
+private const val SUCURSAL_DEMO = "Sucursal Lo Valledor"
 
 /**
  * Checkout (mockup 10): dirección de entrega, resumen del pedido y método de pago.
@@ -66,16 +76,26 @@ class CheckoutScreen : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val total = CartStore.total
         val metodos = listOf(
-            PayMethod("Tarjeta de crédito/débito", Icons.Filled.CreditCard),
-            PayMethod("Mercado Pago", Icons.Filled.AccountBalanceWallet),
-            PayMethod("Webpay", Icons.Filled.CreditCard)
+            PayMethod("Tarjeta de crédito/débito", Icons.Filled.CreditCard, "TARJETA"),
+            PayMethod("Mercado Pago", Icons.Filled.AccountBalanceWallet, "MERCADO_PAGO"),
+            PayMethod("Webpay", Icons.Filled.CreditCard, "WEBPAY")
         )
         var metodoSel by remember { mutableStateOf(0) }
+        var esRetiro by remember { mutableStateOf(false) }
+        var usarCoins by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
         var loading by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
+
+        // Saldo de FrutCoins (para ofrecer pagar con ellos). Fuente de verdad: backend.
+        LaunchedEffect(Unit) {
+            runCatching { OrderApi().frutCoins() }.onSuccess { RewardsStore.set(it.balance) }
+        }
+
+        // Estimación local SOLO para mostrar (retiro = sin envío). El backend reprecia.
+        val envioLocal = if (esRetiro) 0 else CartStore.envio
+        val totalLocal = CartStore.subtotal + envioLocal
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -83,11 +103,20 @@ class CheckoutScreen : Screen {
                 Stepper()
 
                 Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                    SectionTitle("Dirección de entrega", Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp))
-                    AddressCard(Modifier.padding(horizontal = 20.dp))
+                    SectionTitle("Modalidad de entrega", Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp))
+                    ModalidadSelector(esRetiro = esRetiro, onSelect = { esRetiro = it }, Modifier.padding(horizontal = 20.dp))
+
+                    SectionTitle(if (esRetiro) "Sucursal de retiro" else "Dirección de entrega", Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
+                    if (esRetiro) SucursalCard(Modifier.padding(horizontal = 20.dp))
+                    else AddressCard(Modifier.padding(horizontal = 20.dp))
 
                     SectionTitle("Resumen del pedido", Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
-                    OrderSummary(Modifier.padding(horizontal = 20.dp))
+                    OrderSummary(envio = envioLocal, total = totalLocal, modifier = Modifier.padding(horizontal = 20.dp))
+
+                    if (RewardsStore.balance > 0) {
+                        SectionTitle("FrutCoins", Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
+                        FrutCoinsToggle(saldo = RewardsStore.balance, usar = usarCoins, onToggle = { usarCoins = it }, Modifier.padding(horizontal = 20.dp))
+                    }
 
                     SectionTitle("Método de pago", Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
                     Column(modifier = Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -103,7 +132,7 @@ class CheckoutScreen : Screen {
                         Text(error!!, color = FrutAppColors.Error, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
                     }
                     FrutButtonPrimary(
-                        text = if (loading) "Procesando…" else "Pagar ${formatClp(total)}",
+                        text = if (loading) "Procesando…" else "Pagar ${formatClp(totalLocal)}",
                         enabled = !loading && !CartStore.isEmpty,
                         onClick = {
                             error = null
@@ -111,11 +140,27 @@ class CheckoutScreen : Screen {
                             scope.launch {
                                 runCatching {
                                     // El backend re-precia y calcula todo; el front solo manda qué quiere.
+                                    val pagos = buildList {
+                                        if (usarCoins && RewardsStore.balance > 0) {
+                                            add(PaymentInput(method = "FRUTCOINS", monto = RewardsStore.balance))
+                                        }
+                                        add(PaymentInput(method = metodos[metodoSel].code))
+                                    }
                                     OrderApi().create(
                                         CreateOrderRequest(
                                             items = CartStore.items.map {
                                                 OrderItemRequest(productId = it.producto.id, cantidad = it.cantidad, gramos = it.gramos)
-                                            }
+                                            },
+                                            fulfillmentType = if (esRetiro) "RETIRO" else "DELIVERY",
+                                            sucursal = if (esRetiro) SUCURSAL_DEMO else null,
+                                            payments = pagos,
+                                            context = ClientContextDto(
+                                                channel = ClientInfo.channel,
+                                                appVersion = ClientInfo.appVersion,
+                                                deviceModel = ClientInfo.deviceModel,
+                                                osVersion = ClientInfo.osVersion,
+                                                locale = ClientInfo.locale
+                                            )
                                         )
                                     )
                                 }.onSuccess { dto ->
@@ -224,7 +269,7 @@ private fun AddressCard(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun OrderSummary(modifier: Modifier = Modifier) {
+private fun OrderSummary(envio: Int, total: Int, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier.fillMaxWidth().background(FrutAppColors.Cream, RoundedCornerShape(16.dp)).padding(16.dp)
     ) {
@@ -237,12 +282,84 @@ private fun OrderSummary(modifier: Modifier = Modifier) {
         }
         Spacer(Modifier.height(8.dp))
         SummaryLine("Subtotal", formatClp(CartStore.subtotal))
-        SummaryLine("Envío", if (CartStore.envio == 0) "Gratis" else formatClp(CartStore.envio))
+        SummaryLine("Envío", if (envio == 0) "Gratis" else formatClp(envio))
         Spacer(Modifier.height(6.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Total", color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Text(formatClp(CartStore.total), color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(formatClp(total), color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
+    }
+}
+
+@Composable
+private fun ModalidadSelector(esRetiro: Boolean, onSelect: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        ModalidadOption(
+            icon = Icons.Filled.LocalShipping,
+            label = "Despacho",
+            selected = !esRetiro,
+            onClick = { onSelect(false) },
+            modifier = Modifier.weight(1f)
+        )
+        ModalidadOption(
+            icon = Icons.Filled.Storefront,
+            label = "Retiro",
+            selected = esRetiro,
+            onClick = { onSelect(true) },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun ModalidadOption(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .background(if (selected) FrutAppColors.Brand50 else Color.White, RoundedCornerShape(14.dp))
+            .border(1.5.dp, if (selected) FrutAppColors.Brand400 else FrutAppColors.Brand100, RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(icon, contentDescription = null, tint = if (selected) FrutAppColors.Brand600 else FrutAppColors.InkSoft, modifier = Modifier.size(24.dp))
+        Text(label, color = if (selected) FrutAppColors.Brand800 else FrutAppColors.Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
+    }
+}
+
+@Composable
+private fun SucursalCard(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.fillMaxWidth().background(FrutAppColors.Brand50, RoundedCornerShape(16.dp)).padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.size(40.dp).background(Color.White, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Filled.Storefront, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(22.dp))
+        }
+        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(SUCURSAL_DEMO, color = FrutAppColors.Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text("Retiras tu pedido sin costo de envío", color = FrutAppColors.InkMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+    }
+}
+
+@Composable
+private fun FrutCoinsToggle(saldo: Int, usar: Boolean, onToggle: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.fillMaxWidth().background(FrutAppColors.AmberSoft, RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Usar mis FrutCoins", color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("Tienes $saldo · se aplicará el máximo permitido", color = FrutAppColors.AmberCoin, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 2.dp))
+        }
+        Switch(
+            checked = usar,
+            onCheckedChange = onToggle,
+            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = FrutAppColors.Brand400)
+        )
     }
 }
 
