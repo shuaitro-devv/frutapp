@@ -5,19 +5,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
 /**
- * Balance de FrutCoins en memoria (cliente). Arranca con un saldo demo y suma lo ganado
- * al pagar un pedido. Cuando exista el backend de recompensas, esto se reemplaza por la API.
+ * Caché en memoria del saldo de FrutCoins. La FUENTE DE VERDAD es el backend (ledger,
+ * GET /v1/frutcoins); las pantallas lo cargan y actualizan acá para mostrarlo.
  */
 object RewardsStore {
-    var balance by mutableStateOf(245)
+    var balance by mutableStateOf(0)
         private set
 
-    fun add(coins: Int) {
-        balance += coins
+    fun set(value: Int) {
+        balance = value
     }
 
-    /** Reinicia al saldo inicial (al cerrar sesión). */
+    /** Al cerrar sesión. */
     fun reset() {
-        balance = 245
+        balance = 0
     }
 }

@@ -42,9 +42,10 @@ import cl.frutapp.app.ui.theme.FrutAppColors
 
 /**
  * Pedido confirmado (mockup 11): confirmación con número de pedido, entrega estimada,
- * dirección, total y FrutCoins ganadas. Pedido simulado (aún sin persistencia).
+ * dirección, total y FrutCoins ganadas. El pedido ya está persistido en el backend.
  */
 class OrderConfirmedScreen(
+    private val orderId: String,
     private val numero: String,
     private val total: Int,
     private val coins: Int,
@@ -113,7 +114,7 @@ class OrderConfirmedScreen(
                 Column(modifier = Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     FrutButtonPrimary(
                         text = "Ver mi pedido",
-                        onClick = { navigator.replace(OrderTrackingScreen(numero = numero, total = total, direccion = direccion, entrega = entrega)) }
+                        onClick = { navigator.replace(OrderTrackingScreen(orderId = orderId)) }
                     )
                     FrutButtonOutline(text = "Seguir comprando", onClick = { navigator.popUntilRoot() })
                     Spacer(Modifier.height(20.dp))

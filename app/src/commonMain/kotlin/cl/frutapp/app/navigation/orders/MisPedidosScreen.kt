@@ -22,9 +22,11 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,39 +43,40 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import cl.frutapp.app.data.Order
-import cl.frutapp.app.data.OrderEstado
-import cl.frutapp.app.data.OrdersStore
 import cl.frutapp.app.data.formatClp
+import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.navigation.shop.OrderTrackingScreen
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.theme.FrutAppColors
+import cl.frutapp.shared.dto.OrderSummaryDto
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.canasta_frutas
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
 
 /**
- * Mis pedidos (mockup 15): tabs por estado, búsqueda y lista de pedidos. Datos desde
- * [OrdersStore] (memoria). Tab "Pedidos" del bottom nav; cada pedido abre el seguimiento.
+ * Mis pedidos (mockup 15): tabs por estado, búsqueda y lista. Datos del backend
+ * (GET /v1/orders). Cada pedido abre el seguimiento real.
  */
 class MisPedidosScreen : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val tabs = listOf<Pair<String, OrderEstado?>>(
-            "Todos" to null,
-            "En curso" to OrderEstado.EN_CURSO,
-            "Completados" to OrderEstado.COMPLETADO,
-            "Cancelados" to OrderEstado.CANCELADO
-        )
+        var pedidos by remember { mutableStateOf<List<OrderSummaryDto>?>(null) }
+        var error by remember { mutableStateOf(false) }
         var tabSel by remember { mutableStateOf(0) }
         var query by remember { mutableStateOf("") }
 
-        val visibles = OrdersStore.pedidos.filter {
-            (tabs[tabSel].second == null || it.estado == tabs[tabSel].second) &&
-                it.numero.contains(query.trim(), ignoreCase = true)
+        LaunchedEffect(Unit) {
+            runCatching { OrderApi().list() }
+                .onSuccess { pedidos = it }
+                .onFailure { error = true }
+        }
+
+        val tabs = listOf("Todos", "En curso", "Completados", "Cancelados")
+        val visibles = (pedidos ?: emptyList()).filter {
+            matchesTab(tabSel, it.status) && it.numero.contains(query.trim(), ignoreCase = true)
         }
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
@@ -87,31 +90,27 @@ class MisPedidosScreen : Screen {
                     Text("Ayuda", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { })
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     tabs.forEachIndexed { i, t ->
-                        TabChip(label = t.first, selected = tabSel == i, onClick = { tabSel = i }, modifier = Modifier.weight(1f))
+                        TabChip(label = t, selected = tabSel == i, onClick = { tabSel = i }, modifier = Modifier.weight(1f))
                     }
                 }
 
                 SearchBar(query = query, onQuery = { query = it }, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
 
-                if (visibles.isEmpty()) {
-                    Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text("No tienes pedidos en esta categoría.", color = FrutAppColors.InkMuted, fontSize = 14.sp)
+                when {
+                    error -> Center("No pudimos cargar tus pedidos.")
+                    pedidos == null -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = FrutAppColors.Brand400)
                     }
-                } else {
-                    LazyColumn(
+                    visibles.isEmpty() -> Center("No tienes pedidos en esta categoría.")
+                    else -> LazyColumn(
                         modifier = Modifier.weight(1f),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp)
                     ) {
                         items(visibles.size) { idx ->
-                            OrderCard(visibles[idx], onClick = {
-                                val o = visibles[idx]
-                                navigator.push(OrderTrackingScreen(numero = o.numero, total = o.total, direccion = o.direccion, entrega = o.entrega))
-                            })
+                            val o = visibles[idx]
+                            OrderCard(o, onClick = { navigator.push(OrderTrackingScreen(orderId = o.id)) })
                         }
                     }
                 }
@@ -122,6 +121,33 @@ class MisPedidosScreen : Screen {
                 )
             }
         }
+    }
+}
+
+private fun matchesTab(tabIndex: Int, status: String): Boolean = when (tabIndex) {
+    1 -> status in setOf("CREADO", "PAGADO", "EN_PICKING", "STOCK_CONFIRMADO", "FACTURADO", "EN_DESPACHO")
+    2 -> status == "ENTREGADO"
+    3 -> status in setOf("CANCELADO", "DEVOLUCION")
+    else -> true
+}
+
+private fun statusLabel(status: String): String = when (status) {
+    "CREADO" -> "Creado"
+    "PAGADO" -> "Pagado"
+    "EN_PICKING" -> "En preparación"
+    "STOCK_CONFIRMADO" -> "Stock confirmado"
+    "FACTURADO" -> "Facturado"
+    "EN_DESPACHO" -> "En camino"
+    "ENTREGADO" -> "Entregado"
+    "CANCELADO" -> "Cancelado"
+    "DEVOLUCION" -> "Devolución"
+    else -> status
+}
+
+@Composable
+private fun Center(text: String) {
+    Box(Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.Center) {
+        Text(text, color = FrutAppColors.InkMuted, fontSize = 14.sp)
     }
 }
 
@@ -160,7 +186,7 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit, modifier: Modifi
 }
 
 @Composable
-private fun OrderCard(order: Order, onClick: () -> Unit) {
+private fun OrderCard(order: OrderSummaryDto, onClick: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)
             .background(Color.White, RoundedCornerShape(16.dp))
@@ -171,19 +197,14 @@ private fun OrderCard(order: Order, onClick: () -> Unit) {
             modifier = Modifier.size(56.dp).background(FrutAppColors.Brand50, RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Image(
-                painter = painterResource(Res.drawable.canasta_frutas),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.size(44.dp).padding(4.dp)
-            )
+            Image(painter = painterResource(Res.drawable.canasta_frutas), contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(44.dp).padding(4.dp))
         }
         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(order.numero, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                EstadoChip(order.estado, modifier = Modifier.padding(start = 8.dp))
+                EstadoChip(order.status, modifier = Modifier.padding(start = 8.dp))
             }
-            Text(order.fecha, color = FrutAppColors.InkSoft, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+            Text("${order.itemsCount} producto(s)", color = FrutAppColors.InkSoft, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
             Text(formatClp(order.total), color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp))
         }
         Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = FrutAppColors.InkSoft, modifier = Modifier.size(20.dp))
@@ -191,13 +212,13 @@ private fun OrderCard(order: Order, onClick: () -> Unit) {
 }
 
 @Composable
-private fun EstadoChip(estado: OrderEstado, modifier: Modifier = Modifier) {
-    val (text, bg) = when (estado) {
-        OrderEstado.EN_CURSO -> FrutAppColors.AmberCoin to FrutAppColors.AmberSoft
-        OrderEstado.COMPLETADO -> FrutAppColors.Brand600 to FrutAppColors.Brand50
-        OrderEstado.CANCELADO -> FrutAppColors.Error to FrutAppColors.Cream
+private fun EstadoChip(status: String, modifier: Modifier = Modifier) {
+    val (text, bg) = when {
+        status == "ENTREGADO" -> FrutAppColors.Brand600 to FrutAppColors.Brand50
+        status == "CANCELADO" || status == "DEVOLUCION" -> FrutAppColors.Error to FrutAppColors.Cream
+        else -> FrutAppColors.AmberCoin to FrutAppColors.AmberSoft
     }
     Box(modifier = modifier.background(bg, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 2.dp)) {
-        Text(estado.label, color = text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+        Text(statusLabel(status), color = text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
     }
 }

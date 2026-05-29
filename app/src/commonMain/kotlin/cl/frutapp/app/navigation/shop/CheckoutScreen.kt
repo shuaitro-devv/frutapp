@@ -31,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,14 +44,13 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.CartStore
-import cl.frutapp.app.data.Order
-import cl.frutapp.app.data.OrderEstado
-import cl.frutapp.app.data.OrdersStore
-import cl.frutapp.app.data.RewardsStore
 import cl.frutapp.app.data.formatClp
+import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.theme.FrutAppColors
-import kotlin.random.Random
+import cl.frutapp.shared.dto.CreateOrderRequest
+import cl.frutapp.shared.dto.OrderItemRequest
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 
 private data class PayMethod(val label: String, val icon: ImageVector)
@@ -73,6 +73,9 @@ class CheckoutScreen : Screen {
             PayMethod("Webpay", Icons.Filled.CreditCard)
         )
         var metodoSel by remember { mutableStateOf(0) }
+        val scope = rememberCoroutineScope()
+        var loading by remember { mutableStateOf(false) }
+        var error by remember { mutableStateOf<String?>(null) }
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -95,33 +98,43 @@ class CheckoutScreen : Screen {
                     Spacer(Modifier.height(100.dp))
                 }
 
-                Box(modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 20.dp, vertical = 14.dp)) {
+                Column(modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 20.dp, vertical = 14.dp)) {
+                    if (error != null) {
+                        Text(error!!, color = FrutAppColors.Error, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
+                    }
                     FrutButtonPrimary(
-                        text = "Pagar ${formatClp(total)}",
+                        text = if (loading) "Procesando…" else "Pagar ${formatClp(total)}",
+                        enabled = !loading && !CartStore.isEmpty,
                         onClick = {
-                            val numero = "#FRU-2026-${Random.nextInt(100000, 999999)}"
-                            val coins = total / 100
-                            RewardsStore.add(coins)
-                            OrdersStore.add(
-                                Order(
-                                    numero = numero,
-                                    fecha = "Hoy",
-                                    total = total,
-                                    estado = OrderEstado.EN_CURSO,
-                                    direccion = DIRECCION_DEMO,
-                                    entrega = ENTREGA_DEMO
-                                )
-                            )
-                            CartStore.clear()
-                            navigator.replace(
-                                OrderConfirmedScreen(
-                                    numero = numero,
-                                    total = total,
-                                    coins = coins,
-                                    direccion = DIRECCION_DEMO,
-                                    entrega = ENTREGA_DEMO
-                                )
-                            )
+                            error = null
+                            loading = true
+                            scope.launch {
+                                runCatching {
+                                    // El backend re-precia y calcula todo; el front solo manda qué quiere.
+                                    OrderApi().create(
+                                        CreateOrderRequest(
+                                            items = CartStore.items.map {
+                                                OrderItemRequest(productId = it.producto.id, cantidad = it.cantidad, gramos = it.gramos)
+                                            }
+                                        )
+                                    )
+                                }.onSuccess { dto ->
+                                    CartStore.clear()
+                                    navigator.replace(
+                                        OrderConfirmedScreen(
+                                            orderId = dto.id,
+                                            numero = dto.numero,
+                                            total = dto.totalFinal ?: dto.totalEstimado,
+                                            coins = dto.frutcoinsGanadas,
+                                            direccion = dto.direccion,
+                                            entrega = dto.entrega
+                                        )
+                                    )
+                                }.onFailure {
+                                    error = "No pudimos crear el pedido. Revisa tu conexión e inténtalo de nuevo."
+                                }
+                                loading = false
+                            }
                         }
                     )
                 }

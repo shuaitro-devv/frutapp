@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -42,6 +43,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.RewardsStore
+import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.navigation.recycle.ReciclaScreen
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
@@ -63,6 +65,9 @@ class FrutCoinsScreen : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        LaunchedEffect(Unit) {
+            runCatching { OrderApi().frutCoins() }.onSuccess { RewardsStore.set(it.balance) }
+        }
         val ganar = listOf(
             FormaGanar(Icons.Filled.ShoppingCart, "Por cada compra", "+50"),
             FormaGanar(Icons.Filled.Recycling, "Reciclar envases", "+30", onClick = { navigator.push(ReciclaScreen()) }),

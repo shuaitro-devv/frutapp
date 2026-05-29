@@ -44,6 +44,14 @@ object TokenStore {
         SessionStorage.putString(K_USER, json.encodeToString(UserDto.serializer(), user))
     }
 
+    /** Actualiza solo los tokens (al refrescar el access token); mantiene el usuario. */
+    fun updateTokens(access: String, refresh: String) {
+        accessToken = access
+        refreshToken = refresh
+        SessionStorage.putString(K_ACCESS, access)
+        SessionStorage.putString(K_REFRESH, refresh)
+    }
+
     fun clear() {
         accessToken = null
         refreshToken = null

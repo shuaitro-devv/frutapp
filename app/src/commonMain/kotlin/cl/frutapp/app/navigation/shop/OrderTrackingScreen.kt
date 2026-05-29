@@ -25,9 +25,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -39,9 +45,11 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.formatClp
+import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.theme.FrutAppColors
+import cl.frutapp.shared.dto.OrderDto
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.camion_reparto
 import org.jetbrains.compose.resources.ExperimentalResourceApi
@@ -51,94 +59,33 @@ private enum class PasoEstado { COMPLETADO, ACTIVO, PENDIENTE }
 private data class Paso(val titulo: String, val detalle: String, val estado: PasoEstado)
 
 /**
- * Seguimiento de pedido (mockup 12): estado del pedido con ilustración del reparto y
- * timeline vertical. Estado simulado ("En camino") — aún sin backend de órdenes.
+ * Seguimiento de pedido (mockup 12): carga el pedido real del backend y deriva el
+ * timeline del estado de la orden. La operación avanza ese estado desde el back office.
  */
-class OrderTrackingScreen(
-    private val numero: String,
-    private val total: Int,
-    private val direccion: String,
-    private val entrega: String
-) : Screen {
+class OrderTrackingScreen(private val orderId: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val pasos = listOf(
-            Paso("Pedido confirmado", "Recibimos tu pedido", PasoEstado.COMPLETADO),
-            Paso("Preparando tu pedido", "Seleccionando productos frescos", PasoEstado.COMPLETADO),
-            Paso("En camino", "Tu pedido va hacia tu dirección", PasoEstado.ACTIVO),
-            Paso("Entregado", "Disfruta tus productos", PasoEstado.PENDIENTE)
-        )
+        var order by remember { mutableStateOf<OrderDto?>(null) }
+        var error by remember { mutableStateOf(false) }
+
+        LaunchedEffect(orderId) {
+            runCatching { OrderApi().get(orderId) }
+                .onSuccess { order = it }
+                .onFailure { error = true }
+        }
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
             Column(modifier = Modifier.fillMaxSize()) {
                 TrackTopBar(onBack = { navigator.pop() })
 
-                Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(numero, color = FrutAppColors.Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        Box(
-                            modifier = Modifier.background(FrutAppColors.Brand400, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 5.dp)
-                        ) {
-                            Text("En camino", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        }
+                val o = order
+                when {
+                    error -> Centered("No pudimos cargar el pedido.")
+                    o == null -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = FrutAppColors.Brand400)
                     }
-
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(top = 14.dp).height(170.dp).background(FrutAppColors.Brand50, RoundedCornerShape(20.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Image(
-                            painter = painterResource(Res.drawable.camion_reparto),
-                            contentDescription = "Reparto en camino",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxWidth().padding(16.dp).height(140.dp)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp).background(FrutAppColors.Cream, RoundedCornerShape(14.dp)).padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Entrega estimada", color = FrutAppColors.InkSoft, fontSize = 12.sp)
-                            Text(entrega, color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    Text("Estado del pedido", color = FrutAppColors.Brand800, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
-                    pasos.forEachIndexed { i, paso ->
-                        TimelineStep(paso, isLast = i == pasos.lastIndex)
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier.size(36.dp).background(FrutAppColors.Brand50, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Filled.Place, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(20.dp))
-                        }
-                        Column(modifier = Modifier.padding(start = 12.dp)) {
-                            Text("Dirección de entrega", color = FrutAppColors.InkSoft, fontSize = 12.sp)
-                            Text(direccion, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp).background(FrutAppColors.Cream, RoundedCornerShape(14.dp)).padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Total pagado", color = FrutAppColors.Brand800, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                        Text(formatClp(total), color = FrutAppColors.Brand800, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(Modifier.height(20.dp))
+                    else -> Detail(o, modifier = Modifier.weight(1f))
                 }
 
                 FrutBottomNav(
@@ -147,6 +94,110 @@ class OrderTrackingScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun Detail(o: OrderDto, modifier: Modifier) {
+    val pasos = pasosFor(o.status)
+    Column(modifier = modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(o.numero, color = FrutAppColors.Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Box(modifier = Modifier.background(FrutAppColors.Brand400, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 5.dp)) {
+                Text(statusLabel(o.status), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(top = 14.dp).height(170.dp).background(FrutAppColors.Brand50, RoundedCornerShape(20.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(Res.drawable.camion_reparto),
+                contentDescription = "Reparto",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxWidth().padding(16.dp).height(140.dp)
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 16.dp).background(FrutAppColors.Cream, RoundedCornerShape(14.dp)).padding(14.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Entrega estimada", color = FrutAppColors.InkSoft, fontSize = 12.sp)
+                Text(o.entrega, color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        Text("Estado del pedido", color = FrutAppColors.Brand800, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
+        pasos.forEachIndexed { i, paso -> TimelineStep(paso, isLast = i == pasos.lastIndex) }
+
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(36.dp).background(FrutAppColors.Brand50, CircleShape), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.Place, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(20.dp))
+            }
+            Column(modifier = Modifier.padding(start = 12.dp)) {
+                Text("Dirección de entrega", color = FrutAppColors.InkSoft, fontSize = 12.sp)
+                Text(o.direccion, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 16.dp).background(FrutAppColors.Cream, RoundedCornerShape(14.dp)).padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(if (o.totalFinal != null) "Total final" else "Total", color = FrutAppColors.Brand800, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(formatClp(o.totalFinal ?: o.totalEstimado), color = FrutAppColors.Brand800, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(20.dp))
+    }
+}
+
+@Composable
+private fun Centered(text: String) {
+    Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+        Text(text, color = FrutAppColors.InkMuted, fontSize = 14.sp)
+    }
+}
+
+private fun statusLabel(status: String): String = when (status) {
+    "CREADO" -> "Creado"
+    "PAGADO" -> "Pagado"
+    "EN_PICKING" -> "En preparación"
+    "STOCK_CONFIRMADO" -> "Stock confirmado"
+    "FACTURADO" -> "Facturado"
+    "EN_DESPACHO" -> "En camino"
+    "ENTREGADO" -> "Entregado"
+    "CANCELADO" -> "Cancelado"
+    "DEVOLUCION" -> "Devolución"
+    else -> status
+}
+
+private fun pasosFor(status: String): List<Paso> {
+    val step = when (status) {
+        "CREADO", "PAGADO" -> 0
+        "EN_PICKING", "STOCK_CONFIRMADO", "FACTURADO" -> 1
+        "EN_DESPACHO" -> 2
+        "ENTREGADO" -> 3
+        else -> 0
+    }
+    val labels = listOf(
+        "Pedido confirmado" to "Recibimos tu pedido",
+        "Preparando tu pedido" to "Seleccionando productos frescos",
+        "En camino" to "Tu pedido va hacia tu dirección",
+        "Entregado" to "Disfruta tus productos"
+    )
+    return labels.mapIndexed { i, (titulo, detalle) ->
+        val estado = when {
+            i < step -> PasoEstado.COMPLETADO
+            i == step -> PasoEstado.ACTIVO
+            else -> PasoEstado.PENDIENTE
+        }
+        Paso(titulo, detalle, estado)
     }
 }
 
@@ -173,9 +224,7 @@ private fun TimelineStep(paso: Paso, isLast: Boolean) {
     Row(modifier = Modifier.fillMaxWidth()) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .background(if (verde) FrutAppColors.Brand400 else FrutAppColors.Brand50, CircleShape),
+                modifier = Modifier.size(28.dp).background(if (verde) FrutAppColors.Brand400 else FrutAppColors.Brand50, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 if (paso.estado == PasoEstado.COMPLETADO) {

@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,6 +47,7 @@ import cl.frutapp.app.data.CartStore
 import cl.frutapp.app.data.OrdersStore
 import cl.frutapp.app.data.RewardsStore
 import cl.frutapp.app.data.TokenStore
+import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.navigation.auth.LoginScreen
 import cl.frutapp.app.navigation.rewards.FrutCoinsScreen
 import cl.frutapp.app.ui.components.FrutBottomNav
@@ -64,6 +66,9 @@ class ProfileScreen : Screen {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val user = TokenStore.user
+        LaunchedEffect(Unit) {
+            runCatching { OrderApi().frutCoins() }.onSuccess { RewardsStore.set(it.balance) }
+        }
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
             Column(modifier = Modifier.fillMaxSize()) {
