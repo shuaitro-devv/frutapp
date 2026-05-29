@@ -43,6 +43,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.CartStore
+import cl.frutapp.app.data.RewardsStore
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.theme.FrutAppColors
@@ -97,6 +98,7 @@ class CheckoutScreen : Screen {
                         onClick = {
                             val numero = "#FRU-2026-${Random.nextInt(100000, 999999)}"
                             val coins = total / 100
+                            RewardsStore.add(coins)
                             CartStore.clear()
                             navigator.replace(
                                 OrderConfirmedScreen(

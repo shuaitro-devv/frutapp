@@ -1,6 +1,7 @@
 package cl.frutapp.app.navigation.shop
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.formatClp
+import cl.frutapp.app.navigation.rewards.FrutCoinsScreen
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.theme.FrutAppColors
@@ -96,7 +98,8 @@ class OrderConfirmedScreen(
                     }
                     Spacer(Modifier.height(12.dp))
                     Row(
-                        modifier = Modifier.fillMaxWidth().background(FrutAppColors.AmberSoft, RoundedCornerShape(16.dp)).padding(16.dp),
+                        modifier = Modifier.fillMaxWidth().background(FrutAppColors.AmberSoft, RoundedCornerShape(16.dp))
+                            .clickable { navigator.push(FrutCoinsScreen()) }.padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(Icons.Filled.MonetizationOn, contentDescription = null, tint = FrutAppColors.AmberCoin, modifier = Modifier.size(30.dp))
