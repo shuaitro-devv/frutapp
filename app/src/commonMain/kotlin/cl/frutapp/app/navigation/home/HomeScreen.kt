@@ -54,6 +54,7 @@ import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.data.remote.CatalogApi
 import cl.frutapp.app.data.toProducto
+import cl.frutapp.app.navigation.catalog.CatalogScreen
 import cl.frutapp.app.navigation.profile.ProfileScreen
 import cl.frutapp.app.navigation.shop.CartScreen
 import cl.frutapp.app.navigation.shop.ProductDetailScreen
@@ -94,6 +95,7 @@ class HomeScreen : Screen {
                     onSelect = { tab ->
                         selectedTab = tab
                         when (tab) {
+                            FrutTab.EXPLORAR -> navigator.push(CatalogScreen())
                             FrutTab.CARRITO -> navigator.push(CartScreen())
                             FrutTab.PERFIL -> navigator.push(ProfileScreen())
                             else -> {}
