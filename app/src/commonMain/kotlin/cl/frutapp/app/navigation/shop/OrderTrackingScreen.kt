@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -119,7 +120,8 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
                                 showToast(r.toastMessage())
                                 if (r.huboItems()) navigator.push(CartScreen())
                             }
-                        }
+                        },
+                        onCalificar = { navigator.push(CalificarPedidoScreen(o.items)) }
                     )
                 }
 
@@ -133,7 +135,7 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
 }
 
 @Composable
-private fun Detail(o: OrderDto, modifier: Modifier, onReorder: () -> Unit) {
+private fun Detail(o: OrderDto, modifier: Modifier, onReorder: () -> Unit, onCalificar: () -> Unit) {
     val pasos = pasosFor(o.status)
     Column(modifier = modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
         Row(
@@ -204,6 +206,11 @@ private fun Detail(o: OrderDto, modifier: Modifier, onReorder: () -> Unit) {
             Text(formatClp(o.totalFinal ?: o.totalEstimado), color = FrutAppColors.Brand800, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
 
+        if (o.status == "ENTREGADO") {
+            Box(modifier = Modifier.padding(top = 16.dp)) {
+                FrutButtonPrimary(text = "Califica tu compra", onClick = onCalificar, leadingIcon = Icons.Filled.Star)
+            }
+        }
         Box(modifier = Modifier.padding(top = 16.dp)) {
             FrutButtonPrimary(text = "Volver a pedir", onClick = onReorder)
         }
