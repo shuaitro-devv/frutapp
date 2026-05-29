@@ -33,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,16 +45,22 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.CartStore
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.data.fulfillmentLabel
 import cl.frutapp.app.data.paymentMethodLabel
+import cl.frutapp.app.data.toProducto
+import cl.frutapp.app.data.remote.CatalogApi
 import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.ui.components.FrutBottomNav
+import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.components.SkeletonBox
+import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
 import cl.frutapp.shared.dto.OrderDto
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.camion_reparto
 import org.jetbrains.compose.resources.ExperimentalResourceApi
@@ -70,6 +77,7 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val scope = rememberCoroutineScope()
         var order by remember { mutableStateOf<OrderDto?>(null) }
         var error by remember { mutableStateOf(false) }
 
@@ -102,7 +110,39 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
                             Spacer(Modifier.height(12.dp))
                         }
                     }
-                    else -> Detail(o, modifier = Modifier.weight(1f))
+                    else -> Detail(
+                        o,
+                        modifier = Modifier.weight(1f),
+                        onReorder = {
+                            scope.launch {
+                                // Los ítems del pedido son snapshots (sin productId), así que los
+                                // re-mapeamos al catálogo actual por imageKey para recuperar el
+                                // producto real (con su id) y volver a armar el carrito.
+                                val catalogo = runCatching { CatalogApi().products() }.getOrNull()
+                                if (catalogo.isNullOrEmpty()) {
+                                    showToast("No pudimos cargar el catálogo")
+                                    return@launch
+                                }
+                                val porImagen = catalogo.associateBy { it.imageKey }
+                                var agregados = 0
+                                o.items.forEach { item ->
+                                    porImagen[item.imageKey]?.let { p ->
+                                        CartStore.add(p.toProducto(), item.cantidad, item.gramos)
+                                        agregados++
+                                    }
+                                }
+                                if (agregados == 0) {
+                                    showToast("No pudimos re-armar este pedido")
+                                    return@launch
+                                }
+                                showToast(
+                                    if (agregados == o.items.size) "Productos agregados al carrito"
+                                    else "$agregados de ${o.items.size} productos agregados"
+                                )
+                                navigator.push(CartScreen())
+                            }
+                        }
+                    )
                 }
 
                 FrutBottomNav(
@@ -115,7 +155,7 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
 }
 
 @Composable
-private fun Detail(o: OrderDto, modifier: Modifier) {
+private fun Detail(o: OrderDto, modifier: Modifier, onReorder: () -> Unit) {
     val pasos = pasosFor(o.status)
     Column(modifier = modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
         Row(
@@ -184,6 +224,10 @@ private fun Detail(o: OrderDto, modifier: Modifier) {
         ) {
             Text(if (o.totalFinal != null) "Total final" else "Total", color = FrutAppColors.Brand800, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             Text(formatClp(o.totalFinal ?: o.totalEstimado), color = FrutAppColors.Brand800, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        }
+
+        Box(modifier = Modifier.padding(top = 16.dp)) {
+            FrutButtonPrimary(text = "Volver a pedir", onClick = onReorder)
         }
         Spacer(Modifier.height(20.dp))
     }
