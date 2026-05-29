@@ -44,7 +44,6 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.CartStore
-import cl.frutapp.app.data.OrdersStore
 import cl.frutapp.app.data.RewardsStore
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.data.remote.OrderApi
@@ -123,7 +122,6 @@ class ProfileScreen : Screen {
                                 // próximo usuario no herede carrito/FrutCoins/pedidos.
                                 CartStore.clear()
                                 RewardsStore.reset()
-                                OrdersStore.reset()
                                 TokenStore.clear()
                                 navigator.replaceAll(LoginScreen())
                             }
