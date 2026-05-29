@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.CartItem
 import cl.frutapp.app.data.CartStore
 import cl.frutapp.app.data.DemoCatalog
 import cl.frutapp.app.data.Producto
@@ -65,13 +66,17 @@ import org.jetbrains.compose.resources.painterResource
  * Detalle de producto (mockup 08): imagen grande, precio, selector de gramaje + cantidad,
  * badge de frescura, detalles, beneficios, relacionados y barra fija "Agregar al carrito".
  */
-class ProductDetailScreen(private val producto: Producto) : Screen {
+class ProductDetailScreen(
+    private val producto: Producto,
+    /** Si viene, estamos EDITANDO esa línea del carrito (prefill + "Actualizar"). */
+    private val editing: CartItem? = null
+) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val esKg = producto.unidad == "kg"
-        var gramos by remember { mutableStateOf(1000) }
-        var cantidad by remember { mutableStateOf(1) }
+        var gramos by remember { mutableStateOf(editing?.gramos ?: 1000) }
+        var cantidad by remember { mutableStateOf(editing?.cantidad ?: 1) }
         var favorito by remember { mutableStateOf(false) }
 
         val totalSel = if (esKg) (producto.precioClp * gramos / 1000.0).toInt() * cantidad
@@ -189,10 +194,17 @@ class ProductDetailScreen(private val producto: Producto) : Screen {
                     .padding(horizontal = 20.dp, vertical = 14.dp)
             ) {
                 FrutButtonPrimary(
-                    text = "Agregar al carrito · ${formatClp(totalSel)}",
+                    text = (if (editing != null) "Actualizar carrito · " else "Agregar al carrito · ") + formatClp(totalSel),
                     onClick = {
-                        CartStore.add(producto, cantidad, if (esKg) gramos else null)
-                        navigator.push(CartScreen())
+                        if (editing != null) {
+                            // Editar = reemplazar la línea (maneja cambio de gramaje) y volver al carrito.
+                            CartStore.remove(editing)
+                            CartStore.add(producto, cantidad, if (esKg) gramos else null)
+                            navigator.pop()
+                        } else {
+                            CartStore.add(producto, cantidad, if (esKg) gramos else null)
+                            navigator.push(CartScreen())
+                        }
                     }
                 )
             }

@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -62,7 +63,11 @@ fun ProductCard(
     onAdd: () -> Unit,
     modifier: Modifier = Modifier,
     unit: String = "kg",
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
+    /** Cantidad de este producto (línea por defecto) ya en el carrito. 0 = muestra "+". */
+    quantity: Int = 0,
+    onIncrement: () -> Unit = onAdd,
+    onDecrement: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val addScale = remember { Animatable(1f) }
@@ -119,32 +124,72 @@ fun ProductCard(
                         )
                     }
                 }
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .scale(addScale.value)
-                        .background(if (added) FrutAppColors.Brand600 else FrutAppColors.Brand400, CircleShape)
-                        .clickable {
-                            onAdd()
+                if (quantity <= 0) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .scale(addScale.value)
+                            .background(if (added) FrutAppColors.Brand600 else FrutAppColors.Brand400, CircleShape)
+                            .clickable {
+                                onAdd()
+                                addJob?.cancel()
+                                addJob = scope.launch {
+                                    added = true
+                                    addScale.animateTo(0.8f, tween(90))
+                                    addScale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+                                    delay(550)
+                                    added = false
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (added) Icons.Default.Check else Icons.Default.Add,
+                            contentDescription = "Agregar",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .scale(addScale.value)
+                            .background(FrutAppColors.Brand400, CircleShape)
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        StepCircle(Icons.Default.Remove, "Quitar uno", onDecrement)
+                        Text(
+                            "$quantity",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+                        StepCircle(Icons.Default.Add, "Agregar uno") {
+                            onIncrement()
                             addJob?.cancel()
                             addJob = scope.launch {
-                                added = true
-                                addScale.animateTo(0.8f, tween(90))
+                                addScale.animateTo(0.85f, tween(80))
                                 addScale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
-                                delay(550)
-                                added = false
                             }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (added) Icons.Default.Check else Icons.Default.Add,
-                        contentDescription = "Agregar",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun StepCircle(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .background(Color.White.copy(alpha = 0.25f), CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = desc, tint = Color.White, modifier = Modifier.size(16.dp))
     }
 }

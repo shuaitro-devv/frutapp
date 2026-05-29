@@ -160,13 +160,18 @@ class HomeScreen : Screen {
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         fila.forEach { producto ->
+                            val defGramos = if (producto.unidad == "kg") 1000 else null
+                            val linea = CartStore.items.firstOrNull { it.producto.id == producto.id && it.gramos == defGramos }
                             ProductCard(
                                 name = producto.nombre,
                                 price = formatClp(producto.precioClp),
                                 image = producto.imagen,
                                 unit = producto.unidad,
-                                onAdd = { CartStore.add(producto, 1, if (producto.unidad == "kg") 1000 else null) },
+                                onAdd = { CartStore.add(producto, 1, defGramos) },
                                 onClick = { navigator.push(ProductDetailScreen(producto)) },
+                                quantity = linea?.cantidad ?: 0,
+                                onIncrement = { CartStore.add(producto, 1, defGramos) },
+                                onDecrement = { linea?.let { CartStore.setCantidad(it, it.cantidad - 1) } },
                                 modifier = Modifier.weight(1f)
                             )
                         }

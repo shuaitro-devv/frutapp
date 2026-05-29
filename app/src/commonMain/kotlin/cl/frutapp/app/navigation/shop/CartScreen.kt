@@ -84,6 +84,7 @@ class CartScreen : Screen {
                             item(key = "${item.producto.id}-${item.gramos}") {
                                 CartRow(
                                     item = item,
+                                    onEdit = { navigator.push(ProductDetailScreen(producto = item.producto, editing = item)) },
                                     onMinus = { CartStore.setCantidad(item, item.cantidad - 1) },
                                     onPlus = { CartStore.setCantidad(item, item.cantidad + 1) },
                                     onDelete = { CartStore.remove(item) }
@@ -176,26 +177,32 @@ private fun FreeShippingBanner(subtotal: Int, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun CartRow(item: CartItem, onMinus: () -> Unit, onPlus: () -> Unit, onDelete: () -> Unit) {
+private fun CartRow(item: CartItem, onEdit: () -> Unit, onMinus: () -> Unit, onPlus: () -> Unit, onDelete: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier.size(64.dp).background(FrutAppColors.Brand50, RoundedCornerShape(14.dp)),
-            contentAlignment = Alignment.Center
+        // Tocar el producto (imagen + datos) abre el detalle para editar peso/cantidad.
+        Row(
+            modifier = Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).clickable(onClick = onEdit),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Image(
-                painter = painterResource(item.producto.imagen),
-                contentDescription = item.producto.nombre,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.size(52.dp).padding(6.dp)
-            )
-        }
-        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(item.producto.nombre, color = FrutAppColors.Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-            Text(item.detalle, color = FrutAppColors.InkSoft, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
-            Text(formatClp(item.precioTotal), color = FrutAppColors.Brand600, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+            Box(
+                modifier = Modifier.size(64.dp).background(FrutAppColors.Brand50, RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(item.producto.imagen),
+                    contentDescription = item.producto.nombre,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(52.dp).padding(6.dp)
+                )
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                Text(item.producto.nombre, color = FrutAppColors.Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text(item.detalle, color = FrutAppColors.InkSoft, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+                Text(formatClp(item.precioTotal), color = FrutAppColors.Brand600, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+            }
         }
         Column(horizontalAlignment = Alignment.End) {
             Icon(

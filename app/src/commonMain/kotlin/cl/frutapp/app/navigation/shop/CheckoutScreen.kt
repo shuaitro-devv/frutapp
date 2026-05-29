@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -84,6 +86,8 @@ class CheckoutScreen : Screen {
         var metodoSel by remember { mutableStateOf(0) }
         var esRetiro by remember { mutableStateOf(false) }
         var usarCoins by remember { mutableStateOf(false) }
+        var direccion by remember { mutableStateOf(DIRECCION_DEMO) }
+        var editandoDir by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
         var loading by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
@@ -108,7 +112,13 @@ class CheckoutScreen : Screen {
 
                     SectionTitle(if (esRetiro) "Sucursal de retiro" else "Dirección de entrega", Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
                     if (esRetiro) SucursalCard(Modifier.padding(horizontal = 20.dp))
-                    else AddressCard(Modifier.padding(horizontal = 20.dp))
+                    else AddressCard(
+                        direccion = direccion,
+                        editando = editandoDir,
+                        onToggleEdit = { editandoDir = !editandoDir },
+                        onChange = { direccion = it },
+                        modifier = Modifier.padding(horizontal = 20.dp)
+                    )
 
                     SectionTitle("Resumen del pedido", Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
                     OrderSummary(envio = envioLocal, total = totalLocal, modifier = Modifier.padding(horizontal = 20.dp))
@@ -153,6 +163,7 @@ class CheckoutScreen : Screen {
                                             },
                                             fulfillmentType = if (esRetiro) "RETIRO" else "DELIVERY",
                                             sucursal = if (esRetiro) SUCURSAL_DEMO else null,
+                                            direccion = if (esRetiro) null else direccion.trim().ifBlank { null },
                                             payments = pagos,
                                             context = ClientContextDto(
                                                 channel = ClientInfo.channel,
@@ -244,29 +255,60 @@ private fun SectionTitle(title: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun AddressCard(modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier.fillMaxWidth().background(FrutAppColors.Brand50, RoundedCornerShape(16.dp)).padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
+private fun AddressCard(
+    direccion: String,
+    editando: Boolean,
+    onToggleEdit: () -> Unit,
+    onChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxWidth().background(FrutAppColors.Brand50, RoundedCornerShape(16.dp)).padding(16.dp)
     ) {
-        Box(
-            modifier = Modifier.size(40.dp).background(Color.White, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Filled.Home, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(22.dp))
-        }
-        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Casa", color = FrutAppColors.Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Box(
-                    modifier = Modifier.padding(start = 8.dp).background(FrutAppColors.Brand200, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    Text("Predeterminada", color = FrutAppColors.Brand800, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.size(40.dp).background(Color.White, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.Home, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(22.dp))
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Casa", color = FrutAppColors.Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Box(
+                        modifier = Modifier.padding(start = 8.dp).background(FrutAppColors.Brand200, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("Predeterminada", color = FrutAppColors.Brand800, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+                if (!editando) {
+                    Text(direccion, color = FrutAppColors.InkMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
                 }
             }
-            Text(DIRECCION_DEMO, color = FrutAppColors.InkMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
+            Text(
+                if (editando) "Listo" else "Cambiar",
+                color = FrutAppColors.Brand600,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable(onClick = onToggleEdit)
+            )
         }
-        Text("Cambiar", color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { })
+        if (editando) {
+            OutlinedTextField(
+                value = direccion,
+                onValueChange = onChange,
+                singleLine = true,
+                placeholder = { Text("Calle, número, comuna") },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = FrutAppColors.Brand400,
+                    unfocusedBorderColor = FrutAppColors.Brand100,
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+            )
+        }
     }
 }
 
