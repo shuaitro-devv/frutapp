@@ -85,6 +85,9 @@ import frutapp.app.generated.resources.cilantro
 import frutapp.app.generated.resources.hoja_decorativa
 import frutapp.app.generated.resources.lechuga
 import frutapp.app.generated.resources.manzana_roja
+import frutapp.app.generated.resources.naranja
+import frutapp.app.generated.resources.palta_hass
+import frutapp.app.generated.resources.platano
 import frutapp.app.generated.resources.zanahoria
 import org.jetbrains.compose.resources.DrawableResource
 import kotlinx.coroutines.delay
@@ -171,8 +174,27 @@ class HomeScreen : Screen {
                     }
                 }
             }
+            HomeBottomFruits()
             }
         }
+    }
+}
+
+@Composable
+private fun BoxScope.HomeBottomFruits() {
+    Row(
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .fillMaxWidth()
+            .offset(y = 34.dp)
+            .alpha(0.9f),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.Bottom
+    ) {
+        Image(painterResource(Res.drawable.platano), null, Modifier.size(72.dp), contentScale = ContentScale.Fit)
+        Image(painterResource(Res.drawable.manzana_roja), null, Modifier.size(64.dp), contentScale = ContentScale.Fit)
+        Image(painterResource(Res.drawable.naranja), null, Modifier.size(60.dp), contentScale = ContentScale.Fit)
+        Image(painterResource(Res.drawable.palta_hass), null, Modifier.size(64.dp), contentScale = ContentScale.Fit)
     }
 }
 
