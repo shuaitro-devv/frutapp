@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.material.icons.filled.Slideshow
 import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -51,6 +52,7 @@ import cl.frutapp.app.data.RewardsStore
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.legal.LegalDocKind
+import cl.frutapp.app.navigation.OnboardingScreen
 import cl.frutapp.app.navigation.auth.LoginScreen
 import cl.frutapp.app.navigation.legal.LegalDocScreen
 import cl.frutapp.app.navigation.rewards.FrutCoinsScreen
@@ -114,6 +116,7 @@ class ProfileScreen : Screen {
                         "Más opciones",
                         listOf(
                             MenuItem(Icons.Filled.SupportAgent, "Ayuda", onClick = { comingSoon() }),
+                            MenuItem(Icons.Filled.Slideshow, "Ver intro", onClick = { navigator.push(OnboardingScreen(desdeSplash = false)) }),
                             MenuItem(Icons.Filled.Description, "Términos y condiciones", onClick = { navigator.push(LegalDocScreen(LegalDocKind.TERMS)) }),
                             MenuItem(Icons.Filled.PrivacyTip, "Privacidad", onClick = { navigator.push(LegalDocScreen(LegalDocKind.PRIVACY)) }),
                             MenuItem(Icons.Filled.Info, "Acerca de FrutApp", onClick = { comingSoon() })
