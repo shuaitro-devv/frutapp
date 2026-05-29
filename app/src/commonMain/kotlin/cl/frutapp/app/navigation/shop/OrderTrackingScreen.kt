@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -45,6 +46,8 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.formatClp
+import cl.frutapp.app.data.fulfillmentLabel
+import cl.frutapp.app.data.paymentMethodLabel
 import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
@@ -136,13 +139,28 @@ private fun Detail(o: OrderDto, modifier: Modifier) {
         Text("Estado del pedido", color = FrutAppColors.Brand800, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
         pasos.forEachIndexed { i, paso -> TimelineStep(paso, isLast = i == pasos.lastIndex) }
 
+        val esRetiro = o.fulfillmentType == "RETIRO"
         Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(36.dp).background(FrutAppColors.Brand50, CircleShape), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.Place, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(20.dp))
+                Icon(if (esRetiro) Icons.Filled.Storefront else Icons.Filled.Place, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(20.dp))
             }
             Column(modifier = Modifier.padding(start = 12.dp)) {
-                Text("Dirección de entrega", color = FrutAppColors.InkSoft, fontSize = 12.sp)
-                Text(o.direccion, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(fulfillmentLabel(o.fulfillmentType), color = FrutAppColors.InkSoft, fontSize = 12.sp)
+                Text(if (esRetiro) (o.sucursal ?: o.direccion) else o.direccion, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            }
+        }
+
+        if (o.payments.isNotEmpty()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp).background(FrutAppColors.Cream, RoundedCornerShape(14.dp)).padding(14.dp)
+            ) {
+                Text("Medios de pago", color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 6.dp))
+                o.payments.forEach { p ->
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(paymentMethodLabel(p.method), color = FrutAppColors.Ink, fontSize = 13.sp)
+                        Text(formatClp(p.monto), color = FrutAppColors.Ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
         }
 

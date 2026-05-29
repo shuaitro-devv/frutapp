@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,7 +36,10 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.formatClp
+import cl.frutapp.app.data.fulfillmentLabel
+import cl.frutapp.app.data.paymentMethodLabel
 import cl.frutapp.app.navigation.rewards.FrutCoinsScreen
+import cl.frutapp.shared.dto.OrderPaymentDto
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.theme.FrutAppColors
@@ -50,7 +54,9 @@ class OrderConfirmedScreen(
     private val total: Int,
     private val coins: Int,
     private val direccion: String,
-    private val entrega: String
+    private val entrega: String,
+    private val fulfillmentType: String = "DELIVERY",
+    private val payments: List<OrderPaymentDto> = emptyList()
 ) : Screen {
     @Composable
     override fun Content() {
@@ -84,12 +90,20 @@ class OrderConfirmedScreen(
                         InfoRow("Realizado", "Hoy")
                     }
                     Spacer(Modifier.height(12.dp))
+                    val esRetiro = fulfillmentType == "RETIRO"
                     InfoCard {
-                        IconLine(Icons.Filled.LocalShipping, "Entrega estimada", entrega)
+                        IconLine(if (esRetiro) Icons.Filled.Storefront else Icons.Filled.LocalShipping, fulfillmentLabel(fulfillmentType), entrega)
                         Spacer(Modifier.height(10.dp))
-                        IconLine(Icons.Filled.Place, "Dirección", direccion)
+                        IconLine(if (esRetiro) Icons.Filled.Storefront else Icons.Filled.Place, if (esRetiro) "Sucursal" else "Dirección", direccion)
                     }
                     Spacer(Modifier.height(12.dp))
+                    if (payments.isNotEmpty()) {
+                        InfoCard {
+                            Text("Medios de pago", color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+                            payments.forEach { p -> InfoRow(paymentMethodLabel(p.method), formatClp(p.monto)) }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth().background(FrutAppColors.Cream, RoundedCornerShape(16.dp)).padding(16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween

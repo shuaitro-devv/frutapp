@@ -172,7 +172,9 @@ class CheckoutScreen : Screen {
                                             total = dto.totalFinal ?: dto.totalEstimado,
                                             coins = dto.frutcoinsGanadas,
                                             direccion = dto.direccion,
-                                            entrega = dto.entrega
+                                            entrega = dto.entrega,
+                                            fulfillmentType = dto.fulfillmentType,
+                                            payments = dto.payments
                                         )
                                     )
                                 }.onFailure {

@@ -30,6 +30,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -45,6 +49,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.RewardsStore
 import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.navigation.recycle.ReciclaScreen
+import cl.frutapp.shared.dto.FrutCoinsEntryDto
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.theme.FrutAppColors
@@ -65,8 +70,12 @@ class FrutCoinsScreen : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        var movimientos by remember { mutableStateOf<List<FrutCoinsEntryDto>>(emptyList()) }
         LaunchedEffect(Unit) {
-            runCatching { OrderApi().frutCoins() }.onSuccess { RewardsStore.set(it.balance) }
+            runCatching { OrderApi().frutCoins() }.onSuccess {
+                RewardsStore.set(it.balance)
+                movimientos = it.movimientos
+            }
         }
         val ganar = listOf(
             FormaGanar(Icons.Filled.ShoppingCart, "Por cada compra", "+50"),
@@ -104,6 +113,20 @@ class FrutCoinsScreen : Screen {
                     SectionTitle("Desafíos FrutCoins", Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
                     Column(modifier = Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         desafios.forEach { DesafioRow(it) }
+                    }
+
+                    SectionTitle("Historial", Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
+                    if (movimientos.isEmpty()) {
+                        Text(
+                            "Aún no tienes movimientos.",
+                            color = FrutAppColors.InkMuted,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+                        )
+                    } else {
+                        Column(modifier = Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            movimientos.forEach { MovimientoRow(it) }
+                        }
                     }
                     Spacer(Modifier.height(20.dp))
                 }
@@ -200,6 +223,34 @@ private fun RecompensaCard(item: Recompensa, balance: Int) {
                 Text("Canjear", color = if (alcanza) Color.White else FrutAppColors.InkSoft, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
         }
+    }
+}
+
+private fun motivoLabel(motivo: String): String = when (motivo) {
+    "COMPRA" -> "Compra"
+    "CANJE" -> "Canje"
+    "REEMBOLSO" -> "Reembolso"
+    "AJUSTE" -> "Ajuste"
+    else -> motivo
+}
+
+@Composable
+private fun MovimientoRow(item: FrutCoinsEntryDto) {
+    val positivo = item.delta >= 0
+    Row(
+        modifier = Modifier.fillMaxWidth().background(FrutAppColors.Brand50, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(motivoLabel(item.motivo), color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(item.fecha.take(10), color = FrutAppColors.InkSoft, fontSize = 12.sp)
+        }
+        Text(
+            (if (positivo) "+" else "") + "${item.delta}",
+            color = if (positivo) FrutAppColors.Brand600 else FrutAppColors.Error,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
