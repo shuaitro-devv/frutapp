@@ -42,7 +42,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cl.frutapp.app.ui.theme.FrutAppColors
@@ -100,7 +104,7 @@ fun ProductCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Bottom
             ) {
-                Column(modifier = Modifier.padding(end = 8.dp)) {
+                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                     Text(
                         text = name,
                         color = FrutAppColors.Ink,
@@ -108,21 +112,19 @@ fun ProductCard(
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1
                     )
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            text = price,
-                            color = FrutAppColors.Brand600,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "/$unit",
-                            color = FrutAppColors.InkMuted,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(start = 2.dp, bottom = 1.dp)
-                        )
-                    }
+                    // Precio + unidad en UNA sola línea (sin envolver: si no cabe, elipsis).
+                    Text(
+                        text = buildAnnotatedString {
+                            withStyle(SpanStyle(color = FrutAppColors.Brand600, fontWeight = FontWeight.Bold, fontSize = 16.sp)) {
+                                append(price)
+                            }
+                            withStyle(SpanStyle(color = FrutAppColors.InkMuted, fontWeight = FontWeight.Medium, fontSize = 12.sp)) {
+                                append("/$unit")
+                            }
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
                 if (quantity <= 0) {
                     Box(
@@ -154,19 +156,19 @@ fun ProductCard(
                     Row(
                         modifier = Modifier
                             .scale(addScale.value)
-                            .background(FrutAppColors.Brand400, CircleShape)
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                            .height(36.dp)
+                            .background(FrutAppColors.Brand400, RoundedCornerShape(18.dp)),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        StepCircle(Icons.Default.Remove, "Quitar uno", onDecrement)
+                        StepBtn(Icons.Default.Remove, "Quitar uno", onDecrement)
                         Text(
                             "$quantity",
                             color = Color.White,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp)
+                            modifier = Modifier.padding(horizontal = 3.dp)
                         )
-                        StepCircle(Icons.Default.Add, "Agregar uno") {
+                        StepBtn(Icons.Default.Add, "Agregar uno") {
                             onIncrement()
                             addJob?.cancel()
                             addJob = scope.launch {
@@ -182,11 +184,11 @@ fun ProductCard(
 }
 
 @Composable
-private fun StepCircle(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, onClick: () -> Unit) {
+private fun StepBtn(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(28.dp)
-            .background(Color.White.copy(alpha = 0.25f), CircleShape)
+            .size(30.dp)
+            .clip(CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {

@@ -99,11 +99,11 @@ class MisPedidosScreen : Screen {
                 SearchBar(query = query, onQuery = { query = it }, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
 
                 when {
-                    error -> Center("No pudimos cargar tus pedidos.")
+                    error -> Center("No pudimos cargar tus pedidos.", Modifier.weight(1f))
                     pedidos == null -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = FrutAppColors.Brand400)
                     }
-                    visibles.isEmpty() -> Center("No tienes pedidos en esta categoría.")
+                    visibles.isEmpty() -> Center("No tienes pedidos en esta categoría.", Modifier.weight(1f))
                     else -> LazyColumn(
                         modifier = Modifier.weight(1f),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp)
@@ -145,8 +145,8 @@ private fun statusLabel(status: String): String = when (status) {
 }
 
 @Composable
-private fun Center(text: String) {
-    Box(Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.Center) {
+private fun Center(text: String, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
         Text(text, color = FrutAppColors.InkMuted, fontSize = 14.sp)
     }
 }
