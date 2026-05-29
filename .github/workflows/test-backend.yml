@@ -1,20 +1,11 @@
 name: Backend Tests
 
-# Corre la suite de integración del backend en cada push a main / PR que toque backend.
-# En el runner Linux de GitHub, Testcontainers levanta un Postgres efímero solo (Docker
-# viene instalado), corre Flyway y los tests, y lo destruye → cero data basura.
+# Corre la suite de integración del backend en cada PR que toque backend. El push a main
+# ya queda cubierto por el job `test` del workflow de deploy (gatea el despliegue), así que
+# acá solo corremos en PRs para no duplicar. En el runner Linux, Testcontainers levanta un
+# Postgres efímero solo (Docker viene instalado) y lo destruye → cero data basura.
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'backend/**'
-      - 'shared/**'
-      - 'gradle/**'
-      - 'settings.gradle.kts'
-      - 'build.gradle.kts'
-      - 'gradle.properties'
-      - '.github/workflows/test-backend.yml'
   pull_request:
     paths:
       - 'backend/**'

@@ -21,7 +21,24 @@ env:
   HOST_RULE: frutapp-api.grandline.cl
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - name: Run backend tests (Postgres efímero via Testcontainers)
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :backend:test --no-daemon --console=plain
+
   build-and-deploy:
+    needs: test          # no despliega si los tests fallan
     runs-on: ubuntu-latest
     environment: dev
     permissions:
