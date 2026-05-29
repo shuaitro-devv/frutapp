@@ -34,6 +34,9 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Spa
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.StarHalf
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
@@ -58,8 +62,10 @@ import cl.frutapp.app.data.DemoCatalog
 import cl.frutapp.app.data.FavoritesStore
 import cl.frutapp.app.data.Producto
 import cl.frutapp.app.data.formatClp
+import cl.frutapp.app.ui.comingSoon
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.theme.FrutAppColors
+import kotlin.math.abs
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
 
@@ -170,6 +176,7 @@ class ProductDetailScreen(
                         BenefitCard(Icons.Filled.Favorite, "Antioxidantes", Modifier.weight(1f))
                     }
                 }
+                item { ReviewsSection(producto, onVerTodas = { comingSoon() }) }
                 item {
                     SectionTitle("También te puede gustar", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 10.dp))
                 }
@@ -324,6 +331,79 @@ private fun BenefitCard(icon: ImageVector, label: String, modifier: Modifier = M
     ) {
         Icon(icon, contentDescription = null, tint = FrutAppColors.Brand400, modifier = Modifier.size(26.dp))
         Text(label, color = FrutAppColors.Brand800, fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 8.dp))
+    }
+}
+
+private data class Resena(val nombre: String, val estrellas: Int, val fecha: String, val texto: String)
+
+private val RESENAS_DEMO = listOf(
+    Resena("Camila R.", 5, "hace 2 días", "Llegó fresquísimo y muy rápido. Calidad de feria sin moverme de la casa."),
+    Resena("Felipe M.", 5, "hace 1 semana", "Excelente selección, todo en su punto. Ya es mi compra fija de la semana."),
+    Resena("Daniela P.", 4, "hace 2 semanas", "Muy buena calidad y buen precio. Repito sin dudarlo.")
+)
+
+@Composable
+private fun ReviewsSection(producto: Producto, onVerTodas: () -> Unit) {
+    // Promedio y conteo dummy, pero estables por producto (derivados del id) para que
+    // no cambien al recomponer ni al volver a entrar.
+    val h = abs(producto.id.hashCode())
+    val promedio = listOf(4.6, 4.7, 4.8, 4.9)[h % 4]
+    val total = 80 + h % 140
+
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 22.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SectionTitle("Reseñas")
+            Text("Ver todas", color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable(onClick = onVerTodas))
+        }
+        Row(modifier = Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(promedio.toString().replace('.', ','), color = FrutAppColors.Brand800, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+            Column(modifier = Modifier.padding(start = 12.dp)) {
+                StarRow(promedio, starSize = 18.dp)
+                Text("$total reseñas", color = FrutAppColors.InkSoft, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+            }
+        }
+        RESENAS_DEMO.forEach { ReviewCard(it) }
+    }
+}
+
+@Composable
+private fun StarRow(rating: Double, starSize: Dp) {
+    Row {
+        for (i in 1..5) {
+            val icon = when {
+                rating >= i -> Icons.Filled.Star
+                rating >= i - 0.5 -> Icons.Filled.StarHalf
+                else -> Icons.Filled.StarBorder
+            }
+            Icon(icon, contentDescription = null, tint = FrutAppColors.AmberCoin, modifier = Modifier.size(starSize))
+        }
+    }
+}
+
+@Composable
+private fun ReviewCard(r: Resena) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+            .background(FrutAppColors.Brand50, RoundedCornerShape(14.dp)).padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.size(34.dp).background(FrutAppColors.Brand400, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(r.nombre.take(1), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
+                Text(r.nombre, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                StarRow(r.estrellas.toDouble(), starSize = 13.dp)
+            }
+            Text(r.fecha, color = FrutAppColors.InkSoft, fontSize = 11.sp)
+        }
+        Text(r.texto, color = FrutAppColors.Ink, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
     }
 }
 
