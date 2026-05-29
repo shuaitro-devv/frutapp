@@ -1,8 +1,10 @@
 package cl.frutapp.backend.modules.orders
 
+import cl.frutapp.backend.config.BusinessConfig
 import cl.frutapp.backend.db.dbQuery
 import cl.frutapp.shared.dto.OrderDto
 import cl.frutapp.shared.dto.OrderItemDto
+import cl.frutapp.shared.dto.OrderPaymentDto
 import cl.frutapp.shared.dto.OrderSummaryDto
 import kotlinx.datetime.Clock
 import org.jetbrains.exposed.sql.ResultRow
@@ -35,18 +37,41 @@ data class NewOrder(
     val envio: Int,
     val total: Int,
     val frutcoins: Int,
-    val lines: List<NewOrderLine>
+    val lines: List<NewOrderLine>,
+    val fulfillmentType: String,
+    val sucursal: String?,
+    val channel: String?,
+    val appVersion: String?,
+    val deviceModel: String?,
+    val osVersion: String?,
+    val locale: String?,
+    /** Medio de pago para el remanente en efectivo (no-FrutCoins). */
+    val cashMethod: String,
+    /** CLP que el cliente quiere pagar con FrutCoins (ya capado por config). */
+    val frutcoinsClpRequested: Int
 )
 
 class OrderRepository {
 
     /**
-     * Crea el pedido de forma ATÓMICA (una sola transacción): orden + items + historial
-     * (CREADO→PAGADO, pago pre-autorizado simulado) + asiento del ledger de FrutCoins.
+     * Crea el pedido de forma ATÓMICA (una sola transacción): orden + items + pagos +
+     * historial (CREADO→PAGADO, pre-autorizado simulado) + asientos del ledger de FrutCoins
+     * (canje si paga con coins, y ganancia por la compra).
      */
     suspend fun create(o: NewOrder): UUID = dbQuery {
         val orderId = UUID.randomUUID()
         val now = Clock.System.now()
+
+        // Saldo real de FrutCoins (dentro de la txn): vuelve a capar el pago con coins por el
+        // saldo disponible, para nunca gastar más de lo que el usuario tiene.
+        val saldoActual = FrutCoinsLedgerTable
+            .select { FrutCoinsLedgerTable.userId eq o.userId }
+            .sumOf { it[FrutCoinsLedgerTable.delta] }
+        val frutcoinsClp = minOf(o.frutcoinsClpRequested, saldoActual * BusinessConfig.FRUTCOIN_VALOR_CLP)
+            .coerceAtLeast(0)
+        val coinsGastados = frutcoinsClp / BusinessConfig.FRUTCOIN_VALOR_CLP
+        val cashClp = (o.total - frutcoinsClp).coerceAtLeast(0)
+
         OrdersTable.insert {
             it[id] = orderId
             it[numero] = o.numero
@@ -59,7 +84,14 @@ class OrderRepository {
             it[envio] = o.envio
             it[totalEstimado] = o.total
             it[frutcoinsGanadas] = o.frutcoins
-            it[frutcoinsCanjeadas] = 0
+            it[frutcoinsCanjeadas] = coinsGastados
+            it[fulfillmentType] = o.fulfillmentType
+            it[sucursal] = o.sucursal
+            it[channel] = o.channel
+            it[appVersion] = o.appVersion
+            it[deviceModel] = o.deviceModel
+            it[osVersion] = o.osVersion
+            it[locale] = o.locale
             it[createdAt] = now
             it[updatedAt] = now
         }
@@ -78,36 +110,61 @@ class OrderRepository {
                 it[itemStatus] = "PENDIENTE"
             }
         }
+        if (frutcoinsClp > 0) insertPayment(orderId, PaymentMethod.FRUTCOINS.name, frutcoinsClp, now)
+        if (cashClp > 0) insertPayment(orderId, o.cashMethod, cashClp, now)
+
         insertHistory(orderId, null, OrderStatus.CREADO, OrderActor.CLIENTE, "Pedido creado")
         insertHistory(orderId, OrderStatus.CREADO, OrderStatus.PAGADO, OrderActor.SISTEMA, "Pago pre-autorizado (simulado)")
+
+        var balance = saldoActual
+        if (coinsGastados > 0) {
+            balance -= coinsGastados
+            FrutCoinsLedgerTable.insert {
+                it[id] = UUID.randomUUID()
+                it[userId] = o.userId
+                it[FrutCoinsLedgerTable.orderId] = orderId
+                it[delta] = -coinsGastados
+                it[motivo] = "CANJE"
+                it[balanceAfter] = balance
+                it[createdAt] = now
+            }
+        }
         if (o.frutcoins > 0) {
-            val current = FrutCoinsLedgerTable
-                .select { FrutCoinsLedgerTable.userId eq o.userId }
-                .sumOf { it[FrutCoinsLedgerTable.delta] }
+            balance += o.frutcoins
             FrutCoinsLedgerTable.insert {
                 it[id] = UUID.randomUUID()
                 it[userId] = o.userId
                 it[FrutCoinsLedgerTable.orderId] = orderId
                 it[delta] = o.frutcoins
                 it[motivo] = "COMPRA"
-                it[balanceAfter] = current + o.frutcoins
+                it[balanceAfter] = balance
                 it[createdAt] = now
             }
         }
         orderId
     }
 
+    private fun insertPayment(orderId: UUID, method: String, monto: Int, now: kotlinx.datetime.Instant) {
+        OrderPaymentsTable.insert {
+            it[id] = UUID.randomUUID()
+            it[OrderPaymentsTable.orderId] = orderId
+            it[OrderPaymentsTable.method] = method
+            it[OrderPaymentsTable.monto] = monto
+            it[createdAt] = now
+        }
+    }
+
     suspend fun findDetail(id: UUID, userId: UUID): OrderDto? = dbQuery {
         val row = OrdersTable
             .select { (OrdersTable.id eq id) and (OrdersTable.userId eq userId) and OrdersTable.deletedAt.isNull() }
             .singleOrNull() ?: return@dbQuery null
-        toOrderDto(row, itemsOf(id))
+        toOrderDto(row, itemsOf(id), paymentsOf(id))
     }
 
     /** Sin filtro de usuario (back office). */
     suspend fun findById(id: UUID): OrderDto? = dbQuery {
         val row = OrdersTable.select { OrdersTable.id eq id }.singleOrNull() ?: return@dbQuery null
-        toOrderDto(row, itemsOf(id))
+        toOrderDto(row, itemsOf(id), paymentsOf(id))
     }
 
     suspend fun listByUser(userId: UUID): List<OrderSummaryDto> = dbQuery {
@@ -166,6 +223,11 @@ class OrderRepository {
     private fun itemsOf(orderId: UUID): List<OrderItemDto> =
         OrderItemsTable.select { OrderItemsTable.orderId eq orderId }.map { toItemDto(it) }
 
+    private fun paymentsOf(orderId: UUID): List<OrderPaymentDto> =
+        OrderPaymentsTable.select { OrderPaymentsTable.orderId eq orderId }
+            .orderBy(OrderPaymentsTable.createdAt to SortOrder.ASC)
+            .map { OrderPaymentDto(method = it[OrderPaymentsTable.method], monto = it[OrderPaymentsTable.monto]) }
+
     private fun toItemDto(r: ResultRow) = OrderItemDto(
         nombre = r[OrderItemsTable.nombre],
         unidad = r[OrderItemsTable.unidad],
@@ -178,7 +240,7 @@ class OrderRepository {
         itemStatus = r[OrderItemsTable.itemStatus]
     )
 
-    private fun toOrderDto(r: ResultRow, items: List<OrderItemDto>) = OrderDto(
+    private fun toOrderDto(r: ResultRow, items: List<OrderItemDto>, payments: List<OrderPaymentDto>) = OrderDto(
         id = r[OrdersTable.id].toString(),
         numero = r[OrdersTable.numero],
         status = r[OrdersTable.status],
@@ -191,6 +253,9 @@ class OrderRepository {
         totalFinal = r[OrdersTable.totalFinal],
         frutcoinsGanadas = r[OrdersTable.frutcoinsGanadas],
         createdAt = r[OrdersTable.createdAt].toString(),
-        items = items
+        items = items,
+        fulfillmentType = r[OrdersTable.fulfillmentType],
+        sucursal = r[OrdersTable.sucursal],
+        payments = payments
     )
 }

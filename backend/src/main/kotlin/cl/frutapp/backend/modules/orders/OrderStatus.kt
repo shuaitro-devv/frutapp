@@ -38,3 +38,21 @@ enum class OrderStatus {
 enum class PaymentStatus { PREAUTORIZADO, CAPTURADO, REEMBOLSADO }
 
 enum class OrderActor { CLIENTE, SISTEMA, OPERADOR, REPARTIDOR }
+
+/** Medios de pago aceptados (uno o varios por pedido, pago dividido). */
+enum class PaymentMethod {
+    TARJETA, DEBITO, WEBPAY, MERCADO_PAGO, EFECTIVO, FRUTCOINS, TRANSFERENCIA;
+
+    companion object {
+        fun parse(value: String): PaymentMethod? = entries.firstOrNull { it.name == value }
+    }
+}
+
+/** Modalidad de entrega del pedido. */
+enum class FulfillmentType {
+    DELIVERY, RETIRO;
+
+    companion object {
+        fun parse(value: String): FulfillmentType? = entries.firstOrNull { it.name == value }
+    }
+}

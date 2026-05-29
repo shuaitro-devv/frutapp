@@ -6,7 +6,19 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class CreateOrderRequest(
     val items: List<OrderItemRequest>,
-    val direccion: String? = null
+    val direccion: String? = null,
+    /** DELIVERY | RETIRO. null = el backend usa la modalidad por defecto. */
+    val fulfillmentType: String? = null,
+    /** Solo para RETIRO: sucursal de retiro. */
+    val sucursal: String? = null,
+    /**
+     * Medios de pago (puede ser más de uno: pago dividido, incl. FrutCoins).
+     * null/vacío = el backend usa un solo medio por defecto. El backend reprecia y
+     * decide cuánto cubre cada medio (FrutCoins queda capado por config).
+     */
+    val payments: List<PaymentInput>? = null,
+    /** Contexto del cliente (canal/dispositivo) para soporte y analítica. */
+    val context: ClientContextDto? = null
 )
 
 @Serializable
@@ -14,6 +26,30 @@ data class OrderItemRequest(
     val productId: String,
     val cantidad: Int,
     val gramos: Int? = null
+)
+
+/** Un medio de pago dentro del pedido. monto null = el backend asigna el resto del total. */
+@Serializable
+data class PaymentInput(
+    val method: String,        // TARJETA, DEBITO, WEBPAY, MERCADO_PAGO, EFECTIVO, FRUTCOINS, TRANSFERENCIA
+    val monto: Int? = null     // CLP que el cliente quiere cubrir con este medio
+)
+
+/** Contexto del cliente al crear el pedido (metadata operacional/analítica). */
+@Serializable
+data class ClientContextDto(
+    val channel: String? = null,       // APP_ANDROID, WEB, ...
+    val appVersion: String? = null,
+    val deviceModel: String? = null,
+    val osVersion: String? = null,
+    val locale: String? = null
+)
+
+/** Un medio de pago aplicado al pedido (lo que realmente cubrió cada medio). */
+@Serializable
+data class OrderPaymentDto(
+    val method: String,
+    val monto: Int
 )
 
 /** Detalle completo del pedido (lo que la app renderiza, sin calcular nada). */
@@ -31,7 +67,10 @@ data class OrderDto(
     val totalFinal: Int? = null,
     val frutcoinsGanadas: Int,
     val createdAt: String,
-    val items: List<OrderItemDto>
+    val items: List<OrderItemDto>,
+    val fulfillmentType: String = "DELIVERY",
+    val sucursal: String? = null,
+    val payments: List<OrderPaymentDto> = emptyList()
 )
 
 @Serializable

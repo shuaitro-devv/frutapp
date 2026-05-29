@@ -1,5 +1,6 @@
 package cl.frutapp.backend.modules.orders
 
+import cl.frutapp.backend.config.BusinessConfig
 import cl.frutapp.backend.error.NotFoundException
 import cl.frutapp.backend.error.ValidationException
 import cl.frutapp.backend.modules.catalog.CatalogRepository
@@ -46,14 +47,58 @@ class OrderService(
             )
         }
         val subtotal = lines.sumOf { it.montoEstimado }
-        val envio = if (subtotal == 0 || subtotal >= ENVIO_GRATIS_DESDE) 0 else COSTO_ENVIO
+
+        // Modalidad: retiro en sucursal nunca paga envío.
+        val fulfillment = FulfillmentType.parse(req.fulfillmentType ?: FulfillmentType.DELIVERY.name)
+            ?: throw ValidationException("Modalidad inválida: ${req.fulfillmentType}")
+        val esRetiro = fulfillment == FulfillmentType.RETIRO
+        val sucursal = if (esRetiro) (req.sucursal?.takeIf { it.isNotBlank() } ?: SUCURSAL_DEMO) else null
+        val envio = when {
+            esRetiro -> 0
+            subtotal == 0 || subtotal >= BusinessConfig.ENVIO_GRATIS_DESDE -> 0
+            else -> BusinessConfig.COSTO_ENVIO
+        }
         val total = subtotal + envio
-        val frutcoins = total / 100
+        val frutcoins = BusinessConfig.frutcoinsPorCompra(total)
         val numero = "#FRU-2026-${Random.nextInt(100000, 1000000)}"
-        val direccion = req.direccion?.takeIf { it.isNotBlank() } ?: DIRECCION_DEMO
+        val direccion = if (esRetiro) (sucursal ?: SUCURSAL_DEMO)
+            else req.direccion?.takeIf { it.isNotBlank() } ?: DIRECCION_DEMO
+        val entrega = if (esRetiro) ENTREGA_RETIRO else ENTREGA_DEMO
+
+        // Pagos: valida los medios; capa el monto en FrutCoins por config (% del total).
+        // El backend (repo) lo vuelve a capar por el saldo real dentro de la transacción.
+        val pagos = req.payments.orEmpty()
+        pagos.forEach { p ->
+            if (PaymentMethod.parse(p.method) == null) throw ValidationException("Medio de pago inválido: ${p.method}")
+        }
+        val frutcoinsClpPedido = pagos
+            .filter { it.method == PaymentMethod.FRUTCOINS.name }
+            .sumOf { (it.monto ?: 0).coerceAtLeast(0) }
+        val frutcoinsClpCapado = minOf(frutcoinsClpPedido, BusinessConfig.maxFrutcoinsClp(total), total)
+        val cashMethod = pagos.firstOrNull { it.method != PaymentMethod.FRUTCOINS.name }?.method
+            ?: PaymentMethod.TARJETA.name
 
         val id = orders.create(
-            NewOrder(numero, userId, direccion, ENTREGA_DEMO, subtotal, envio, total, frutcoins, lines)
+            NewOrder(
+                numero = numero,
+                userId = userId,
+                direccion = direccion,
+                entrega = entrega,
+                subtotal = subtotal,
+                envio = envio,
+                total = total,
+                frutcoins = frutcoins,
+                lines = lines,
+                fulfillmentType = fulfillment.name,
+                sucursal = sucursal,
+                channel = req.context?.channel,
+                appVersion = req.context?.appVersion,
+                deviceModel = req.context?.deviceModel,
+                osVersion = req.context?.osVersion,
+                locale = req.context?.locale,
+                cashMethod = cashMethod,
+                frutcoinsClpRequested = frutcoinsClpCapado
+            )
         )
         return orders.findDetail(id, userId)
             ?: throw IllegalStateException("Pedido recién creado no encontrado")
@@ -93,9 +138,9 @@ class OrderService(
         runCatching { UUID.fromString(value) }.getOrNull() ?: throw ValidationException(msg)
 
     companion object {
-        private const val ENVIO_GRATIS_DESDE = 15000
-        private const val COSTO_ENVIO = 2990
         private const val DIRECCION_DEMO = "Av. Siempre Viva 742, Santiago"
         private const val ENTREGA_DEMO = "Hoy 10:00 - 12:00"
+        private const val ENTREGA_RETIRO = "Retiro en sucursal"
+        private const val SUCURSAL_DEMO = "Sucursal Lo Valledor"
     }
 }

@@ -17,9 +17,25 @@ object OrdersTable : Table("customer_order") {
     val totalFinal = integer("total_final").nullable()
     val frutcoinsGanadas = integer("frutcoins_ganadas")
     val frutcoinsCanjeadas = integer("frutcoins_canjeadas")
+    val fulfillmentType = text("fulfillment_type")
+    val sucursal = text("sucursal").nullable()
+    val channel = text("channel").nullable()
+    val appVersion = text("app_version").nullable()
+    val deviceModel = text("device_model").nullable()
+    val osVersion = text("os_version").nullable()
+    val locale = text("locale").nullable()
     val createdAt = timestamp("created_at")
     val updatedAt = timestamp("updated_at")
     val deletedAt = timestamp("deleted_at").nullable()
+    override val primaryKey = PrimaryKey(id)
+}
+
+object OrderPaymentsTable : Table("order_payment") {
+    val id = uuid("id")
+    val orderId = uuid("order_id")
+    val method = text("method")
+    val monto = integer("monto")
+    val createdAt = timestamp("created_at")
     override val primaryKey = PrimaryKey(id)
 }
 
