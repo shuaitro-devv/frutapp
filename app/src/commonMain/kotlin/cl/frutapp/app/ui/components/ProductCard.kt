@@ -2,8 +2,21 @@
 
 package cl.frutapp.app.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.scale
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,6 +63,9 @@ fun ProductCard(
     unit: String = "kg",
     onClick: () -> Unit = {}
 ) {
+    val scope = rememberCoroutineScope()
+    val addScale = remember { Animatable(1f) }
+    var added by remember { mutableStateOf(false) }
     Card(
         modifier = modifier.clickable(onClick = onClick),
         shape = FrutAppShapes.large,
@@ -104,12 +120,22 @@ fun ProductCard(
                 Box(
                     modifier = Modifier
                         .size(36.dp)
-                        .background(FrutAppColors.Brand400, CircleShape)
-                        .clickable(onClick = onAdd),
+                        .scale(addScale.value)
+                        .background(if (added) FrutAppColors.Brand600 else FrutAppColors.Brand400, CircleShape)
+                        .clickable {
+                            onAdd()
+                            scope.launch {
+                                added = true
+                                addScale.animateTo(0.8f, tween(90))
+                                addScale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+                                delay(550)
+                                added = false
+                            }
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Add,
+                        imageVector = if (added) Icons.Default.Check else Icons.Default.Add,
                         contentDescription = "Agregar",
                         tint = Color.White,
                         modifier = Modifier.size(20.dp)
