@@ -1,5 +1,6 @@
 package cl.frutapp.backend.plugins
 
+import cl.frutapp.backend.config.configRoutes
 import cl.frutapp.backend.modules.auth.AuthService
 import cl.frutapp.backend.modules.auth.authRoutes
 import cl.frutapp.backend.modules.catalog.CatalogService
@@ -20,5 +21,6 @@ fun Application.configureRouting(
         authRoutes(authService)
         catalogRoutes(catalogService)
         orderRoutes(orderService)
+        configRoutes()
     }
 }

@@ -1,5 +1,7 @@
 package cl.frutapp.backend
 
+import cl.frutapp.backend.config.ConfigCache
+import cl.frutapp.backend.config.ConfigRepository
 import cl.frutapp.backend.config.JwtConfig
 import cl.frutapp.backend.config.MailConfig
 import cl.frutapp.backend.modules.auth.AuthService
@@ -27,6 +29,7 @@ import io.ktor.server.application.Application
 import io.ktor.server.netty.EngineMain
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /**
  * Entrada principal del backend FrutApp.
@@ -44,6 +47,14 @@ fun Application.module() {
     configureStatusPages()
     configureMonitoring()
     configureDatabases()
+
+    // Config de negocio desde BD (app_config): carga el caché antes de servir y luego
+    // lo refresca periódicamente (cambiar un parámetro = editar la fila, sin redeploy).
+    val configRepository = ConfigRepository()
+    runBlocking {
+        runCatching { ConfigCache.refresh(configRepository) }
+            .onFailure { environment.log.warn("Carga inicial de config falló (uso defaults)", it) }
+    }
 
     val mailConfig = MailConfig.from(environment.config)
     val emailSender: EmailSender = if (mailConfig.enabled) {
@@ -69,6 +80,15 @@ fun Application.module() {
 
     configureSecurity(jwtConfig, tokenService)
     configureRouting(authService, catalogService, orderService)
+
+    // Refresca la config de negocio cada 60s (cambios en app_config sin redeploy).
+    launch {
+        while (true) {
+            delay(60_000)
+            runCatching { ConfigCache.refresh(configRepository) }
+                .onFailure { environment.log.warn("Refresh de config falló", it) }
+        }
+    }
 
     // Demo: auto-avance de pedidos (gated por env DEMO_AUTO_ADVANCE). En producción real = false.
     val demoAutoAdvance = environment.config.propertyOrNull("demo.autoAdvance")?.getString().toBoolean()

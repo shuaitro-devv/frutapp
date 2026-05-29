@@ -1,30 +1,30 @@
 package cl.frutapp.backend.config
 
 /**
- * Parámetros de negocio AJUSTABLES en un solo lugar.
- *
- * Hoy son constantes en código; mañana el "módulo de configuración" (web admin) los
- * leerá desde BD y solo cambiará el ORIGEN de estos valores —el resto de la lógica
- * sigue pidiéndolos acá y no se entera. Toda regla con un "número mágico" ajustable
- * (envío, tasa de FrutCoins, topes, medios/modalidades habilitados) debe vivir aquí.
+ * Parámetros de negocio AJUSTABLES, leídos de [ConfigCache] (tabla `app_config`) con
+ * fallback a estos defaults si la clave no existe. Cambiarlos = editar la fila en BD;
+ * al refrescar el caché surten efecto **sin redeploy**. Toda regla con un "número mágico"
+ * ajustable (envío, tasa/tope de FrutCoins, medios/modalidades) debe pedirlo acá.
  */
 object BusinessConfig {
 
+    // Defaults (fallback si la BD no tiene la clave).
+    private const val DEF_ENVIO_GRATIS_DESDE = 15_000
+    private const val DEF_COSTO_ENVIO = 2_990
+    private const val DEF_FRUTCOINS_GANA_CADA_CLP = 100
+    private const val DEF_FRUTCOIN_VALOR_CLP = 1
+    private const val DEF_FRUTCOINS_MAX_PORC_PAGO = 0.20
+
     // --- Envío ---
-    /** Desde este subtotal (CLP) el envío es gratis. */
-    const val ENVIO_GRATIS_DESDE = 15_000
-    /** Costo de envío (CLP) bajo el umbral. El retiro en sucursal nunca paga envío. */
-    const val COSTO_ENVIO = 2_990
+    val ENVIO_GRATIS_DESDE: Int get() = ConfigCache.int("envio_gratis_desde", DEF_ENVIO_GRATIS_DESDE)
+    val COSTO_ENVIO: Int get() = ConfigCache.int("costo_envio", DEF_COSTO_ENVIO)
 
-    // --- FrutCoins ---
-    /** Se gana 1 FrutCoin por cada N CLP gastados. */
-    const val FRUTCOINS_GANA_CADA_CLP = 100
-    /** Valor de 1 FrutCoin al pagar (CLP). */
-    const val FRUTCOIN_VALOR_CLP = 1
-    /** Tope: porcentaje máximo del total que se puede pagar con FrutCoins. */
-    const val FRUTCOINS_MAX_PORC_PAGO = 0.20
+    // --- FrutCoins --- (coerceAtLeast(1): nunca dividir por cero aunque la BD traiga 0)
+    val FRUTCOINS_GANA_CADA_CLP: Int get() = ConfigCache.int("frutcoins_gana_cada_clp", DEF_FRUTCOINS_GANA_CADA_CLP).coerceAtLeast(1)
+    val FRUTCOIN_VALOR_CLP: Int get() = ConfigCache.int("frutcoin_valor_clp", DEF_FRUTCOIN_VALOR_CLP).coerceAtLeast(1)
+    val FRUTCOINS_MAX_PORC_PAGO: Double get() = ConfigCache.double("frutcoins_max_porc_pago", DEF_FRUTCOINS_MAX_PORC_PAGO)
 
-    // --- Catálogos habilitados (referencia para validación; el front debería pedirlos) ---
+    // --- Catálogos habilitados (estáticos por ahora) ---
     val MEDIOS_PAGO = listOf("TARJETA", "DEBITO", "WEBPAY", "MERCADO_PAGO", "EFECTIVO", "FRUTCOINS", "TRANSFERENCIA")
     val MODALIDADES = listOf("DELIVERY", "RETIRO")
 
