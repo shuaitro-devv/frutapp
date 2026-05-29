@@ -151,9 +151,9 @@ class HomeScreen : Screen {
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)
                     )
                 }
-                item { SectionHeader("Categorías", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 4.dp)) }
+                item { SectionHeader("Categorías", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 4.dp), onVerTodo = { navigator.push(CatalogScreen()) }) }
                 item { CategoriesRow(modifier = Modifier.padding(vertical = 8.dp)) }
-                item { SectionHeader("Productos destacados", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp)) }
+                item { SectionHeader("Productos destacados", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp), onVerTodo = { navigator.push(CatalogScreen()) }) }
                 items(destacados.chunked(2)) { fila ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
@@ -440,19 +440,21 @@ private fun BannerSlideView(slide: BannerSlide) {
 }
 
 @Composable
-private fun SectionHeader(title: String, modifier: Modifier = Modifier) {
+private fun SectionHeader(title: String, modifier: Modifier = Modifier, onVerTodo: (() -> Unit)? = null) {
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(title, style = MaterialTheme.typography.titleLarge, color = FrutAppColors.Brand800, fontWeight = FontWeight.Bold)
-        Text(
-            "Ver todo",
-            style = MaterialTheme.typography.labelLarge,
-            color = FrutAppColors.Brand600,
-            modifier = Modifier.clickable { }
-        )
+        if (onVerTodo != null) {
+            Text(
+                "Ver todo",
+                style = MaterialTheme.typography.labelLarge,
+                color = FrutAppColors.Brand600,
+                modifier = Modifier.clickable(onClick = onVerTodo)
+            )
+        }
     }
 }
 

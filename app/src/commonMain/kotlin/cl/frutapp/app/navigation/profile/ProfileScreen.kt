@@ -51,6 +51,7 @@ import cl.frutapp.app.legal.LegalDocKind
 import cl.frutapp.app.navigation.auth.LoginScreen
 import cl.frutapp.app.navigation.legal.LegalDocScreen
 import cl.frutapp.app.navigation.rewards.FrutCoinsScreen
+import cl.frutapp.app.ui.comingSoon
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.FrutTab
@@ -79,7 +80,7 @@ class ProfileScreen : Screen {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Perfil", color = FrutAppColors.Brand800, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Text("Ayuda", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { })
+                    Text("Ayuda", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { comingSoon() })
                 }
 
                 Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
@@ -94,25 +95,25 @@ class ProfileScreen : Screen {
                     MenuSection(
                         "Mis cuentas y direcciones",
                         listOf(
-                            MenuItem(Icons.Filled.Place, "Direcciones"),
-                            MenuItem(Icons.Filled.CreditCard, "Métodos de pago"),
-                            MenuItem(Icons.Filled.Link, "Cuentas vinculadas")
+                            MenuItem(Icons.Filled.Place, "Direcciones", onClick = { comingSoon() }),
+                            MenuItem(Icons.Filled.CreditCard, "Métodos de pago", onClick = { comingSoon() }),
+                            MenuItem(Icons.Filled.Link, "Cuentas vinculadas", onClick = { comingSoon() })
                         )
                     )
                     MenuSection(
                         "Preferencias",
                         listOf(
-                            MenuItem(Icons.Filled.Notifications, "Notificaciones"),
-                            MenuItem(Icons.Filled.Language, "Idioma")
+                            MenuItem(Icons.Filled.Notifications, "Notificaciones", onClick = { comingSoon() }),
+                            MenuItem(Icons.Filled.Language, "Idioma", onClick = { comingSoon() })
                         )
                     )
                     MenuSection(
                         "Más opciones",
                         listOf(
-                            MenuItem(Icons.Filled.SupportAgent, "Ayuda"),
+                            MenuItem(Icons.Filled.SupportAgent, "Ayuda", onClick = { comingSoon() }),
                             MenuItem(Icons.Filled.Description, "Términos y condiciones", onClick = { navigator.push(LegalDocScreen(LegalDocKind.TERMS)) }),
                             MenuItem(Icons.Filled.PrivacyTip, "Privacidad", onClick = { navigator.push(LegalDocScreen(LegalDocKind.PRIVACY)) }),
-                            MenuItem(Icons.Filled.Info, "Acerca de FrutApp")
+                            MenuItem(Icons.Filled.Info, "Acerca de FrutApp", onClick = { comingSoon() })
                         )
                     )
 
@@ -174,7 +175,7 @@ private fun UserCard(nombre: String, email: String, telefono: String?, onFrutCoi
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Editar perfil", color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { })
+            Text("Editar perfil", color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { comingSoon() })
             Box(
                 modifier = Modifier.background(FrutAppColors.AmberSoft, RoundedCornerShape(12.dp)).clickable(onClick = onFrutCoins).padding(horizontal = 12.dp, vertical = 6.dp)
             ) {

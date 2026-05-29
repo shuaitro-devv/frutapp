@@ -55,6 +55,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.CartItem
 import cl.frutapp.app.data.CartStore
 import cl.frutapp.app.data.DemoCatalog
+import cl.frutapp.app.data.FavoritesStore
 import cl.frutapp.app.data.Producto
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.ui.components.FrutButtonPrimary
@@ -77,7 +78,7 @@ class ProductDetailScreen(
         val esKg = producto.unidad == "kg"
         var gramos by remember { mutableStateOf(editing?.gramos ?: 1000) }
         var cantidad by remember { mutableStateOf(editing?.cantidad ?: 1) }
-        var favorito by remember { mutableStateOf(false) }
+        val favorito = FavoritesStore.isFavorite(producto.id)
 
         val totalSel = if (esKg) (producto.precioClp * gramos / 1000.0).toInt() * cantidad
         else producto.precioClp * cantidad
@@ -88,7 +89,7 @@ class ProductDetailScreen(
                     TopBar(
                         favorito = favorito,
                         onBack = { navigator.pop() },
-                        onFav = { favorito = !favorito }
+                        onFav = { FavoritesStore.toggle(producto.id) }
                     )
                 }
                 item {

@@ -49,6 +49,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.RewardsStore
 import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.navigation.recycle.ReciclaScreen
+import cl.frutapp.app.ui.comingSoon
 import cl.frutapp.shared.dto.FrutCoinsEntryDto
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
@@ -153,7 +154,7 @@ private fun TopBar(onBack: () -> Unit) {
             Icon(Icons.Filled.ArrowBack, contentDescription = "Volver", tint = FrutAppColors.Ink, modifier = Modifier.size(20.dp))
         }
         Text("FrutCoins", color = FrutAppColors.Brand800, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 12.dp).weight(1f))
-        Text("Historial", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { })
+        Text("Historial", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { comingSoon() })
     }
 }
 
@@ -218,6 +219,7 @@ private fun RecompensaCard(item: Recompensa, balance: Int) {
             Box(
                 modifier = Modifier
                     .background(if (alcanza) FrutAppColors.Brand400 else FrutAppColors.Brand100, RoundedCornerShape(12.dp))
+                    .clickable { comingSoon() }
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Text("Canjear", color = if (alcanza) Color.White else FrutAppColors.InkSoft, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)

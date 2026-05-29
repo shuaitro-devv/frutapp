@@ -7,12 +7,14 @@ import androidx.fragment.app.FragmentActivity
 import cl.frutapp.app.data.BiometricAuth
 import cl.frutapp.app.data.SessionStorage
 import cl.frutapp.app.data.TokenStore
+import cl.frutapp.app.ui.initToast
 
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         // Sesión persistida: inicializar storage y restaurar antes de pintar la UI.
         SessionStorage.init(applicationContext)
         TokenStore.restore()
+        initToast(applicationContext)
         BiometricAuth.bind(this)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
