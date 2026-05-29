@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -29,6 +30,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,15 +45,21 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.formatClp
+import cl.frutapp.app.data.huboItems
+import cl.frutapp.app.data.reorderIntoCart
+import cl.frutapp.app.data.toastMessage
 import cl.frutapp.app.data.remote.OrderApi
+import cl.frutapp.app.navigation.shop.CartScreen
 import cl.frutapp.app.navigation.shop.OrderTrackingScreen
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.components.OrderListSkeleton
+import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
 import cl.frutapp.shared.dto.OrderSummaryDto
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.canasta_frutas
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
 
@@ -63,6 +71,7 @@ class MisPedidosScreen : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val scope = rememberCoroutineScope()
         var pedidos by remember { mutableStateOf<List<OrderSummaryDto>?>(null) }
         var error by remember { mutableStateOf(false) }
         var tabSel by remember { mutableStateOf(0) }
@@ -108,7 +117,23 @@ class MisPedidosScreen : Screen {
                     ) {
                         items(visibles.size) { idx ->
                             val o = visibles[idx]
-                            OrderCard(o, onClick = { navigator.push(OrderTrackingScreen(orderId = o.id)) })
+                            OrderCard(
+                                o,
+                                onClick = { navigator.push(OrderTrackingScreen(orderId = o.id)) },
+                                onReorder = {
+                                    // El resumen no trae los ítems; pedimos el detalle para re-armar.
+                                    scope.launch {
+                                        val detalle = runCatching { OrderApi().get(o.id) }.getOrNull()
+                                        if (detalle == null) {
+                                            showToast("No pudimos cargar el pedido")
+                                            return@launch
+                                        }
+                                        val r = reorderIntoCart(detalle.items)
+                                        showToast(r.toastMessage())
+                                        if (r.huboItems()) navigator.push(CartScreen())
+                                    }
+                                }
+                            )
                         }
                     }
                 }
@@ -184,28 +209,40 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit, modifier: Modifi
 }
 
 @Composable
-private fun OrderCard(order: OrderSummaryDto, onClick: () -> Unit) {
-    Row(
+private fun OrderCard(order: OrderSummaryDto, onClick: () -> Unit, onReorder: () -> Unit) {
+    Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)
             .background(Color.White, RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier.size(56.dp).background(FrutAppColors.Brand50, RoundedCornerShape(14.dp)),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Image(painter = painterResource(Res.drawable.canasta_frutas), contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(44.dp).padding(4.dp))
-        }
-        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(order.numero, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                EstadoChip(order.status, modifier = Modifier.padding(start = 8.dp))
+            Box(
+                modifier = Modifier.size(56.dp).background(FrutAppColors.Brand50, RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(painter = painterResource(Res.drawable.canasta_frutas), contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(44.dp).padding(4.dp))
             }
-            Text("${order.itemsCount} producto(s)", color = FrutAppColors.InkSoft, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
-            Text(formatClp(order.total), color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp))
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(order.numero, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    EstadoChip(order.status, modifier = Modifier.padding(start = 8.dp))
+                }
+                Text("${order.itemsCount} producto(s)", color = FrutAppColors.InkSoft, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+                Text(formatClp(order.total), color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp))
+            }
+            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = FrutAppColors.InkSoft, modifier = Modifier.size(20.dp))
         }
-        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = FrutAppColors.InkSoft, modifier = Modifier.size(20.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onReorder)
+                .padding(start = 68.dp, end = 14.dp, top = 4.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Filled.Replay, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(16.dp))
+            Text("Volver a pedir", color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp))
+        }
     }
 }
 

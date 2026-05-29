@@ -45,12 +45,12 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import cl.frutapp.app.data.CartStore
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.data.fulfillmentLabel
+import cl.frutapp.app.data.huboItems
 import cl.frutapp.app.data.paymentMethodLabel
-import cl.frutapp.app.data.toProducto
-import cl.frutapp.app.data.remote.CatalogApi
+import cl.frutapp.app.data.reorderIntoCart
+import cl.frutapp.app.data.toastMessage
 import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutButtonPrimary
@@ -115,31 +115,9 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
                         modifier = Modifier.weight(1f),
                         onReorder = {
                             scope.launch {
-                                // Los ítems del pedido son snapshots (sin productId), así que los
-                                // re-mapeamos al catálogo actual por imageKey para recuperar el
-                                // producto real (con su id) y volver a armar el carrito.
-                                val catalogo = runCatching { CatalogApi().products() }.getOrNull()
-                                if (catalogo.isNullOrEmpty()) {
-                                    showToast("No pudimos cargar el catálogo")
-                                    return@launch
-                                }
-                                val porImagen = catalogo.associateBy { it.imageKey }
-                                var agregados = 0
-                                o.items.forEach { item ->
-                                    porImagen[item.imageKey]?.let { p ->
-                                        CartStore.add(p.toProducto(), item.cantidad, item.gramos)
-                                        agregados++
-                                    }
-                                }
-                                if (agregados == 0) {
-                                    showToast("No pudimos re-armar este pedido")
-                                    return@launch
-                                }
-                                showToast(
-                                    if (agregados == o.items.size) "Productos agregados al carrito"
-                                    else "$agregados de ${o.items.size} productos agregados"
-                                )
-                                navigator.push(CartScreen())
+                                val r = reorderIntoCart(o.items)
+                                showToast(r.toastMessage())
+                                if (r.huboItems()) navigator.push(CartScreen())
                             }
                         }
                     )
