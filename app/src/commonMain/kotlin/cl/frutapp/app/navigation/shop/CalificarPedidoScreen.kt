@@ -80,7 +80,15 @@ class CalificarPedidoScreen(private val items: List<OrderItemDto>) : Screen {
                 return@LaunchedEffect
             }
             val porImagen = catalogo.associateBy { it.imageKey }
-            productos = items.mapNotNull { porImagen[it.imageKey]?.toProducto() }.distinctBy { it.id }
+            val mapeados = items.mapNotNull { porImagen[it.imageKey]?.toProducto() }.distinctBy { it.id }
+            // Precarga: si ya calificaste un producto, mostramos tus estrellas y comentario.
+            mapeados.forEach { p ->
+                ResenasStore.miResena(p.id)?.let { mia ->
+                    estrellas[p.id] = mia.estrellas
+                    if (mia.texto.isNotBlank()) comentarios[p.id] = mia.texto
+                }
+            }
+            productos = mapeados
         }
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
@@ -132,7 +140,7 @@ class CalificarPedidoScreen(private val items: List<OrderItemDto>) : Screen {
                                     lista.forEach { p ->
                                         val s = estrellas[p.id] ?: 0
                                         if (s > 0) {
-                                            ResenasStore.agregar(p.id, autor, s, comentarios[p.id]?.trim() ?: "")
+                                            ResenasStore.guardar(p.id, autor, s, comentarios[p.id]?.trim() ?: "")
                                             n++
                                         }
                                     }

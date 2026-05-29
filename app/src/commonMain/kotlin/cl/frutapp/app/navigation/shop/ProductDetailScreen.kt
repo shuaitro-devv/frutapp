@@ -357,6 +357,7 @@ private fun ReviewsSection(producto: Producto, onVerTodas: () -> Unit) {
     // null = estamos creando una reseña nueva; con id = estamos editando esa reseña.
     var editandoId by rememberSaveable(producto.id) { mutableStateOf<Int?>(null) }
     val autor = TokenStore.user?.name?.takeIf { it.isNotBlank() } ?: "Tú"
+    val yaResenada = ResenasStore.miResena(producto.id) != null
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
         Row(
@@ -403,7 +404,7 @@ private fun ReviewsSection(producto: Producto, onVerTodas: () -> Unit) {
                     escribiendo = false
                 }
             )
-        } else {
+        } else if (!yaResenada) {
             Box(
                 modifier = Modifier.fillMaxWidth().padding(top = 14.dp)
                     .border(1.dp, FrutAppColors.Brand400, RoundedCornerShape(12.dp))

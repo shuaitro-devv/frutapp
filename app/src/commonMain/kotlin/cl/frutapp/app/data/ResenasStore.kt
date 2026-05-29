@@ -35,6 +35,9 @@ object ResenasStore {
     /** Reseñas que el usuario agregó a este producto (sobre las semilla). */
     fun extras(productId: String): Int = (resenas(productId).size - SEMILLA_COUNT).coerceAtLeast(0)
 
+    /** La reseña del usuario para este producto (si ya la escribió). */
+    fun miResena(productId: String): Resena? = resenas(productId).firstOrNull { it.propia }
+
     fun agregar(productId: String, nombre: String, estrellas: Int, texto: String) {
         resenas(productId).add(0, Resena(nextId++, nombre, estrellas, "recién", texto.trim(), propia = true))
     }
@@ -43,5 +46,12 @@ object ResenasStore {
         val lista = resenas(productId)
         val i = lista.indexOfFirst { it.id == id }
         if (i >= 0) lista[i] = lista[i].copy(estrellas = estrellas, texto = texto.trim(), fecha = "editada")
+    }
+
+    /** Crea o actualiza la reseña del usuario (una por producto). */
+    fun guardar(productId: String, nombre: String, estrellas: Int, texto: String) {
+        val mia = miResena(productId)
+        if (mia != null) editar(productId, mia.id, estrellas, texto)
+        else agregar(productId, nombre, estrellas, texto)
     }
 }
