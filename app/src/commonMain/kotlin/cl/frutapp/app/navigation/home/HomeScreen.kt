@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -40,7 +41,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -72,6 +75,7 @@ import cl.frutapp.app.ui.theme.FrutAppColors
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.canasta_frutas
 import frutapp.app.generated.resources.cilantro
+import frutapp.app.generated.resources.hoja_decorativa
 import frutapp.app.generated.resources.lechuga
 import frutapp.app.generated.resources.manzana_roja
 import frutapp.app.generated.resources.zanahoria
@@ -259,18 +263,52 @@ private fun HeroBanner(modifier: Modifier = Modifier, onClick: () -> Unit = {}) 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(140.dp)
-            .clip(RoundedCornerShape(20.dp))
+            .height(165.dp)
+            .clip(RoundedCornerShape(22.dp))
             .background(
-                Brush.horizontalGradient(listOf(FrutAppColors.Brand600, FrutAppColors.Brand400))
+                Brush.horizontalGradient(listOf(FrutAppColors.Brand800, FrutAppColors.Brand600))
             )
             .clickable(onClick = onClick)
     ) {
+        // Canasta sangrando por el borde derecho (imagen transparente)
+        Image(
+            painter = painterResource(Res.drawable.canasta_frutas),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .offset(x = 14.dp)
+                .size(180.dp)
+        )
+        // Hojas decorativas flotando (como el mockup)
+        Image(
+            painter = painterResource(Res.drawable.hoja_decorativa),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = (-6).dp, y = (-8).dp)
+                .size(58.dp)
+                .rotate(25f)
+                .alpha(0.9f)
+        )
+        Image(
+            painter = painterResource(Res.drawable.hoja_decorativa),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .offset(x = (-12).dp, y = 10.dp)
+                .size(48.dp)
+                .rotate(205f)
+                .alpha(0.45f)
+        )
+        // Texto + CTA
         Column(
             modifier = Modifier
                 .align(Alignment.CenterStart)
-                .padding(start = 20.dp, end = 8.dp)
-                .fillMaxWidth(0.62f)
+                .padding(start = 22.dp, end = 8.dp)
+                .fillMaxWidth(0.6f)
         ) {
             Text(
                 text = "Frescura que se nota,",
@@ -284,22 +322,22 @@ private fun HeroBanner(modifier: Modifier = Modifier, onClick: () -> Unit = {}) 
                 color = Color.White,
                 fontWeight = FontWeight.Bold
             )
-            Text(
-                text = "Directo de la feria a tu mesa.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.9f),
-                modifier = Modifier.padding(top = 6.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .padding(top = 14.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.White)
+                    .clickable(onClick = onClick)
+                    .padding(horizontal = 18.dp, vertical = 9.dp)
+            ) {
+                Text(
+                    text = "Ver ofertas",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = FrutAppColors.Brand600,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
-        Image(
-            painter = painterResource(Res.drawable.canasta_frutas),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 8.dp)
-                .size(130.dp)
-        )
     }
 }
 
