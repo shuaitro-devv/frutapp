@@ -53,6 +53,7 @@ import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.theme.FrutAppColors
 import cl.frutapp.shared.dto.OrderDto
+import kotlinx.coroutines.delay
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.camion_reparto
 import org.jetbrains.compose.resources.ExperimentalResourceApi
@@ -72,10 +73,16 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
         var order by remember { mutableStateOf<OrderDto?>(null) }
         var error by remember { mutableStateOf(false) }
 
+        // Auto-refresh: re-consulta el pedido mientras la pantalla está abierta para que el
+        // timeline avance solo (el backend mueve el estado). Para al llegar a un estado final.
         LaunchedEffect(orderId) {
-            runCatching { OrderApi().get(orderId) }
-                .onSuccess { order = it }
-                .onFailure { error = true }
+            while (true) {
+                runCatching { OrderApi().get(orderId) }
+                    .onSuccess { order = it }
+                    .onFailure { if (order == null) error = true }
+                if (order?.status in setOf("ENTREGADO", "CANCELADO", "DEVOLUCION")) break
+                delay(8000)
+            }
         }
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
