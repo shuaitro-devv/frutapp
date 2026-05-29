@@ -50,6 +50,7 @@ import cl.frutapp.app.data.DemoCatalog
 import cl.frutapp.app.data.Producto
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.navigation.shop.ProductDetailScreen
+import cl.frutapp.app.ui.comingSoon
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.theme.FrutAppColors
@@ -103,7 +104,7 @@ class OfertasScreen : Screen {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Ofertas", color = FrutAppColors.Brand800, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Text("Ayuda", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { })
+                    Text("Ayuda", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { comingSoon() })
                 }
 
                 LazyColumn(modifier = Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp)) {
@@ -243,7 +244,9 @@ private fun LimitedOffer(modifier: Modifier = Modifier) {
 private fun PackCard(pack: Pack) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)
-            .background(FrutAppColors.Brand50, RoundedCornerShape(16.dp)).padding(16.dp),
+            .background(FrutAppColors.Brand50, RoundedCornerShape(16.dp))
+            .clickable { comingSoon() }
+            .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(

@@ -45,6 +45,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.navigation.rewards.FrutCoinsScreen
+import cl.frutapp.app.ui.comingSoon
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.FrutTab
@@ -117,7 +118,7 @@ class ReciclaScreen : Screen {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text("Puntos de reciclaje cerca de ti", color = FrutAppColors.Brand800, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                            Text("Ver mapa", color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { })
+                            Text("Ver mapa", color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { comingSoon() })
                         }
                     }
                     items(puntos.size) { i -> PuntoCard(puntos[i]) }
@@ -167,7 +168,10 @@ private fun SectionTitle(title: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun TipoItem(tipo: TipoReciclaje) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable { comingSoon() }
+    ) {
         Box(
             modifier = Modifier.size(64.dp).background(FrutAppColors.Brand50, CircleShape),
             contentAlignment = Alignment.Center
@@ -182,7 +186,9 @@ private fun TipoItem(tipo: TipoReciclaje) {
 private fun PuntoCard(punto: Punto) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)
-            .background(FrutAppColors.Brand50, RoundedCornerShape(16.dp)).padding(14.dp),
+            .background(FrutAppColors.Brand50, RoundedCornerShape(16.dp))
+            .clickable { comingSoon() }
+            .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
