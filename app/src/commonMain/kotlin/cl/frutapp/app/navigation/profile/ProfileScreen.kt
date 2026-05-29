@@ -42,6 +42,8 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.CartStore
+import cl.frutapp.app.data.OrdersStore
 import cl.frutapp.app.data.RewardsStore
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.navigation.auth.LoginScreen
@@ -112,6 +114,11 @@ class ProfileScreen : Screen {
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)
                             .background(FrutAppColors.Brand50, RoundedCornerShape(14.dp))
                             .clickable {
+                                // Limpia TODA la sesión y los stores en memoria para que el
+                                // próximo usuario no herede carrito/FrutCoins/pedidos.
+                                CartStore.clear()
+                                RewardsStore.reset()
+                                OrdersStore.reset()
                                 TokenStore.clear()
                                 navigator.replaceAll(LoginScreen())
                             }

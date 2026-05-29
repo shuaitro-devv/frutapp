@@ -13,7 +13,7 @@ class MainActivity : FragmentActivity() {
         // Sesión persistida: inicializar storage y restaurar antes de pintar la UI.
         SessionStorage.init(applicationContext)
         TokenStore.restore()
-        BiometricAuth.activity = this
+        BiometricAuth.bind(this)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
@@ -22,7 +22,7 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
-        if (BiometricAuth.activity === this) BiometricAuth.activity = null
+        BiometricAuth.unbind()
         super.onDestroy()
     }
 }

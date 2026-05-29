@@ -174,7 +174,7 @@ class ProductDetailScreen(private val producto: Producto) : Screen {
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(relacionados) { rel ->
-                            RelatedCard(rel, onClick = { navigator.push(ProductDetailScreen(rel)) })
+                            RelatedCard(rel, onClick = { navigator.replace(ProductDetailScreen(rel)) })
                         }
                     }
                     Spacer(Modifier.height(110.dp))

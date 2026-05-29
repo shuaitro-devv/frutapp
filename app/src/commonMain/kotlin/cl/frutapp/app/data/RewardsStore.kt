@@ -15,4 +15,9 @@ object RewardsStore {
     fun add(coins: Int) {
         balance += coins
     }
+
+    /** Reinicia al saldo inicial (al cerrar sesión). */
+    fun reset() {
+        balance = 245
+    }
 }

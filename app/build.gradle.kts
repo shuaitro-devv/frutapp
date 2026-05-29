@@ -53,6 +53,8 @@ kotlin {
             implementation(libs.kotlinx.coroutines.android)
             // Huella / biometría (trae androidx.fragment para FragmentActivity)
             implementation("androidx.biometric:biometric:1.1.0")
+            // Almacenamiento cifrado de la sesión (tokens)
+            implementation("androidx.security:security-crypto:1.1.0-alpha06")
         }
     }
 }

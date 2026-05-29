@@ -53,13 +53,20 @@ object CartStore {
         }
     }
 
-    fun setCantidad(index: Int, cantidad: Int) {
-        if (index !in items.indices) return
-        if (cantidad <= 0) items.removeAt(index) else items[index] = items[index].copy(cantidad = cantidad)
+    /** Ubica la línea por identidad (producto + gramaje), no por índice: evita operar
+     *  sobre el item equivocado cuando la lista cambia/reordena. */
+    private fun indexOf(item: CartItem) =
+        items.indexOfFirst { it.producto.id == item.producto.id && it.gramos == item.gramos }
+
+    fun setCantidad(item: CartItem, cantidad: Int) {
+        val i = indexOf(item)
+        if (i < 0) return
+        if (cantidad <= 0) items.removeAt(i) else items[i] = items[i].copy(cantidad = cantidad)
     }
 
-    fun remove(index: Int) {
-        if (index in items.indices) items.removeAt(index)
+    fun remove(item: CartItem) {
+        val i = indexOf(item)
+        if (i >= 0) items.removeAt(i)
     }
 
     fun clear() = items.clear()

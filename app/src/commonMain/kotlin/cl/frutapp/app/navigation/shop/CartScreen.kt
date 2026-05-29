@@ -80,13 +80,13 @@ class CartScreen : Screen {
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp)
                     ) {
                         item { FreeShippingBanner(subtotal = subtotal, modifier = Modifier.padding(20.dp)) }
-                        items.forEachIndexed { index, item ->
+                        items.forEach { item ->
                             item(key = "${item.producto.id}-${item.gramos}") {
                                 CartRow(
                                     item = item,
-                                    onMinus = { CartStore.setCantidad(index, item.cantidad - 1) },
-                                    onPlus = { CartStore.setCantidad(index, item.cantidad + 1) },
-                                    onDelete = { CartStore.remove(index) }
+                                    onMinus = { CartStore.setCantidad(item, item.cantidad - 1) },
+                                    onPlus = { CartStore.setCantidad(item, item.cantidad + 1) },
+                                    onDelete = { CartStore.remove(item) }
                                 )
                             }
                         }

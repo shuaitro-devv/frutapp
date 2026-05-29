@@ -1,5 +1,8 @@
 package cl.frutapp.app.data
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import cl.frutapp.shared.dto.UserDto
 import kotlinx.serialization.json.Json
 
@@ -13,11 +16,12 @@ object TokenStore {
     private const val K_USER = "user"
     private val json = Json { ignoreUnknownKeys = true }
 
-    var accessToken: String? = null
+    // Estado de Compose: las pantallas que leen user/accessToken recomponen al cambiar.
+    var accessToken: String? by mutableStateOf(null)
         private set
     var refreshToken: String? = null
         private set
-    var user: UserDto? = null
+    var user: UserDto? by mutableStateOf(null)
         private set
 
     val isLoggedIn: Boolean get() = accessToken != null

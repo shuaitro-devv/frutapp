@@ -23,19 +23,27 @@ data class Order(
  * se reemplaza por la API (y los pedidos persisten entre sesiones).
  */
 object OrdersStore {
-    val pedidos = mutableStateListOf(
-        Order(
-            numero = "#FRU-2026-100234",
-            fecha = "Hace 3 días",
-            total = 12450,
-            estado = OrderEstado.COMPLETADO,
-            direccion = "Av. Siempre Viva 742, Santiago",
-            entrega = "Entregado"
-        )
-    )
+    val pedidos = mutableStateListOf<Order>()
+
+    init { reset() }
 
     /** Agrega un pedido nuevo arriba (el más reciente primero). */
     fun add(order: Order) {
         pedidos.add(0, order)
+    }
+
+    /** Reinicia al pedido demo sembrado (al cerrar sesión). */
+    fun reset() {
+        pedidos.clear()
+        pedidos.add(
+            Order(
+                numero = "#FRU-2026-100234",
+                fecha = "Hace 3 días",
+                total = 12450,
+                estado = OrderEstado.COMPLETADO,
+                direccion = "Av. Siempre Viva 742, Santiago",
+                entrega = "Entregado"
+            )
+        )
     }
 }
