@@ -136,7 +136,7 @@ class ProfileScreen : Screen {
                     }
 
                     Box(modifier = Modifier.padding(20.dp)) {
-                        FrutButtonPrimary(text = "Invita a un amigo", onClick = { navigator.push(FrutCoinsScreen()) })
+                        FrutButtonPrimary(text = "Invita a un amigo", onClick = { navigator.push(InvitarAmigoScreen()) })
                     }
                     Spacer(Modifier.height(8.dp))
                 }
