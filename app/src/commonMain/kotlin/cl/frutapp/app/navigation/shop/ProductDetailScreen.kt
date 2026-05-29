@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Add
@@ -43,12 +44,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -61,9 +65,13 @@ import cl.frutapp.app.data.CartStore
 import cl.frutapp.app.data.DemoCatalog
 import cl.frutapp.app.data.FavoritesStore
 import cl.frutapp.app.data.Producto
+import cl.frutapp.app.data.Resena
+import cl.frutapp.app.data.ResenasStore
+import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.ui.comingSoon
 import cl.frutapp.app.ui.components.FrutButtonPrimary
+import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
 import kotlin.math.abs
 import org.jetbrains.compose.resources.ExperimentalResourceApi
@@ -334,21 +342,19 @@ private fun BenefitCard(icon: ImageVector, label: String, modifier: Modifier = M
     }
 }
 
-private data class Resena(val nombre: String, val estrellas: Int, val fecha: String, val texto: String)
-
-private val RESENAS_DEMO = listOf(
-    Resena("Camila R.", 5, "hace 2 días", "Llegó fresquísimo y muy rápido. Calidad de feria sin moverme de la casa."),
-    Resena("Felipe M.", 5, "hace 1 semana", "Excelente selección, todo en su punto. Ya es mi compra fija de la semana."),
-    Resena("Daniela P.", 4, "hace 2 semanas", "Muy buena calidad y buen precio. Repito sin dudarlo.")
-)
-
 @Composable
 private fun ReviewsSection(producto: Producto, onVerTodas: () -> Unit) {
-    // Promedio y conteo dummy, pero estables por producto (derivados del id) para que
-    // no cambien al recomponer ni al volver a entrar.
+    val resenas = ResenasStore.resenas(producto.id)
+    // Promedio dummy estable por producto (derivado del id). El conteo headline suma las
+    // reseñas que el usuario haya agregado en la sesión para que se sienta "vivo".
     val h = abs(producto.id.hashCode())
     val promedio = listOf(4.6, 4.7, 4.8, 4.9)[h % 4]
-    val total = 80 + h % 140
+    val total = 80 + h % 140 + ResenasStore.extras(producto.id)
+
+    var escribiendo by rememberSaveable(producto.id) { mutableStateOf(false) }
+    var estrellas by rememberSaveable(producto.id) { mutableStateOf(5) }
+    var texto by rememberSaveable(producto.id) { mutableStateOf("") }
+    val autor = TokenStore.user?.name?.takeIf { it.isNotBlank() } ?: "Tú"
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
         Row(
@@ -366,7 +372,98 @@ private fun ReviewsSection(producto: Producto, onVerTodas: () -> Unit) {
                 Text("$total reseñas", color = FrutAppColors.InkSoft, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
             }
         }
-        RESENAS_DEMO.forEach { ReviewCard(it) }
+
+        if (escribiendo) {
+            EscribirResenaForm(
+                estrellas = estrellas,
+                onEstrellas = { estrellas = it },
+                texto = texto,
+                onTexto = { texto = it },
+                onPublicar = {
+                    ResenasStore.agregar(producto.id, autor, estrellas, texto)
+                    texto = ""
+                    estrellas = 5
+                    escribiendo = false
+                    showToast("¡Gracias por tu reseña!")
+                },
+                onCancelar = { escribiendo = false }
+            )
+        } else {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(top = 14.dp)
+                    .border(1.dp, FrutAppColors.Brand400, RoundedCornerShape(12.dp))
+                    .clickable { escribiendo = true }
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Star, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(18.dp))
+                    Text("Escribir una reseña", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+        }
+
+        resenas.forEach { ReviewCard(it) }
+    }
+}
+
+@Composable
+private fun EscribirResenaForm(
+    estrellas: Int,
+    onEstrellas: (Int) -> Unit,
+    texto: String,
+    onTexto: (String) -> Unit,
+    onPublicar: () -> Unit,
+    onCancelar: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 14.dp)
+            .border(1.dp, FrutAppColors.Brand100, RoundedCornerShape(16.dp)).padding(16.dp)
+    ) {
+        Text("Tu calificación", color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        StarSelector(rating = estrellas, onRating = onEstrellas)
+        Spacer(Modifier.height(12.dp))
+        Box(
+            modifier = Modifier.fillMaxWidth().height(92.dp)
+                .background(Color.White, RoundedCornerShape(12.dp))
+                .border(1.dp, FrutAppColors.Brand100, RoundedCornerShape(12.dp))
+                .padding(12.dp)
+        ) {
+            if (texto.isEmpty()) {
+                Text("Cuéntanos cómo estuvo tu experiencia…", color = FrutAppColors.InkSoft, fontSize = 14.sp)
+            }
+            BasicTextField(
+                value = texto,
+                onValueChange = onTexto,
+                textStyle = TextStyle(color = FrutAppColors.Ink, fontSize = 14.sp),
+                cursorBrush = SolidColor(FrutAppColors.Brand400),
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        Spacer(Modifier.height(14.dp))
+        FrutButtonPrimary(text = "Publicar reseña", onClick = onPublicar, enabled = texto.isNotBlank())
+        Text(
+            "Cancelar",
+            color = FrutAppColors.InkSoft,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp).clickable(onClick = onCancelar),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun StarSelector(rating: Int, onRating: (Int) -> Unit) {
+    Row(modifier = Modifier.padding(top = 6.dp)) {
+        for (i in 1..5) {
+            Icon(
+                imageVector = if (i <= rating) Icons.Filled.Star else Icons.Filled.StarBorder,
+                contentDescription = "$i estrella(s)",
+                tint = FrutAppColors.AmberCoin,
+                modifier = Modifier.size(36.dp).clickable { onRating(i) }.padding(end = 6.dp)
+            )
+        }
     }
 }
 
