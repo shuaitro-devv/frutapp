@@ -23,7 +23,9 @@ import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.navigation.auth.LoginScreen
+import cl.frutapp.app.navigation.home.HomeScreen
 import cl.frutapp.app.ui.theme.FrutAppColors
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.logo_white
@@ -46,7 +48,8 @@ class SplashScreen : Screen {
             alpha.animateTo(1f, tween(600))
             scale.animateTo(1f, tween(600))
             delay(1200)
-            navigator.replace(LoginScreen())
+            // Si hay sesión persistida, entra directo al Home; si no, al Login.
+            if (TokenStore.isLoggedIn) navigator.replace(HomeScreen()) else navigator.replace(LoginScreen())
         }
 
         Box(
