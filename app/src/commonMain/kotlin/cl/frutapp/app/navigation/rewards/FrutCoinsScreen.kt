@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -36,6 +37,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -56,6 +59,7 @@ import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.theme.FrutAppColors
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.frutcoin
+import frutapp.app.generated.resources.mascota_coin
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
 
@@ -160,17 +164,48 @@ private fun TopBar(onBack: () -> Unit) {
 
 @Composable
 private fun Balance(modifier: Modifier = Modifier) {
-    Column(
+    val balance = RewardsStore.balance
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(170.dp)
-            .background(Brush.horizontalGradient(listOf(FrutAppColors.Brand600, FrutAppColors.Brand400)), RoundedCornerShape(22.dp)),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .height(190.dp)
+            .background(
+                Brush.horizontalGradient(listOf(FrutAppColors.Brand600, FrutAppColors.Brand400)),
+                RoundedCornerShape(22.dp)
+            )
+            .clip(RoundedCornerShape(22.dp))
     ) {
-        Image(painter = painterResource(Res.drawable.frutcoin), contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(54.dp))
-        Text("${RewardsStore.balance}", color = Color.White, fontSize = 42.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
-        Text("FrutCoins disponibles", color = Color.White.copy(alpha = 0.9f), fontSize = 14.sp)
+        // Monedas decorativas semi-transparentes: textura de fondo para que no se vea vacío.
+        Box(modifier = Modifier.size(140.dp).offset(x = (-40).dp, y = (-40).dp).background(Color.White.copy(alpha = 0.08f), CircleShape).align(Alignment.TopStart))
+        Box(modifier = Modifier.size(70.dp).offset(x = (-12).dp, y = 30.dp).background(Color.White.copy(alpha = 0.10f), CircleShape).align(Alignment.BottomStart))
+        Box(modifier = Modifier.size(180.dp).offset(x = 60.dp, y = (-60).dp).background(Color.White.copy(alpha = 0.07f), CircleShape).align(Alignment.TopEnd))
+        Box(modifier = Modifier.size(40.dp).offset(x = (-20).dp, y = (-10).dp).background(Color.White.copy(alpha = 0.10f), CircleShape).align(Alignment.BottomEnd))
+
+        Row(
+            modifier = Modifier.fillMaxSize().padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Tu saldo", color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 4.dp)) {
+                    Text("$balance", color = Color.White, fontSize = 52.sp, fontWeight = FontWeight.Bold)
+                    Text("FC", color = Color.White.copy(alpha = 0.7f), fontSize = 18.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp, bottom = 12.dp))
+                }
+                Text(
+                    "Cubre hasta el 20% de tus próximos pedidos",
+                    color = Color.White.copy(alpha = 0.92f),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            Image(
+                painter = painterResource(Res.drawable.mascota_coin),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(140.dp).rotate(-8f)
+            )
+        }
     }
 }
 
