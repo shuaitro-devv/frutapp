@@ -52,6 +52,7 @@ import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.data.remote.CatalogApi
 import cl.frutapp.app.data.toProducto
 import cl.frutapp.app.ui.components.FrutButtonPrimary
+import cl.frutapp.app.ui.components.FrutLoader
 import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
 import cl.frutapp.shared.dto.OrderItemDto
@@ -109,7 +110,7 @@ class CalificarPedidoScreen(private val items: List<OrderItemDto>) : Screen {
                 val lista = productos
                 when {
                     error -> Centrado("No pudimos cargar los productos.")
-                    lista == null -> Centrado("Cargando productos…")
+                    lista == null -> Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { FrutLoader() }
                     lista.isEmpty() -> Centrado("No hay productos para calificar.")
                     else -> {
                         Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {

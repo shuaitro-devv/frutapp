@@ -45,6 +45,7 @@ import cl.frutapp.app.data.Producto
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.data.remote.CatalogApi
 import cl.frutapp.app.data.toProducto
+import cl.frutapp.app.ui.components.FrutLoader
 import cl.frutapp.app.ui.components.ProductCard
 import cl.frutapp.app.ui.theme.FrutAppColors
 import org.jetbrains.compose.resources.ExperimentalResourceApi
@@ -81,7 +82,7 @@ class MisFavoritosScreen : Screen {
                 }
 
                 when {
-                    favoritos == null -> Centrado("Cargando favoritos…")
+                    favoritos == null -> Box(Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.Center) { FrutLoader() }
                     favoritos.isEmpty() -> VacioFavoritos()
                     else -> LazyColumn(
                         modifier = Modifier.fillMaxSize(),
@@ -140,9 +141,3 @@ private fun VacioFavoritos() {
     }
 }
 
-@Composable
-private fun Centrado(texto: String) {
-    Box(Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.Center) {
-        Text(texto, color = FrutAppColors.InkMuted, fontSize = 14.sp)
-    }
-}
