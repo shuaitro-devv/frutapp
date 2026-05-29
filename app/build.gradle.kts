@@ -51,6 +51,8 @@ kotlin {
             implementation(libs.ktor.client.android)
             implementation(libs.koin.android)
             implementation(libs.kotlinx.coroutines.android)
+            // Huella / biometría (trae androidx.fragment para FragmentActivity)
+            implementation("androidx.biometric:biometric:1.1.0")
         }
     }
 }

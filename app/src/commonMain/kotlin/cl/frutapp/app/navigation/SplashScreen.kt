@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.BiometricAuth
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.navigation.auth.LoginScreen
 import cl.frutapp.app.navigation.home.HomeScreen
@@ -48,8 +49,17 @@ class SplashScreen : Screen {
             alpha.animateTo(1f, tween(600))
             scale.animateTo(1f, tween(600))
             delay(1200)
-            // Si hay sesión persistida, entra directo al Home; si no, al Login.
-            if (TokenStore.isLoggedIn) navigator.replace(HomeScreen()) else navigator.replace(LoginScreen())
+            when {
+                // Sin sesión → Login.
+                !TokenStore.isLoggedIn -> navigator.replace(LoginScreen())
+                // Con sesión pero sin huella disponible → Home directo (no bloquear).
+                !BiometricAuth.isAvailable() -> navigator.replace(HomeScreen())
+                // Con sesión + huella → pedir huella; al cancelar/fallar, fallback a Login.
+                else -> BiometricAuth.authenticate(
+                    onSuccess = { navigator.replace(HomeScreen()) },
+                    onError = { navigator.replace(LoginScreen()) }
+                )
+            }
         }
 
         Box(
