@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
@@ -21,13 +22,21 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.remote.AuthApi
+import cl.frutapp.app.legal.LEGAL_VERSION
+import cl.frutapp.app.legal.LegalDocKind
+import cl.frutapp.app.navigation.legal.LegalDocScreen
 import cl.frutapp.app.ui.components.AuthHeaderText
 import cl.frutapp.app.ui.components.AuthScaffold
 import cl.frutapp.app.ui.components.FrutButtonGhost
@@ -110,11 +119,33 @@ class RegisterScreen : Screen {
                     onCheckedChange = { acceptTerms = it },
                     colors = CheckboxDefaults.colors(checkedColor = FrutAppColors.Brand400)
                 )
-                Text(
-                    text = "Acepto los Términos y Condiciones y la Política de Privacidad.",
-                    color = FrutAppColors.InkMuted,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(start = 4.dp)
+                val consentText = buildAnnotatedString {
+                    append("Acepto los ")
+                    pushStringAnnotation("link", "TERMS")
+                    withStyle(SpanStyle(color = FrutAppColors.Brand600, fontWeight = FontWeight.SemiBold)) {
+                        append("Términos y Condiciones")
+                    }
+                    pop()
+                    append(" y la ")
+                    pushStringAnnotation("link", "PRIVACY")
+                    withStyle(SpanStyle(color = FrutAppColors.Brand600, fontWeight = FontWeight.SemiBold)) {
+                        append("Política de Privacidad")
+                    }
+                    pop()
+                    append(".")
+                }
+                ClickableText(
+                    text = consentText,
+                    style = TextStyle(color = FrutAppColors.InkMuted, fontSize = 12.sp),
+                    modifier = Modifier.padding(start = 4.dp),
+                    onClick = { offset ->
+                        consentText.getStringAnnotations("link", offset, offset).firstOrNull()?.let { ann ->
+                            when (ann.item) {
+                                "TERMS" -> navigator.push(LegalDocScreen(LegalDocKind.TERMS))
+                                "PRIVACY" -> navigator.push(LegalDocScreen(LegalDocKind.PRIVACY))
+                            }
+                        }
+                    }
                 )
             }
 
@@ -133,7 +164,8 @@ class RegisterScreen : Screen {
                                     name = name.trim(),
                                     email = email.trim(),
                                     phone = phone.trim().ifBlank { null },
-                                    password = password
+                                    password = password,
+                                    consentVersion = LEGAL_VERSION
                                 )
                             )
                         }

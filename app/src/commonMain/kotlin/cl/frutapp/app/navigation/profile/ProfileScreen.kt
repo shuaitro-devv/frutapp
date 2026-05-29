@@ -47,14 +47,16 @@ import cl.frutapp.app.data.CartStore
 import cl.frutapp.app.data.RewardsStore
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.data.remote.OrderApi
+import cl.frutapp.app.legal.LegalDocKind
 import cl.frutapp.app.navigation.auth.LoginScreen
+import cl.frutapp.app.navigation.legal.LegalDocScreen
 import cl.frutapp.app.navigation.rewards.FrutCoinsScreen
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.theme.FrutAppColors
 
-private data class MenuItem(val icon: ImageVector, val label: String)
+private data class MenuItem(val icon: ImageVector, val label: String, val onClick: () -> Unit = {})
 
 /**
  * Perfil (mockup 16): datos del usuario (reales, desde [TokenStore]), badge de FrutCoins,
@@ -108,8 +110,8 @@ class ProfileScreen : Screen {
                         "Más opciones",
                         listOf(
                             MenuItem(Icons.Filled.SupportAgent, "Ayuda"),
-                            MenuItem(Icons.Filled.Description, "Términos y condiciones"),
-                            MenuItem(Icons.Filled.PrivacyTip, "Privacidad"),
+                            MenuItem(Icons.Filled.Description, "Términos y condiciones", onClick = { navigator.push(LegalDocScreen(LegalDocKind.TERMS)) }),
+                            MenuItem(Icons.Filled.PrivacyTip, "Privacidad", onClick = { navigator.push(LegalDocScreen(LegalDocKind.PRIVACY)) }),
                             MenuItem(Icons.Filled.Info, "Acerca de FrutApp")
                         )
                     )
@@ -190,7 +192,7 @@ private fun MenuSection(titulo: String, items: List<MenuItem>) {
     ) {
         items.forEach { item ->
             Row(
-                modifier = Modifier.fillMaxWidth().clickable { }.padding(14.dp),
+                modifier = Modifier.fillMaxWidth().clickable(onClick = item.onClick).padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
