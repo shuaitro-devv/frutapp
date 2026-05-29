@@ -1,0 +1,63 @@
+package cl.frutapp.backend.modules.orders
+
+import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.kotlin.datetime.timestamp
+
+object OrdersTable : Table("customer_order") {
+    val id = uuid("id")
+    val numero = text("numero")
+    val userId = uuid("user_id")
+    val status = text("status")
+    val paymentStatus = text("payment_status")
+    val direccion = text("direccion")
+    val entrega = text("entrega")
+    val subtotalEstimado = integer("subtotal_estimado")
+    val envio = integer("envio")
+    val totalEstimado = integer("total_estimado")
+    val totalFinal = integer("total_final").nullable()
+    val frutcoinsGanadas = integer("frutcoins_ganadas")
+    val frutcoinsCanjeadas = integer("frutcoins_canjeadas")
+    val createdAt = timestamp("created_at")
+    val updatedAt = timestamp("updated_at")
+    val deletedAt = timestamp("deleted_at").nullable()
+    override val primaryKey = PrimaryKey(id)
+}
+
+object OrderItemsTable : Table("order_item") {
+    val id = uuid("id")
+    val orderId = uuid("order_id")
+    val productId = uuid("product_id")
+    val nombre = text("nombre")
+    val unidad = text("unidad")
+    val imageKey = text("image_key")
+    val precioUnitario = integer("precio_unitario")
+    val gramos = integer("gramos").nullable()
+    val cantidad = integer("cantidad")
+    val montoEstimado = integer("monto_estimado")
+    val pesoReal = integer("peso_real").nullable()
+    val montoFinal = integer("monto_final").nullable()
+    val itemStatus = text("item_status")
+    override val primaryKey = PrimaryKey(id)
+}
+
+object OrderStatusHistoryTable : Table("order_status_history") {
+    val id = uuid("id")
+    val orderId = uuid("order_id")
+    val fromStatus = text("from_status").nullable()
+    val toStatus = text("to_status")
+    val actor = text("actor")
+    val nota = text("nota").nullable()
+    val createdAt = timestamp("created_at")
+    override val primaryKey = PrimaryKey(id)
+}
+
+object FrutCoinsLedgerTable : Table("frutcoins_ledger") {
+    val id = uuid("id")
+    val userId = uuid("user_id")
+    val orderId = uuid("order_id").nullable()
+    val delta = integer("delta")
+    val motivo = text("motivo")
+    val balanceAfter = integer("balance_after")
+    val createdAt = timestamp("created_at")
+    override val primaryKey = PrimaryKey(id)
+}

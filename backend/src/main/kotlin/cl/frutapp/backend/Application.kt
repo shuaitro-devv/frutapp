@@ -13,6 +13,9 @@ import cl.frutapp.backend.modules.auth.TokenService
 import cl.frutapp.backend.modules.auth.UserRepository
 import cl.frutapp.backend.modules.catalog.CatalogRepository
 import cl.frutapp.backend.modules.catalog.CatalogService
+import cl.frutapp.backend.modules.orders.FrutCoinsRepository
+import cl.frutapp.backend.modules.orders.OrderRepository
+import cl.frutapp.backend.modules.orders.OrderService
 import cl.frutapp.backend.plugins.configureCors
 import cl.frutapp.backend.plugins.configureDatabases
 import cl.frutapp.backend.plugins.configureMonitoring
@@ -58,8 +61,10 @@ fun Application.module() {
         tokens = tokenService,
         emailSender = emailSender
     )
-    val catalogService = CatalogService(CatalogRepository())
+    val catalogRepository = CatalogRepository()
+    val catalogService = CatalogService(catalogRepository)
+    val orderService = OrderService(OrderRepository(), catalogRepository, FrutCoinsRepository())
 
     configureSecurity(jwtConfig, tokenService)
-    configureRouting(authService, catalogService)
+    configureRouting(authService, catalogService, orderService)
 }
