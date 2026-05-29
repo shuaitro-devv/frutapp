@@ -8,7 +8,6 @@ import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.lowerCase
-import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.selectAll
 import java.util.UUID
 
@@ -24,7 +23,7 @@ class CatalogRepository {
     suspend fun listProducts(categorySlug: String?, query: String?): List<ProductDto> = dbQuery {
         ProductTable
             .join(CategoryTable, JoinType.INNER, onColumn = ProductTable.categoryId, otherColumn = CategoryTable.id)
-            .select {
+            .selectAll().where {
                 // Construido dentro del lambda: isNull/eq/like son miembros de SqlExpressionBuilder.
                 var cond: Op<Boolean> = ProductTable.deletedAt.isNull() and (ProductTable.active eq true)
                 if (!categorySlug.isNullOrBlank()) {
@@ -41,7 +40,7 @@ class CatalogRepository {
 
     suspend fun findProduct(id: UUID): ProductDto? = dbQuery {
         ProductTable
-            .select { (ProductTable.id eq id) and ProductTable.deletedAt.isNull() }
+            .selectAll().where { (ProductTable.id eq id) and ProductTable.deletedAt.isNull() }
             .map(::toProduct)
             .singleOrNull()
     }

@@ -5,7 +5,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import java.util.UUID
 
@@ -24,7 +24,7 @@ class EmailVerificationTokenRepository {
     /** Token vigente (no usado, no vencido) para ese usuario + hash de código. */
     suspend fun findValid(userId: UUID, codeHash: String): UUID? = dbQuery {
         EmailVerificationTokensTable
-            .select {
+            .selectAll().where {
                 (EmailVerificationTokensTable.userId eq userId) and
                     (EmailVerificationTokensTable.codeHash eq codeHash) and
                     EmailVerificationTokensTable.usedAt.isNull() and

@@ -5,7 +5,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import java.util.UUID
 
@@ -24,7 +24,7 @@ class PasswordResetTokenRepository {
     /** Token vigente (no usado, no vencido) para ese usuario + hash de código. */
     suspend fun findValid(userId: UUID, codeHash: String): UUID? = dbQuery {
         PasswordResetTokensTable
-            .select {
+            .selectAll().where {
                 (PasswordResetTokensTable.userId eq userId) and
                     (PasswordResetTokensTable.codeHash eq codeHash) and
                     PasswordResetTokensTable.usedAt.isNull() and

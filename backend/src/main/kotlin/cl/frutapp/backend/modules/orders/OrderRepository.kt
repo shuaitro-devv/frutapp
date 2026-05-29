@@ -11,7 +11,7 @@ import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import java.util.UUID
 
@@ -65,7 +65,7 @@ class OrderRepository {
         // Saldo real de FrutCoins (dentro de la txn): vuelve a capar el pago con coins por el
         // saldo disponible, para nunca gastar más de lo que el usuario tiene.
         val saldoActual = FrutCoinsLedgerTable
-            .select { FrutCoinsLedgerTable.userId eq o.userId }
+            .selectAll().where { FrutCoinsLedgerTable.userId eq o.userId }
             .sumOf { it[FrutCoinsLedgerTable.delta] }
         val frutcoinsClp = minOf(o.frutcoinsClpRequested, saldoActual * BusinessConfig.FRUTCOIN_VALOR_CLP)
             .coerceAtLeast(0)
@@ -156,20 +156,20 @@ class OrderRepository {
 
     suspend fun findDetail(id: UUID, userId: UUID): OrderDto? = dbQuery {
         val row = OrdersTable
-            .select { (OrdersTable.id eq id) and (OrdersTable.userId eq userId) and OrdersTable.deletedAt.isNull() }
+            .selectAll().where { (OrdersTable.id eq id) and (OrdersTable.userId eq userId) and OrdersTable.deletedAt.isNull() }
             .singleOrNull() ?: return@dbQuery null
         toOrderDto(row, itemsOf(id), paymentsOf(id))
     }
 
     /** Sin filtro de usuario (back office). */
     suspend fun findById(id: UUID): OrderDto? = dbQuery {
-        val row = OrdersTable.select { OrdersTable.id eq id }.singleOrNull() ?: return@dbQuery null
+        val row = OrdersTable.selectAll().where { OrdersTable.id eq id }.singleOrNull() ?: return@dbQuery null
         toOrderDto(row, itemsOf(id), paymentsOf(id))
     }
 
     suspend fun listByUser(userId: UUID): List<OrderSummaryDto> = dbQuery {
         OrdersTable
-            .select { (OrdersTable.userId eq userId) and OrdersTable.deletedAt.isNull() }
+            .selectAll().where { (OrdersTable.userId eq userId) and OrdersTable.deletedAt.isNull() }
             .orderBy(OrdersTable.createdAt to SortOrder.DESC)
             .map { row ->
                 val id = row[OrdersTable.id]
@@ -179,19 +179,19 @@ class OrderRepository {
                     status = row[OrdersTable.status],
                     total = row[OrdersTable.totalFinal] ?: row[OrdersTable.totalEstimado],
                     fecha = row[OrdersTable.createdAt].toString(),
-                    itemsCount = OrderItemsTable.select { OrderItemsTable.orderId eq id }.count().toInt()
+                    itemsCount = OrderItemsTable.selectAll().where { OrderItemsTable.orderId eq id }.count().toInt()
                 )
             }
     }
 
     suspend fun currentStatus(id: UUID): OrderStatus? = dbQuery {
-        OrdersTable.select { OrdersTable.id eq id }.singleOrNull()
+        OrdersTable.selectAll().where { OrdersTable.id eq id }.singleOrNull()
             ?.let { OrderStatus.parse(it[OrdersTable.status]) }
     }
 
     /** Pedidos activos (no borrados) con su estado, para el auto-avance de demo. */
     suspend fun listActive(): List<Pair<UUID, OrderStatus>> = dbQuery {
-        OrdersTable.select { OrdersTable.deletedAt.isNull() }
+        OrdersTable.selectAll().where { OrdersTable.deletedAt.isNull() }
             .mapNotNull { row ->
                 val st = OrderStatus.parse(row[OrdersTable.status]) ?: return@mapNotNull null
                 row[OrdersTable.id] to st
@@ -230,10 +230,10 @@ class OrderRepository {
     }
 
     private fun itemsOf(orderId: UUID): List<OrderItemDto> =
-        OrderItemsTable.select { OrderItemsTable.orderId eq orderId }.map { toItemDto(it) }
+        OrderItemsTable.selectAll().where { OrderItemsTable.orderId eq orderId }.map { toItemDto(it) }
 
     private fun paymentsOf(orderId: UUID): List<OrderPaymentDto> =
-        OrderPaymentsTable.select { OrderPaymentsTable.orderId eq orderId }
+        OrderPaymentsTable.selectAll().where { OrderPaymentsTable.orderId eq orderId }
             .orderBy(OrderPaymentsTable.createdAt to SortOrder.ASC)
             .map { OrderPaymentDto(method = it[OrderPaymentsTable.method], monto = it[OrderPaymentsTable.monto]) }
 

@@ -5,7 +5,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import java.util.UUID
 
@@ -26,7 +26,7 @@ class RefreshTokenRepository {
     /** Devuelve el token si existe, no está revocado y no venció. */
     suspend fun findValid(tokenHash: String): RefreshTokenRow? = dbQuery {
         RefreshTokensTable
-            .select {
+            .selectAll().where {
                 (RefreshTokensTable.tokenHash eq tokenHash) and
                     RefreshTokensTable.revokedAt.isNull() and
                     (RefreshTokensTable.expiresAt greater Clock.System.now())

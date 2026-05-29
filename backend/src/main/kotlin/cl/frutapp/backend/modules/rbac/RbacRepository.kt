@@ -6,7 +6,6 @@ import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insertIgnore
-import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.selectAll
 import java.util.UUID
 
@@ -16,13 +15,13 @@ class RbacRepository {
     suspend fun rolesOf(userId: UUID): List<String> = dbQuery {
         UserRoleTable
             .join(RoleTable, JoinType.INNER, onColumn = UserRoleTable.roleId, otherColumn = RoleTable.id)
-            .select { UserRoleTable.userId eq userId }
+            .selectAll().where { UserRoleTable.userId eq userId }
             .map { it[RoleTable.code] }
     }
 
     /** Asigna un rol a un usuario (idempotente). No-op si el rol no existe. */
     suspend fun assignRole(userId: UUID, roleCode: String): Unit = dbQuery {
-        val roleId = RoleTable.select { RoleTable.code eq roleCode }.singleOrNull()?.get(RoleTable.id)
+        val roleId = RoleTable.selectAll().where { RoleTable.code eq roleCode }.singleOrNull()?.get(RoleTable.id)
             ?: return@dbQuery
         UserRoleTable.insertIgnore {
             it[UserRoleTable.userId] = userId
@@ -33,7 +32,7 @@ class RbacRepository {
 
     /** Quita un rol a un usuario (no-op si no lo tenía o el rol no existe). */
     suspend fun revokeRole(userId: UUID, roleCode: String): Unit = dbQuery {
-        val roleId = RoleTable.select { RoleTable.code eq roleCode }.singleOrNull()?.get(RoleTable.id)
+        val roleId = RoleTable.selectAll().where { RoleTable.code eq roleCode }.singleOrNull()?.get(RoleTable.id)
             ?: return@dbQuery
         UserRoleTable.deleteWhere { Op.build { (UserRoleTable.userId eq userId) and (UserRoleTable.roleId eq roleId) } }
         Unit

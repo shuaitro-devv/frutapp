@@ -4,7 +4,7 @@ import cl.frutapp.backend.db.dbQuery
 import cl.frutapp.shared.dto.FrutCoinsBalanceDto
 import cl.frutapp.shared.dto.FrutCoinsEntryDto
 import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import java.util.UUID
 
 class FrutCoinsRepository {
@@ -12,7 +12,7 @@ class FrutCoinsRepository {
     /** Saldo (suma del ledger) + historial de movimientos, más reciente primero. */
     suspend fun balanceAndHistory(userId: UUID): FrutCoinsBalanceDto = dbQuery {
         val movimientos = FrutCoinsLedgerTable
-            .select { FrutCoinsLedgerTable.userId eq userId }
+            .selectAll().where { FrutCoinsLedgerTable.userId eq userId }
             .orderBy(FrutCoinsLedgerTable.createdAt to SortOrder.DESC)
             .map {
                 FrutCoinsEntryDto(

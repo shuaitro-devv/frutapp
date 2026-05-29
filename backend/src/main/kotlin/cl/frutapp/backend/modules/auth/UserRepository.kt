@@ -6,7 +6,7 @@ import kotlinx.datetime.Clock
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import java.util.UUID
 
@@ -27,14 +27,14 @@ class UserRepository {
 
     suspend fun findByEmail(email: String): UserRow? = dbQuery {
         UsersTable
-            .select { (UsersTable.email eq email) and UsersTable.deletedAt.isNull() }
+            .selectAll().where { (UsersTable.email eq email) and UsersTable.deletedAt.isNull() }
             .map(::toRow)
             .singleOrNull()
     }
 
     suspend fun findById(id: UUID): UserRow? = dbQuery {
         UsersTable
-            .select { (UsersTable.id eq id) and UsersTable.deletedAt.isNull() }
+            .selectAll().where { (UsersTable.id eq id) and UsersTable.deletedAt.isNull() }
             .map(::toRow)
             .singleOrNull()
     }
