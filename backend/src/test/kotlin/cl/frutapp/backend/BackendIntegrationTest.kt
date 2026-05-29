@@ -6,12 +6,14 @@ import cl.frutapp.backend.config.ConfigRepository
 import cl.frutapp.backend.config.DbConfig
 import cl.frutapp.backend.config.JwtConfig
 import cl.frutapp.backend.db.DatabaseFactory
+import cl.frutapp.backend.error.ConflictException
 import cl.frutapp.backend.error.UnauthorizedException
 import cl.frutapp.backend.error.ValidationException
 import cl.frutapp.backend.modules.admin.AdminUserService
 import cl.frutapp.backend.modules.auth.AuthService
+import cl.frutapp.backend.modules.auth.Email
+import cl.frutapp.backend.modules.auth.EmailSender
 import cl.frutapp.backend.modules.auth.EmailVerificationTokenRepository
-import cl.frutapp.backend.modules.auth.LogEmailSender
 import cl.frutapp.backend.modules.auth.PasswordResetTokenRepository
 import cl.frutapp.backend.modules.auth.RefreshTokenRepository
 import cl.frutapp.backend.modules.auth.TokenService
@@ -27,6 +29,8 @@ import cl.frutapp.backend.modules.rbac.RbacRepository
 import cl.frutapp.shared.dto.AdminCreateUserRequest
 import cl.frutapp.shared.dto.CreateOrderRequest
 import cl.frutapp.shared.dto.LoginRequest
+import cl.frutapp.shared.dto.RefreshRequest
+import cl.frutapp.shared.dto.ResetPasswordRequest
 import cl.frutapp.shared.dto.SetRolesRequest
 import cl.frutapp.shared.dto.OrderItemRequest
 import cl.frutapp.shared.dto.PaymentInput
@@ -58,17 +62,22 @@ class BackendIntegrationTest {
 
     private val users = UserRepository()
     private val rbac = RbacRepository()
+    // Captura los correos para poder extraer códigos (verificación / invitación) en los tests.
+    private val sentEmails = mutableListOf<Email>()
+    private val emailSender = object : EmailSender {
+        override suspend fun send(email: Email) { sentEmails.add(email) }
+    }
     private val tokenService = TokenService(
         JwtConfig("test-secret-no-prod-1234567890", "frutapp-api", "frutapp-app", "frutapp", 15L, 60L)
     )
     private val auth = AuthService(
         users, RefreshTokenRepository(), PasswordResetTokenRepository(),
-        EmailVerificationTokenRepository(), tokenService, LogEmailSender(), rbac
+        EmailVerificationTokenRepository(), tokenService, emailSender, rbac
     )
     private val catalog = CatalogRepository()
     private val frutCoins = FrutCoinsRepository()
     private val orders = OrderService(OrderRepository(), catalog, frutCoins)
-    private val adminUsers = AdminUserService(users, rbac, PasswordResetTokenRepository(), tokenService, LogEmailSender())
+    private val adminUsers = AdminUserService(users, rbac, PasswordResetTokenRepository(), tokenService, emailSender)
 
     @BeforeAll
     fun setup() {
@@ -237,6 +246,49 @@ class BackendIntegrationTest {
             assertEquals(listOf("picker"), rbac.rolesOf(u.id))
             // contraseña aleatoria: no puede loguear hasta fijarla por invitación
             assertFailsWith<UnauthorizedException> { auth.login(LoginRequest(email, "abc123")) }
+        }
+    }
+
+    @Test
+    fun `invitacion - el staff fija su clave y entra`() {
+        runBlocking {
+            sentEmails.clear()
+            val email = "inv${System.nanoTime()}@frutapp.local"
+            adminUsers.createUser(AdminCreateUserRequest("Inv Staff", email, null, listOf("picker")))
+            // el código de 6 dígitos viaja en el correo de invitación
+            val code = Regex("\\d{6}").find(sentEmails.last().text)!!.value
+            // el staff fija su clave con el flujo de reset existente y entra
+            auth.resetPassword(ResetPasswordRequest(email, code, "nueva123"))
+            val res = auth.login(LoginRequest(email, "nueva123"))
+            assertTrue(res.accessToken.isNotEmpty())
+            assertTrue(rbac.rolesOf(users.findByEmail(email)!!.id).contains("picker"))
+        }
+    }
+
+    @Test
+    fun `validaciones rechazan entradas invalidas`() {
+        runBlocking {
+            assertFailsWith<ValidationException> { auth.register(RegisterRequest("X", "no-es-correo", null, "abc123", "1.0")) }
+            val email = "dup${System.nanoTime()}@frutapp.local"
+            auth.register(RegisterRequest("X", email, null, "abc123", "1.0"))
+            assertFailsWith<ConflictException> { auth.register(RegisterRequest("X", email, null, "abc123", "1.0")) }
+            users.markEmailVerified(users.findByEmail(email)!!.id)
+            assertFailsWith<UnauthorizedException> { auth.login(LoginRequest(email, "otra999")) }
+            assertFailsWith<ValidationException> {
+                adminUsers.createUser(AdminCreateUserRequest("Y", "staffx${System.nanoTime()}@frutapp.local", null, listOf("rol-inexistente")))
+            }
+        }
+    }
+
+    @Test
+    fun `refresh rota y revoca el token anterior`() {
+        runBlocking {
+            val u = registerVerified()
+            val first = auth.login(LoginRequest(u.email, "abc123"))
+            val rotated = auth.refresh(RefreshRequest(first.refreshToken))
+            assertTrue(rotated.accessToken.isNotEmpty())
+            // el refresh anterior ya quedó revocado (rotación)
+            assertFailsWith<UnauthorizedException> { auth.refresh(RefreshRequest(first.refreshToken)) }
         }
     }
 
