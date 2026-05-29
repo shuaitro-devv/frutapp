@@ -44,6 +44,8 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.CartStore
+import cl.frutapp.app.data.DireccionesStore
+import cl.frutapp.app.data.MetodosPagoStore
 import cl.frutapp.app.data.RewardsStore
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.data.remote.OrderApi
@@ -95,8 +97,8 @@ class ProfileScreen : Screen {
                     MenuSection(
                         "Mis cuentas y direcciones",
                         listOf(
-                            MenuItem(Icons.Filled.Place, "Direcciones", onClick = { comingSoon() }),
-                            MenuItem(Icons.Filled.CreditCard, "Métodos de pago", onClick = { comingSoon() }),
+                            MenuItem(Icons.Filled.Place, "Direcciones", onClick = { navigator.push(DireccionesScreen()) }),
+                            MenuItem(Icons.Filled.CreditCard, "Métodos de pago", onClick = { navigator.push(MetodosPagoScreen()) }),
                             MenuItem(Icons.Filled.Link, "Cuentas vinculadas", onClick = { comingSoon() })
                         )
                     )
@@ -125,6 +127,8 @@ class ProfileScreen : Screen {
                                 // próximo usuario no herede carrito/FrutCoins/pedidos.
                                 CartStore.clear()
                                 RewardsStore.reset()
+                                DireccionesStore.reset()
+                                MetodosPagoStore.reset()
                                 TokenStore.clear()
                                 navigator.replaceAll(LoginScreen())
                             }
