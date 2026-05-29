@@ -7,7 +7,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -18,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
@@ -27,6 +31,7 @@ import cl.frutapp.app.data.BiometricAuth
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.navigation.auth.LoginScreen
 import cl.frutapp.app.navigation.home.HomeScreen
+import cl.frutapp.app.ui.components.FrutLoader
 import cl.frutapp.app.ui.theme.FrutAppColors
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.logo_white
@@ -50,8 +55,8 @@ class SplashScreen : Screen {
             scale.animateTo(1f, tween(600))
             delay(1200)
             when {
-                // Sin sesión → Login.
-                !TokenStore.isLoggedIn -> navigator.replace(LoginScreen())
+                // Sin sesión → onboarding (intro), que al terminar lleva a Login.
+                !TokenStore.isLoggedIn -> navigator.replace(OnboardingScreen())
                 // Con sesión pero sin huella disponible → Home directo (no bloquear).
                 !BiometricAuth.isAvailable() -> navigator.replace(HomeScreen())
                 // Con sesión + huella → pedir huella; al cancelar/fallar, fallback a Login.
@@ -72,15 +77,23 @@ class SplashScreen : Screen {
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Image(
-                painter = painterResource(Res.drawable.logo_white),
-                contentDescription = "FrutApp",
-                contentScale = ContentScale.FillWidth,
-                modifier = Modifier
-                    .width(240.dp)
-                    .scale(scale.value)
-                    .alpha(alpha.value)
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Image(
+                    painter = painterResource(Res.drawable.logo_white),
+                    contentDescription = "FrutApp",
+                    contentScale = ContentScale.FillWidth,
+                    modifier = Modifier
+                        .width(240.dp)
+                        .scale(scale.value)
+                        .alpha(alpha.value)
+                )
+                Spacer(Modifier.height(36.dp))
+                FrutLoader(
+                    modifier = Modifier.alpha(alpha.value),
+                    colorA = Color.White,
+                    colorB = FrutAppColors.Brand100
+                )
+            }
         }
     }
 }

@@ -75,6 +75,7 @@ import cl.frutapp.app.navigation.rewards.FrutCoinsScreen
 import cl.frutapp.app.navigation.shop.CartScreen
 import cl.frutapp.app.navigation.shop.MisFavoritosScreen
 import cl.frutapp.app.navigation.shop.ProductDetailScreen
+import cl.frutapp.app.ui.components.BrandWaveHeader
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.components.ProductCard
@@ -137,7 +138,6 @@ class HomeScreen : Screen {
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 item { HomeHeader(onFavoritos = { navigator.push(MisFavoritosScreen()) }) }
-                item { SearchBarMock(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) }
                 item {
                     HeroCarousel(
                         onOfertas = { navigator.push(OfertasScreen()) },
@@ -223,28 +223,35 @@ private fun BoxScope.HomeLeaves() {
 
 @Composable
 private fun HomeHeader(modifier: Modifier = Modifier, onFavoritos: () -> Unit = {}) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(start = 20.dp, end = 20.dp, top = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = TokenStore.user?.name?.substringBefore(' ')?.let { "¡Hola, $it! 👋" } ?: "¡Hola! 👋",
-                style = MaterialTheme.typography.headlineSmall,
-                color = FrutAppColors.Brand800
-            )
-            Text(
-                text = "¿Qué productos frescos buscas hoy?",
-                style = MaterialTheme.typography.bodyMedium,
-                color = FrutAppColors.InkMuted
-            )
+    // Cabecera con ola verde de marca: saludo en blanco sobre el verde y la búsqueda montada
+    // sobre la curva (mismo lenguaje visual que el onboarding).
+    Box(modifier = modifier.fillMaxWidth()) {
+        BrandWaveHeader(modifier = Modifier.align(Alignment.TopCenter), height = 215.dp)
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(start = 20.dp, end = 20.dp, top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = TokenStore.user?.name?.substringBefore(' ')?.let { "¡Hola, $it! 👋" } ?: "¡Hola! 👋",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "¿Qué productos frescos buscas hoy?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.9f)
+                    )
+                }
+                HeaderIcon(Icons.Default.FavoriteBorder, onClick = onFavoritos)
+                Spacer(Modifier.width(10.dp))
+                HeaderIcon(Icons.Default.Notifications)
+            }
+            Spacer(Modifier.height(18.dp))
+            SearchBarMock(modifier = Modifier.padding(horizontal = 20.dp))
+            Spacer(Modifier.height(4.dp))
         }
-        HeaderIcon(Icons.Default.FavoriteBorder, onClick = onFavoritos)
-        Spacer(Modifier.width(10.dp))
-        HeaderIcon(Icons.Default.Notifications)
     }
 }
 
@@ -253,11 +260,11 @@ private fun HeaderIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, on
     Box(
         modifier = Modifier
             .size(44.dp)
-            .background(FrutAppColors.Brand50, CircleShape)
+            .background(Color.White.copy(alpha = 0.18f), CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
     }
 }
 
