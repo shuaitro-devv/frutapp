@@ -77,9 +77,9 @@ import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.components.ProductCard
 import cl.frutapp.app.ui.theme.FrutAppColors
 import frutapp.app.generated.resources.Res
+import frutapp.app.generated.resources.banner_frescos
 import frutapp.app.generated.resources.banner_fruit
 import frutapp.app.generated.resources.banner_frutcoins
-import frutapp.app.generated.resources.canasta_frutas
 import frutapp.app.generated.resources.cilantro
 import frutapp.app.generated.resources.hoja_decorativa
 import frutapp.app.generated.resources.lechuga
@@ -287,7 +287,7 @@ private data class BannerSlide(
 private fun HeroCarousel(onOfertas: () -> Unit, onFrutCoins: () -> Unit, modifier: Modifier = Modifier) {
     val slides = remember(onOfertas, onFrutCoins) {
         listOf(
-            BannerSlide("Frescura que se nota,", "calidad que te acompaña", "Ver ofertas", Res.drawable.canasta_frutas, 180.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas),
+            BannerSlide("Frescura que se nota,", "calidad que te acompaña", "Ver ofertas", Res.drawable.banner_frescos, 180.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas, fullBg = true),
             BannerSlide("Hasta 40% de", "descuento esta semana", "Ver ofertas", Res.drawable.banner_fruit, 150.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas, fullBg = true),
             BannerSlide("Junta FrutCoins", "en cada compra", "Ver FrutCoins", Res.drawable.banner_frutcoins, 120.dp, FrutAppColors.Brand800, FrutAppColors.Brand400, onFrutCoins, fullBg = true)
         )
