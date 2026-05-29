@@ -55,6 +55,7 @@ import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.data.remote.CatalogApi
 import cl.frutapp.app.data.toProducto
 import cl.frutapp.app.navigation.catalog.CatalogScreen
+import cl.frutapp.app.navigation.offers.OfertasScreen
 import cl.frutapp.app.navigation.orders.MisPedidosScreen
 import cl.frutapp.app.navigation.profile.ProfileScreen
 import cl.frutapp.app.navigation.shop.CartScreen
@@ -113,7 +114,7 @@ class HomeScreen : Screen {
             ) {
                 item { HomeHeader() }
                 item { SearchBarMock(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) }
-                item { HeroBanner(modifier = Modifier.padding(horizontal = 20.dp)) }
+                item { HeroBanner(modifier = Modifier.padding(horizontal = 20.dp), onClick = { navigator.push(OfertasScreen()) }) }
                 item { SectionHeader("Categorías", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 4.dp)) }
                 item { CategoriesRow(modifier = Modifier.padding(vertical = 8.dp)) }
                 item { SectionHeader("Productos destacados", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp)) }
@@ -201,7 +202,7 @@ private fun SearchBarMock(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun HeroBanner(modifier: Modifier = Modifier) {
+private fun HeroBanner(modifier: Modifier = Modifier, onClick: () -> Unit = {}) {
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -210,6 +211,7 @@ private fun HeroBanner(modifier: Modifier = Modifier) {
             .background(
                 Brush.horizontalGradient(listOf(FrutAppColors.Brand600, FrutAppColors.Brand400))
             )
+            .clickable(onClick = onClick)
     ) {
         Column(
             modifier = Modifier
