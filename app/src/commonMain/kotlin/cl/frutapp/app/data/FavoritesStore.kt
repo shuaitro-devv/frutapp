@@ -10,9 +10,14 @@ import androidx.compose.runtime.mutableStateListOf
 object FavoritesStore {
     private val ids = mutableStateListOf<String>()
 
+    /** Ids favoritos (observable por Compose). El más reciente queda al final. */
+    val items: List<String> get() = ids
+
     fun isFavorite(productId: String): Boolean = ids.contains(productId)
 
     fun toggle(productId: String) {
         if (!ids.remove(productId)) ids.add(productId)
     }
+
+    fun clear() = ids.clear()
 }

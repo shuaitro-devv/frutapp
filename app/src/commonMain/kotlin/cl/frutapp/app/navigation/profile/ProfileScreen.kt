@@ -45,6 +45,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.CartStore
 import cl.frutapp.app.data.DireccionesStore
+import cl.frutapp.app.data.FavoritesStore
 import cl.frutapp.app.data.MetodosPagoStore
 import cl.frutapp.app.data.RewardsStore
 import cl.frutapp.app.data.TokenStore
@@ -129,6 +130,7 @@ class ProfileScreen : Screen {
                                 RewardsStore.reset()
                                 DireccionesStore.reset()
                                 MetodosPagoStore.reset()
+                                FavoritesStore.clear()
                                 TokenStore.clear()
                                 navigator.replaceAll(LoginScreen())
                             }

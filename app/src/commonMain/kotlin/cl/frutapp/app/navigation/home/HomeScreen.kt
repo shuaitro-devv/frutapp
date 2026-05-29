@@ -28,6 +28,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.Notifications
@@ -72,6 +73,7 @@ import cl.frutapp.app.navigation.profile.ProfileScreen
 import cl.frutapp.app.navigation.recycle.ReciclaScreen
 import cl.frutapp.app.navigation.rewards.FrutCoinsScreen
 import cl.frutapp.app.navigation.shop.CartScreen
+import cl.frutapp.app.navigation.shop.MisFavoritosScreen
 import cl.frutapp.app.navigation.shop.ProductDetailScreen
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
@@ -134,7 +136,7 @@ class HomeScreen : Screen {
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
-                item { HomeHeader() }
+                item { HomeHeader(onFavoritos = { navigator.push(MisFavoritosScreen()) }) }
                 item { SearchBarMock(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) }
                 item {
                     HeroCarousel(
@@ -220,7 +222,7 @@ private fun BoxScope.HomeLeaves() {
 }
 
 @Composable
-private fun HomeHeader(modifier: Modifier = Modifier) {
+private fun HomeHeader(modifier: Modifier = Modifier, onFavoritos: () -> Unit = {}) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -240,16 +242,19 @@ private fun HomeHeader(modifier: Modifier = Modifier) {
                 color = FrutAppColors.InkMuted
             )
         }
+        HeaderIcon(Icons.Default.FavoriteBorder, onClick = onFavoritos)
+        Spacer(Modifier.width(10.dp))
         HeaderIcon(Icons.Default.Notifications)
     }
 }
 
 @Composable
-private fun HeaderIcon(icon: androidx.compose.ui.graphics.vector.ImageVector) {
+private fun HeaderIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit = {}) {
     Box(
         modifier = Modifier
             .size(44.dp)
-            .background(FrutAppColors.Brand50, CircleShape),
+            .background(FrutAppColors.Brand50, CircleShape)
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(22.dp))
