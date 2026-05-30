@@ -50,6 +50,7 @@ import cl.frutapp.app.data.DireccionesStore
 import cl.frutapp.app.data.FavoritesStore
 import cl.frutapp.app.data.MetodosPagoStore
 import cl.frutapp.app.data.RewardsStore
+import cl.frutapp.app.data.StreakStore
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.legal.LegalDocKind
@@ -96,6 +97,7 @@ class ProfileScreen : Screen {
                         email = user?.email ?: "",
                         telefono = user?.phone,
                         onFrutCoins = { navigator.push(FrutCoinsScreen()) },
+                        onHuella = { navigator.push(HuellaVerdeScreen()) },
                         modifier = Modifier.padding(horizontal = 20.dp)
                     )
 
@@ -163,7 +165,7 @@ class ProfileScreen : Screen {
 }
 
 @Composable
-private fun UserCard(nombre: String, email: String, telefono: String?, onFrutCoins: () -> Unit, modifier: Modifier = Modifier) {
+private fun UserCard(nombre: String, email: String, telefono: String?, onFrutCoins: () -> Unit, onHuella: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier.fillMaxWidth().background(FrutAppColors.Brand50, RoundedCornerShape(18.dp)).padding(16.dp)
     ) {
@@ -188,10 +190,19 @@ private fun UserCard(nombre: String, email: String, telefono: String?, onFrutCoi
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("Editar perfil", color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { comingSoon() })
-            Box(
-                modifier = Modifier.background(FrutAppColors.AmberSoft, RoundedCornerShape(12.dp)).clickable(onClick = onFrutCoins).padding(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Text("${RewardsStore.balance} FrutCoins", color = FrutAppColors.AmberCoin, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Chip de racha verde (entry point sutil a Mi huella verde).
+                Box(
+                    modifier = Modifier.background(FrutAppColors.Brand50, RoundedCornerShape(12.dp))
+                        .clickable(onClick = onHuella).padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Text("🔥 ${StreakStore.dias} ${StreakStore.nivel.emoji}", color = FrutAppColors.Brand800, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+                Box(
+                    modifier = Modifier.background(FrutAppColors.AmberSoft, RoundedCornerShape(12.dp)).clickable(onClick = onFrutCoins).padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text("${RewardsStore.balance} FrutCoins", color = FrutAppColors.AmberCoin, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

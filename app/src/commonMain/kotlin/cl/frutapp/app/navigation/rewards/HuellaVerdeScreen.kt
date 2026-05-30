@@ -45,6 +45,8 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.HuellaVerdeStore
+import cl.frutapp.app.data.NivelRacha
+import cl.frutapp.app.data.StreakStore
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.shareText
@@ -75,6 +77,13 @@ class HuellaVerdeScreen : Screen {
                 Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
                     HeroCard(recic = recic, gramos = gramos, coins = coins, ahorrado = ahorrado)
 
+                    RachaCard(
+                        dias = StreakStore.dias,
+                        nivel = StreakStore.nivel,
+                        faltaParaProximo = StreakStore.diasParaProximoNivel,
+                        modifier = Modifier.padding(top = 14.dp)
+                    )
+
                     SectionTitle("Cómo sumar más", Modifier.padding(top = 24.dp, bottom = 8.dp))
                     val tips = listOf(
                         Triple(Icons.Filled.Recycling, "Devuelve tus envases", "+30 coins por reciclaje"),
@@ -88,9 +97,11 @@ class HuellaVerdeScreen : Screen {
                     FrutButtonPrimary(
                         text = "Compartir mi huella",
                         onClick = {
+                            val nivel = StreakStore.nivel
                             shareText(
                                 "🌿 Mi huella verde con FrutApp:\n" +
-                                    "$recic reciclajes · ${gramos}g al ciclo · $coins FrutCoins ganados · ${formatClp(ahorrado)} ahorrado.\n" +
+                                    "$recic reciclajes · ${gramos}g al ciclo · $coins FrutCoins · ${formatClp(ahorrado)} ahorrado.\n" +
+                                    "🔥 ${StreakStore.dias} días en racha verde · ${nivel.emoji} nivel ${nivel.titulo}\n" +
                                     "De la Vega a tu mesa · y de vuelta al ciclo."
                             )
                         }
@@ -214,6 +225,74 @@ private fun TipRow(icon: ImageVector, titulo: String, detalle: String) {
         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
             Text(titulo, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Text(detalle, color = FrutAppColors.InkSoft, fontSize = 12.sp, modifier = Modifier.padding(top = 1.dp))
+        }
+    }
+}
+
+@Composable
+private fun RachaCard(dias: Int, nivel: NivelRacha, faltaParaProximo: Int?, modifier: Modifier = Modifier) {
+    // Card horizontal: mascota a la izquierda, datos de racha a la derecha.
+    Row(
+        modifier = modifier.fillMaxWidth()
+            .background(FrutAppColors.Brand50, RoundedCornerShape(20.dp))
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.size(82.dp)
+                .background(androidx.compose.ui.graphics.Color.White, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(nivel.mascota),
+                contentDescription = "Mascota racha ${nivel.titulo}",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(72.dp)
+            )
+        }
+        Column(modifier = Modifier.weight(1f).padding(start = 14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🔥", fontSize = 22.sp)
+                Text(
+                    "$dias días",
+                    color = FrutAppColors.Brand800,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 6.dp)
+                )
+            }
+            Row(
+                modifier = Modifier.padding(top = 2.dp)
+                    .background(androidx.compose.ui.graphics.Color.White, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(nivel.emoji, fontSize = 12.sp)
+                Text(
+                    "Nivel ${nivel.titulo}",
+                    color = FrutAppColors.Brand800,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 4.dp)
+                )
+            }
+            val proximo = nivel.proximoNivel
+            if (faltaParaProximo != null && proximo != null) {
+                Text(
+                    "+$faltaParaProximo días para ${proximo.emoji} ${proximo.titulo}",
+                    color = FrutAppColors.InkSoft,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            } else {
+                Text(
+                    "¡Máximo nivel alcanzado!",
+                    color = FrutAppColors.Brand600,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
         }
     }
 }
