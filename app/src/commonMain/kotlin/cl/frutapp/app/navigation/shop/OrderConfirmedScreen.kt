@@ -1,3 +1,5 @@
+@file:OptIn(org.jetbrains.compose.resources.ExperimentalResourceApi::class)
+
 package cl.frutapp.app.navigation.shop
 
 import androidx.compose.foundation.background
@@ -48,6 +50,9 @@ import cl.frutapp.shared.dto.OrderPaymentDto
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.theme.FrutAppColors
+import frutapp.app.generated.resources.Res
+import frutapp.app.generated.resources.mascota_cajita
+import org.jetbrains.compose.resources.painterResource
 
 /**
  * Pedido confirmado (mockup 11): confirmación con número de pedido, entrega estimada,
@@ -75,11 +80,17 @@ class OrderConfirmedScreen(
                     modifier = Modifier.fillMaxWidth().padding(top = 60.dp, start = 24.dp, end = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    // Mascota Cajita celebrando que llega tu pedido. Más cariñoso que un check ícono.
                     Box(
-                        modifier = Modifier.size(96.dp).background(FrutAppColors.Brand50, CircleShape),
+                        modifier = Modifier.size(120.dp).background(FrutAppColors.Brand50, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = FrutAppColors.Brand400, modifier = Modifier.size(60.dp))
+                        androidx.compose.foundation.Image(
+                            painter = painterResource(Res.drawable.mascota_cajita),
+                            contentDescription = null,
+                            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                            modifier = Modifier.size(100.dp)
+                        )
                     }
                     Text("¡Pedido confirmado!", color = FrutAppColors.Brand800, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 18.dp))
                     Text(

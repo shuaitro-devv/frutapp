@@ -59,6 +59,7 @@ import cl.frutapp.app.ui.theme.FrutAppColors
 import cl.frutapp.shared.dto.OrderSummaryDto
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.canasta_frutas
+import frutapp.app.generated.resources.mascota_cajita
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
@@ -110,7 +111,7 @@ class MisPedidosScreen : Screen {
                 when {
                     error -> Center("No pudimos cargar tus pedidos.", Modifier.weight(1f))
                     pedidos == null -> OrderListSkeleton(Modifier.weight(1f).padding(top = 6.dp))
-                    visibles.isEmpty() -> Center("No tienes pedidos en esta categoría.", Modifier.weight(1f))
+                    visibles.isEmpty() -> EmptyPedidos(Modifier.weight(1f))
                     else -> LazyColumn(
                         modifier = Modifier.weight(1f),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp)
@@ -171,6 +172,29 @@ private fun statusLabel(status: String): String = when (status) {
 private fun Center(text: String, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
         Text(text, color = FrutAppColors.InkMuted, fontSize = 14.sp)
+    }
+}
+
+@Composable
+private fun EmptyPedidos(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxWidth().padding(vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier.size(140.dp).background(FrutAppColors.Brand50, androidx.compose.foundation.shape.CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            androidx.compose.foundation.Image(
+                painter = org.jetbrains.compose.resources.painterResource(frutapp.app.generated.resources.Res.drawable.mascota_cajita),
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                modifier = Modifier.size(118.dp)
+            )
+        }
+        Text("Aún no tienes pedidos por acá", color = FrutAppColors.Brand800, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
+        Text("Cuando pidas algo, te lo llevo aquí mismo.", color = FrutAppColors.InkMuted, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
     }
 }
 

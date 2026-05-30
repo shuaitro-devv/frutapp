@@ -74,7 +74,11 @@ fun FrutBottomNav(
     onSelect: (FrutTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(modifier = modifier.fillMaxWidth()) {
+    // navigationBarsPadding en el Box raíz: el CartButton flotante también respeta
+    // la barra de navegación del sistema (gesture pill o 3 botones). Antes solo el
+    // Row interno tenía el padding, así que el CartButton quedaba sobre la nav bar
+    // en celulares con 3-button navigation.
+    Box(modifier = modifier.fillMaxWidth().navigationBarsPadding()) {
         Surface(
             modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter),
             color = Color.White,
@@ -83,7 +87,6 @@ fun FrutBottomNav(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .navigationBarsPadding()
                     .height(68.dp)
                     .padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,

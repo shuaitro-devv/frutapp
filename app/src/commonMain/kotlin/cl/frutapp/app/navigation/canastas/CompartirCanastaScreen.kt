@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -106,7 +107,7 @@ class CompartirCanastaScreen(private val canastaId: Int) : Screen {
 
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
-                        .aspectRatio(1f)
+                        .aspectRatio(0.8f) // 4:5 portrait — más alto, no se cortan labels
                         .clip(RoundedCornerShape(24.dp))
                         .then(capture.modifier)
                 ) {
@@ -115,7 +116,7 @@ class CompartirCanastaScreen(private val canastaId: Int) : Screen {
 
                 Spacer(Modifier.weight(1f))
 
-                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
+                Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 16.dp)) {
                     FrutButtonPrimary(
                         text = if (compartiendo) "Preparando…" else "Compartir canasta",
                         enabled = !compartiendo,

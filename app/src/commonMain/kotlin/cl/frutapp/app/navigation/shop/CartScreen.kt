@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -30,6 +31,10 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +54,8 @@ import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.theme.FrutAppColors
+import frutapp.app.generated.resources.Res
+import frutapp.app.generated.resources.mascota_palta_racha
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
 
@@ -60,6 +67,7 @@ class CartScreen : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        var mostrarSelectorCanasta by remember { mutableStateOf(false) }
         val items = CartStore.items
         val subtotal = CartStore.subtotal
         val envio = CartStore.envio
@@ -95,7 +103,7 @@ class CartScreen : Screen {
                         item { Summary(subtotal = subtotal, envio = envio, total = total, modifier = Modifier.padding(20.dp)) }
                     }
 
-                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp)) {
                         FrutButtonPrimary(
                             text = "Proceder al pago · ${formatClp(total)}",
                             onClick = { navigator.push(CheckoutScreen()) }
@@ -110,10 +118,7 @@ class CartScreen : Screen {
                                 Text("Pago seguro", color = FrutAppColors.InkSoft, fontSize = 12.sp, modifier = Modifier.padding(start = 6.dp))
                             }
                             Row(
-                                modifier = Modifier.clickable {
-                                    val items = CartStore.items.map { cl.frutapp.app.data.CanastaItem(it.producto, it.cantidad, it.gramos) }
-                                    navigator.push(cl.frutapp.app.navigation.canastas.NuevaCanastaScreen(itemsIniciales = items))
-                                },
+                                modifier = Modifier.clickable { mostrarSelectorCanasta = true },
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(Icons.Filled.ShoppingBasket, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(14.dp))
@@ -127,6 +132,86 @@ class CartScreen : Screen {
                     selected = FrutTab.CARRITO,
                     onSelect = { tab -> if (tab != FrutTab.CARRITO) navigator.popUntilRoot() }
                 )
+            }
+
+            if (mostrarSelectorCanasta) {
+                SelectorCanastaCart(
+                    onDismiss = { mostrarSelectorCanasta = false },
+                    onSeleccionar = { canastaId ->
+                        CartStore.items.forEach { item ->
+                            cl.frutapp.app.data.CanastaStore.agregarProducto(canastaId, item.producto, item.cantidad, item.gramos)
+                        }
+                        cl.frutapp.app.ui.showToast("Productos agregados a la canasta")
+                        mostrarSelectorCanasta = false
+                    },
+                    onNueva = {
+                        mostrarSelectorCanasta = false
+                        val items = CartStore.items.map { cl.frutapp.app.data.CanastaItem(it.producto, it.cantidad, it.gramos) }
+                        navigator.push(cl.frutapp.app.navigation.canastas.NuevaCanastaScreen(itemsIniciales = items))
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun SelectorCanastaCart(
+    onDismiss: () -> Unit,
+    onSeleccionar: (Int) -> Unit,
+    onNueva: () -> Unit
+) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)) {
+            Text("Guardar carrito como canasta", color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "Agrega los productos a una canasta existente o crea una nueva.",
+                color = FrutAppColors.InkMuted, fontSize = 12.sp,
+                modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
+            )
+            if (cl.frutapp.app.data.CanastaStore.items.isEmpty()) {
+                Text(
+                    "Aún no tienes canastas propias.",
+                    color = FrutAppColors.InkSoft, fontSize = 13.sp,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            } else {
+                cl.frutapp.app.data.CanastaStore.items.forEach { c ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                            .background(FrutAppColors.Brand50, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                            .clickable { onSeleccionar(c.id) }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.foundation.layout.Box(
+                            modifier = Modifier.size(38.dp).background(Color.White, androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(c.emoji, fontSize = 20.sp)
+                        }
+                        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                            Text(c.nombre, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text("${c.cantidadProductos} producto(s)", color = FrutAppColors.InkSoft, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    .background(FrutAppColors.Brand400, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                    .clickable(onClick = onNueva)
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                Text("Crear canasta nueva", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp))
             }
         }
     }
@@ -277,12 +362,17 @@ private fun EmptyCart(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.Center
     ) {
         Box(
-            modifier = Modifier.size(96.dp).background(FrutAppColors.Brand50, CircleShape),
+            modifier = Modifier.size(140.dp).background(FrutAppColors.Brand50, CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Filled.ShoppingCart, contentDescription = null, tint = FrutAppColors.Brand400, modifier = Modifier.size(44.dp))
+            androidx.compose.foundation.Image(
+                painter = painterResource(Res.drawable.mascota_palta_racha),
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                modifier = Modifier.size(118.dp)
+            )
         }
-        Text("Tu carrito está vacío", color = FrutAppColors.Brand800, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
-        Text("Agrega productos frescos y aparecerán aquí.", color = FrutAppColors.InkMuted, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
+        Text("Tu carrito está esperando", color = FrutAppColors.Brand800, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
+        Text("Agrégame algo fresco y te ayudo a llevarlo.", color = FrutAppColors.InkMuted, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
     }
 }
