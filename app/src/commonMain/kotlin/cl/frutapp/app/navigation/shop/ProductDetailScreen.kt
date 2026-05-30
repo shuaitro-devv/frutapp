@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -48,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -107,7 +109,8 @@ class ProductDetailScreen(
                     TopBar(
                         favorito = favorito,
                         onBack = { navigator.pop() },
-                        onFav = { FavoritesStore.toggle(producto.id) }
+                        onFav = { FavoritesStore.toggle(producto.id) },
+                        onCanasta = { mostrarSelector = true }
                     )
                 }
                 item {
@@ -211,6 +214,7 @@ class ProductDetailScreen(
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .background(Color.White)
+                    .navigationBarsPadding()
                     .padding(horizontal = 20.dp, vertical = 14.dp)
             ) {
                 FrutButtonPrimary(
@@ -326,7 +330,7 @@ private fun SelectorCanasta(
 }
 
 @Composable
-private fun TopBar(favorito: Boolean, onBack: () -> Unit, onFav: () -> Unit) {
+private fun TopBar(favorito: Boolean, onBack: () -> Unit, onFav: () -> Unit, onCanasta: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -337,14 +341,25 @@ private fun TopBar(favorito: Boolean, onBack: () -> Unit, onFav: () -> Unit) {
     ) {
         CircleIcon(Icons.Filled.ArrowBack, "Volver", FrutAppColors.Ink, onBack)
         Text("Detalle del producto", color = FrutAppColors.Ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-        CircleIcon(
-            icon = if (favorito) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-            desc = "Favorito",
-            tint = if (favorito) FrutAppColors.Error else FrutAppColors.Ink,
-            onClick = onFav
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CircleIcon(
+                icon = ShoppingBasketIcon,
+                desc = "Agregar a una canasta",
+                tint = FrutAppColors.Brand600,
+                onClick = onCanasta
+            )
+            Spacer(Modifier.size(8.dp))
+            CircleIcon(
+                icon = if (favorito) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                desc = "Favorito",
+                tint = if (favorito) FrutAppColors.Error else FrutAppColors.Ink,
+                onClick = onFav
+            )
+        }
     }
 }
+
+private val ShoppingBasketIcon = Icons.Filled.ShoppingBasket
 
 @Composable
 private fun CircleIcon(icon: ImageVector, desc: String, tint: Color, onClick: () -> Unit) {
@@ -451,6 +466,8 @@ private fun ReviewsSection(producto: Producto, onVerTodas: () -> Unit) {
     var escribiendo by rememberSaveable(producto.id) { mutableStateOf(false) }
     var estrellas by rememberSaveable(producto.id) { mutableStateOf(5) }
     var texto by rememberSaveable(producto.id) { mutableStateOf("") }
+    // Picker de foto real (Android Photo Picker, sin permisos en Android 13+).
+    val fotoPicker = cl.frutapp.app.ui.rememberImagePickerState()
     // null = estamos creando una reseña nueva; con id = estamos editando esa reseña.
     var editandoId by rememberSaveable(producto.id) { mutableStateOf<Int?>(null) }
     val autor = TokenStore.user?.name?.takeIf { it.isNotBlank() } ?: "Tú"
@@ -480,23 +497,28 @@ private fun ReviewsSection(producto: Producto, onVerTodas: () -> Unit) {
                 onEstrellas = { estrellas = it },
                 texto = texto,
                 onTexto = { texto = it },
+                imagen = fotoPicker.imagen,
+                onPickFoto = { fotoPicker.pick() },
+                onQuitarFoto = { fotoPicker.limpiar() },
                 onConfirmar = {
                     val id = editandoId
                     if (id != null) {
-                        ResenasStore.editar(producto.id, id, estrellas, texto)
+                        ResenasStore.editar(producto.id, id, estrellas, texto, imagen = fotoPicker.imagen)
                         showToast("Reseña actualizada")
                     } else {
-                        ResenasStore.agregar(producto.id, autor, estrellas, texto)
+                        ResenasStore.agregar(producto.id, autor, estrellas, texto, imagen = fotoPicker.imagen)
                         showToast("¡Gracias por tu reseña!")
                     }
                     texto = ""
                     estrellas = 5
+                    fotoPicker.limpiar()
                     editandoId = null
                     escribiendo = false
                 },
                 onCancelar = {
                     texto = ""
                     estrellas = 5
+                    fotoPicker.limpiar()
                     editandoId = null
                     escribiendo = false
                 }
@@ -529,6 +551,9 @@ private fun ReviewsSection(producto: Producto, onVerTodas: () -> Unit) {
                         editandoId = r.id
                         estrellas = r.estrellas
                         texto = r.texto
+                        // No re-cargamos la foto al editar (el picker arranca en null).
+                        // Si el usuario quiere mantener la foto, vuelve a adjuntar.
+                        fotoPicker.limpiar()
                         escribiendo = true
                     }
                 } else null
@@ -544,6 +569,9 @@ private fun EscribirResenaForm(
     onEstrellas: (Int) -> Unit,
     texto: String,
     onTexto: (String) -> Unit,
+    imagen: androidx.compose.ui.graphics.ImageBitmap?,
+    onPickFoto: () -> Unit,
+    onQuitarFoto: () -> Unit,
     onConfirmar: () -> Unit,
     onCancelar: () -> Unit
 ) {
@@ -570,6 +598,54 @@ private fun EscribirResenaForm(
                 cursorBrush = SolidColor(FrutAppColors.Brand400),
                 modifier = Modifier.fillMaxSize()
             )
+        }
+        Spacer(Modifier.height(10.dp))
+        if (imagen != null) {
+            // Preview de la foto elegida + botón quitar.
+            Box(
+                modifier = Modifier.fillMaxWidth().height(140.dp)
+                    .background(FrutAppColors.Brand50, RoundedCornerShape(10.dp))
+            ) {
+                Image(
+                    bitmap = imagen,
+                    contentDescription = "Tu foto",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
+                )
+                Row(
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.55f), RoundedCornerShape(8.dp))
+                        .clickable(onClick = onQuitarFoto)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("✕", color = androidx.compose.ui.graphics.Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Quitar foto",
+                        color = androidx.compose.ui.graphics.Color.White,
+                        fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 6.dp)
+                    )
+                }
+            }
+        } else {
+            // Botón para abrir el Photo Picker del sistema.
+            Row(
+                modifier = Modifier.clickable(onClick = onPickFoto)
+                    .background(androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(10.dp))
+                    .border(1.dp, FrutAppColors.Brand100, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("📷", fontSize = 14.sp)
+                Text(
+                    "Adjuntar foto del producto",
+                    color = FrutAppColors.Brand600,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 6.dp)
+                )
+            }
         }
         Spacer(Modifier.height(14.dp))
         FrutButtonPrimary(text = if (modoEdicion) "Guardar cambios" else "Publicar reseña", onClick = onConfirmar, enabled = texto.isNotBlank())
@@ -640,6 +716,14 @@ private fun ReviewCard(r: Resena, onEditar: (() -> Unit)? = null) {
         }
         if (r.texto.isNotBlank()) {
             Text(r.texto, color = FrutAppColors.Ink, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+        }
+        r.imagen?.let { bmp ->
+            Image(
+                bitmap = bmp,
+                contentDescription = "Foto del producto",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.padding(top = 8.dp).fillMaxWidth().height(140.dp).clip(RoundedCornerShape(10.dp))
+            )
         }
         if (onEditar != null) {
             Text(

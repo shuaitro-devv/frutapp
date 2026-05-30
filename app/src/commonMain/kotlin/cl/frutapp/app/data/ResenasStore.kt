@@ -3,6 +3,7 @@ package cl.frutapp.app.data
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.ui.graphics.ImageBitmap
 
 data class Resena(
     val id: Int,
@@ -11,7 +12,9 @@ data class Resena(
     val fecha: String,
     val texto: String,
     /** True si la escribió el usuario actual (se puede editar). */
-    val propia: Boolean = false
+    val propia: Boolean = false,
+    /** Foto real seleccionada por el usuario desde su galería (sin subir a backend). */
+    val imagen: ImageBitmap? = null
 )
 
 /**
@@ -38,20 +41,20 @@ object ResenasStore {
     /** La reseña del usuario para este producto (si ya la escribió). */
     fun miResena(productId: String): Resena? = resenas(productId).firstOrNull { it.propia }
 
-    fun agregar(productId: String, nombre: String, estrellas: Int, texto: String) {
-        resenas(productId).add(0, Resena(nextId++, nombre, estrellas, "recién", texto.trim(), propia = true))
+    fun agregar(productId: String, nombre: String, estrellas: Int, texto: String, imagen: ImageBitmap? = null) {
+        resenas(productId).add(0, Resena(nextId++, nombre, estrellas, "recién", texto.trim(), propia = true, imagen = imagen))
     }
 
-    fun editar(productId: String, id: Int, estrellas: Int, texto: String) {
+    fun editar(productId: String, id: Int, estrellas: Int, texto: String, imagen: ImageBitmap? = null) {
         val lista = resenas(productId)
         val i = lista.indexOfFirst { it.id == id }
-        if (i >= 0) lista[i] = lista[i].copy(estrellas = estrellas, texto = texto.trim(), fecha = "editada")
+        if (i >= 0) lista[i] = lista[i].copy(estrellas = estrellas, texto = texto.trim(), fecha = "editada", imagen = imagen)
     }
 
     /** Crea o actualiza la reseña del usuario (una por producto). */
-    fun guardar(productId: String, nombre: String, estrellas: Int, texto: String) {
+    fun guardar(productId: String, nombre: String, estrellas: Int, texto: String, imagen: ImageBitmap? = null) {
         val mia = miResena(productId)
-        if (mia != null) editar(productId, mia.id, estrellas, texto)
-        else agregar(productId, nombre, estrellas, texto)
+        if (mia != null) editar(productId, mia.id, estrellas, texto, imagen)
+        else agregar(productId, nombre, estrellas, texto, imagen)
     }
 }
