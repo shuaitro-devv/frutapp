@@ -19,12 +19,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.MonetizationOn
+import androidx.compose.material.icons.filled.Park
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -35,10 +38,12 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.HuellaVerdeStore
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.data.fulfillmentLabel
 import cl.frutapp.app.data.paymentMethodLabel
 import cl.frutapp.app.navigation.rewards.FrutCoinsScreen
+import cl.frutapp.app.navigation.rewards.HuellaVerdeScreen
 import cl.frutapp.shared.dto.OrderPaymentDto
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
@@ -61,6 +66,8 @@ class OrderConfirmedScreen(
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        // Cada compra suma a la huella verde del usuario (dummy en sesión).
+        LaunchedEffect(orderId) { HuellaVerdeStore.sumarCompra(coins = coins, ahorroClp = 0) }
 
         Box(modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)) {
             Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -122,6 +129,25 @@ class OrderConfirmedScreen(
                             Text("¡Ganaste $coins FrutCoins!", color = FrutAppColors.AmberCoin, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                             Text("Úsalas para descuentos en tus próximas compras.", color = FrutAppColors.InkMuted, fontSize = 12.sp)
                         }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    // Card de huella verde: enganche emocional + entrada a la pantalla shareable.
+                    Row(
+                        modifier = Modifier.fillMaxWidth().background(FrutAppColors.Brand50, RoundedCornerShape(16.dp))
+                            .clickable { navigator.push(HuellaVerdeScreen()) }.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier.size(40.dp).background(FrutAppColors.Brand400, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.Park, contentDescription = null, tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(22.dp))
+                        }
+                        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                            Text("Tu huella verde creció", color = FrutAppColors.Brand800, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            Text("Mira tu impacto y compártelo →", color = FrutAppColors.InkMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 1.dp))
+                        }
+                        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(22.dp))
                     }
                 }
 

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Park
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Slideshow
@@ -56,6 +57,7 @@ import cl.frutapp.app.navigation.OnboardingScreen
 import cl.frutapp.app.navigation.auth.LoginScreen
 import cl.frutapp.app.navigation.legal.LegalDocScreen
 import cl.frutapp.app.navigation.rewards.FrutCoinsScreen
+import cl.frutapp.app.navigation.rewards.HuellaVerdeScreen
 import cl.frutapp.app.ui.comingSoon
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutButtonPrimary
@@ -100,6 +102,7 @@ class ProfileScreen : Screen {
                     MenuSection(
                         "Mis cuentas y direcciones",
                         listOf(
+                            MenuItem(Icons.Filled.Park, "Mi huella verde", onClick = { navigator.push(HuellaVerdeScreen()) }),
                             MenuItem(Icons.Filled.Place, "Direcciones", onClick = { navigator.push(DireccionesScreen()) }),
                             MenuItem(Icons.Filled.CreditCard, "Métodos de pago", onClick = { navigator.push(MetodosPagoScreen()) }),
                             MenuItem(Icons.Filled.Link, "Cuentas vinculadas", onClick = { comingSoon() })
