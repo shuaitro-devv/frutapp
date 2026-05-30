@@ -49,7 +49,6 @@ import cl.frutapp.app.data.NivelRacha
 import cl.frutapp.app.data.StreakStore
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.ui.components.FrutButtonPrimary
-import cl.frutapp.app.ui.shareText
 import cl.frutapp.app.ui.theme.FrutAppColors
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.huella_verde
@@ -96,15 +95,7 @@ class HuellaVerdeScreen : Screen {
                     Spacer(Modifier.height(20.dp))
                     FrutButtonPrimary(
                         text = "Compartir mi huella",
-                        onClick = {
-                            val nivel = StreakStore.nivel
-                            shareText(
-                                "🌿 Mi huella verde con FrutApp:\n" +
-                                    "$recic reciclajes · ${gramos}g al ciclo · $coins FrutCoins · ${formatClp(ahorrado)} ahorrado.\n" +
-                                    "🔥 ${StreakStore.dias} días en racha verde · ${nivel.emoji} nivel ${nivel.titulo}\n" +
-                                    "De la Vega a tu mesa · y de vuelta al ciclo."
-                            )
-                        }
+                        onClick = { navigator.push(CompartirHuellaScreen()) }
                     )
                     Spacer(Modifier.height(28.dp))
                 }
