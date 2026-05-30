@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -129,9 +130,15 @@ class CheckoutScreen : Screen {
                     SectionTitle("Resumen del pedido", Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
                     OrderSummary(envio = envioLocal, total = totalLocal, modifier = Modifier.padding(horizontal = 20.dp))
 
-                    if (RewardsStore.balance > 0) {
+                    if (RewardsStore.balance > 0 && !esRetiro && envioLocal > 0) {
                         SectionTitle("FrutCoins", Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
-                        FrutCoinsToggle(saldo = RewardsStore.balance, usar = usarCoins, onToggle = { usarCoins = it }, Modifier.padding(horizontal = 20.dp))
+                        FrutCoinsToggle(
+                            saldo = RewardsStore.balance,
+                            envio = envioLocal,
+                            usar = usarCoins,
+                            onToggle = { usarCoins = it },
+                            modifier = Modifier.padding(horizontal = 20.dp)
+                        )
                     }
 
                     SectionTitle("Método de pago", Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
@@ -143,7 +150,7 @@ class CheckoutScreen : Screen {
                     Spacer(Modifier.height(100.dp))
                 }
 
-                Column(modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 20.dp, vertical = 14.dp)) {
+                Column(modifier = Modifier.fillMaxWidth().background(Color.White).navigationBarsPadding().padding(horizontal = 20.dp, vertical = 14.dp)) {
                     if (error != null) {
                         Text(error!!, color = FrutAppColors.Error, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
                     }
@@ -218,7 +225,14 @@ class CheckoutScreen : Screen {
                                             )
                                         )
                                     }.onFailure { e ->
-                                        error = "No pudimos crear el pedido. ${e.message ?: "Intenta de nuevo."}"
+                                        cl.frutapp.app.ui.ErrorReporter.report(screen = "Checkout", action = "create_order", error = e)
+                                        if (cl.frutapp.app.ui.esSesionExpirada(e)) {
+                                            cl.frutapp.app.ui.showToast("Tu sesión expiró. Vuelve a iniciar sesión.")
+                                            cl.frutapp.app.data.TokenStore.clear()
+                                            navigator.replaceAll(cl.frutapp.app.navigation.auth.LoginScreen())
+                                        } else {
+                                            error = cl.frutapp.app.ui.mensajeAmigable(e, "crear el pedido")
+                                        }
                                         loading = false
                                     }
                                 }
@@ -446,14 +460,19 @@ private fun SucursalCard(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun FrutCoinsToggle(saldo: Int, usar: Boolean, onToggle: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+private fun FrutCoinsToggle(saldo: Int, envio: Int, usar: Boolean, onToggle: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    val cubierto = minOf(saldo, envio)
     Row(
         modifier = modifier.fillMaxWidth().background(FrutAppColors.AmberSoft, RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text("Usar mis FrutCoins", color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text("Tienes $saldo · se aplicará el máximo permitido", color = FrutAppColors.AmberCoin, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 2.dp))
+            Text("Cubre tu despacho con FrutCoins", color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            val msg = if (saldo >= envio)
+                "Tienes $saldo · cubrimos los ${formatClp(envio)} del despacho"
+            else
+                "Tienes $saldo · cubrimos ${formatClp(cubierto)} del despacho (${formatClp(envio - cubierto)} restante)"
+            Text(msg, color = FrutAppColors.AmberCoin, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 2.dp))
         }
         Switch(
             checked = usar,
