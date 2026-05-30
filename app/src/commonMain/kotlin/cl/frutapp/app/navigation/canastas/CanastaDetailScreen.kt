@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -27,10 +28,15 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,7 +52,9 @@ import cl.frutapp.app.data.CanastaItem
 import cl.frutapp.app.data.CanastaStore
 import cl.frutapp.app.data.CartStore
 import cl.frutapp.app.data.formatClp
+import cl.frutapp.app.navigation.catalog.CatalogScreen
 import cl.frutapp.app.navigation.shop.CartScreen
+import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
@@ -71,6 +79,8 @@ class CanastaDetailScreen(private val canastaId: Int) : Screen {
             return
         }
 
+        var confirmandoEliminar by remember { mutableStateOf(false) }
+
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
             Column(modifier = Modifier.fillMaxSize()) {
                 TopBar(
@@ -83,46 +93,50 @@ class CanastaDetailScreen(private val canastaId: Int) : Screen {
                     HeaderCard(canasta)
 
                     Spacer(Modifier.height(18.dp))
-                    Text("${canasta.cantidadProductos} producto${if (canasta.cantidadProductos != 1) "s" else ""}", color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(10.dp))
-                    canasta.items.forEach { item ->
-                        ItemRow(
-                            item = item,
-                            esTemplate = canasta.esTemplate,
-                            onIncrement = {
-                                val nuevos = canasta.items.map {
-                                    if (it === item) it.copy(cantidad = it.cantidad + 1) else it
-                                }
-                                CanastaStore.actualizar(canasta.id, items = nuevos)
-                            },
-                            onDecrement = {
-                                val nuevos = canasta.items.mapNotNull {
-                                    when {
-                                        it !== item -> it
-                                        it.cantidad > 1 -> it.copy(cantidad = it.cantidad - 1)
-                                        else -> null
-                                    }
-                                }
-                                CanastaStore.actualizar(canasta.id, items = nuevos)
-                            }
+
+                    if (canasta.items.isEmpty()) {
+                        // Empty state con guía clara: el problema #1 que reportaste.
+                        EmptyCanasta(
+                            onExplorar = { navigator.push(CatalogScreen()) }
                         )
+                    } else {
+                        Text("${canasta.cantidadProductos} producto${if (canasta.cantidadProductos != 1) "s" else ""}", color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(10.dp))
+                        canasta.items.forEach { item ->
+                            ItemRow(
+                                item = item,
+                                esTemplate = canasta.esTemplate,
+                                onIncrement = {
+                                    val nuevos = canasta.items.map {
+                                        if (it === item) it.copy(cantidad = it.cantidad + 1) else it
+                                    }
+                                    CanastaStore.actualizar(canasta.id, items = nuevos)
+                                },
+                                onDecrement = {
+                                    val nuevos = canasta.items.mapNotNull {
+                                        when {
+                                            it !== item -> it
+                                            it.cantidad > 1 -> it.copy(cantidad = it.cantidad - 1)
+                                            else -> null
+                                        }
+                                    }
+                                    CanastaStore.actualizar(canasta.id, items = nuevos)
+                                }
+                            )
+                        }
                     }
 
                     if (!canasta.esTemplate) {
                         Spacer(Modifier.height(16.dp))
                         RecordatorioToggle(canasta)
                         Spacer(Modifier.height(12.dp))
-                        EliminarRow {
-                            CanastaStore.eliminar(canasta.id)
-                            showToast("Canasta eliminada")
-                            navigator.pop()
-                        }
+                        EliminarRow { confirmandoEliminar = true }
                     }
                     Spacer(Modifier.height(140.dp))
                 }
 
                 // Bottom bar: total + Comprar
-                Column(modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 20.dp, vertical = 14.dp)) {
+                Column(modifier = Modifier.fillMaxWidth().background(Color.White).navigationBarsPadding().padding(horizontal = 20.dp, vertical = 14.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -133,6 +147,7 @@ class CanastaDetailScreen(private val canastaId: Int) : Screen {
                     }
                     FrutButtonPrimary(
                         text = if (canasta.esTemplate) "Comprar y guardar canasta" else "Comprar canasta",
+                        enabled = canasta.items.isNotEmpty(),
                         onClick = {
                             // Si es template, copiarla a "Mis canastas" primero para que quede
                             // editable y no se pierda al modificarla en el carrito.
@@ -145,7 +160,73 @@ class CanastaDetailScreen(private val canastaId: Int) : Screen {
                     )
                 }
             }
+
+            if (confirmandoEliminar) {
+                AlertDialog(
+                    onDismissRequest = { confirmandoEliminar = false },
+                    title = { Text("¿Eliminar canasta?", color = FrutAppColors.Brand800, fontWeight = FontWeight.Bold) },
+                    text = { Text("'${canasta.nombre}' se borrará. Esta acción no se puede deshacer.", color = FrutAppColors.InkMuted, fontSize = 14.sp) },
+                    confirmButton = {
+                        Text(
+                            "Eliminar",
+                            color = FrutAppColors.Error,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clickable {
+                                    CanastaStore.eliminar(canasta.id)
+                                    confirmandoEliminar = false
+                                    showToast("Canasta eliminada")
+                                    navigator.pop()
+                                }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
+                    },
+                    dismissButton = {
+                        Text(
+                            "Cancelar",
+                            color = FrutAppColors.InkSoft,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .clickable { confirmandoEliminar = false }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
+                    },
+                    containerColor = Color.White
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun EmptyCanasta(onExplorar: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier.size(72.dp).background(FrutAppColors.Brand50, androidx.compose.foundation.shape.CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("🧺", fontSize = 36.sp)
+        }
+        Text(
+            "Aún no tiene productos",
+            color = FrutAppColors.Brand800,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 14.dp)
+        )
+        Text(
+            "Busca productos y toca \"+ A canasta\" para agregarlos aquí.",
+            color = FrutAppColors.InkMuted,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        FrutButtonOutline(text = "Explorar productos", onClick = onExplorar)
     }
 }
 
