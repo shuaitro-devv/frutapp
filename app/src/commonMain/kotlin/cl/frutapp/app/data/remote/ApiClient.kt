@@ -5,6 +5,7 @@ import cl.frutapp.shared.dto.AuthResponse
 import cl.frutapp.shared.dto.RefreshRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.HttpSend
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -61,25 +62,37 @@ object ApiClient {
     val client: HttpClient = HttpClient {
         install(ContentNegotiation) { json(json) }
         install(HttpTimeout) { requestTimeoutMillis = 15_000; connectTimeoutMillis = 10_000 }
+        // Sin esto, Ktor intenta deserializar el body de error (ej. 401 con
+        // {"error":"Invalid credentials"}) como el DTO esperado y falla con
+        // MissingFieldException — que no es legible ni para la heurística de
+        // mensajeAmigable. Con expectSuccess, status no-2xx lanza ClientRequestException
+        // cuyo .message contiene "401 Unauthorized" / "422 Unprocessable Entity" / etc.
+        expectSuccess = true
         // Adjunta el access token (JWT) en cada request si hay sesión (se lee en tiempo de request).
         defaultRequest {
             TokenStore.accessToken?.let { header(HttpHeaders.Authorization, "Bearer $it") }
         }
     }.also { c ->
         // Auto-refresh: si un endpoint protegido responde 401, refresca el token y reintenta una vez.
+        // Con expectSuccess=true, el 401 llega como ClientRequestException (no como response):
+        // catcheamos, refrescamos y reintentamos; si no es 401 o falla refresh, re-lanzamos.
         c.plugin(HttpSend).intercept { request ->
-            val call = execute(request)
-            if (call.response.status == HttpStatusCode.Unauthorized &&
-                TokenStore.refreshToken != null &&
-                !request.url.buildString().contains("/auth/")
-            ) {
-                val newAccess = tryRefresh()
-                if (newAccess != null) {
-                    request.headers.remove(HttpHeaders.Authorization)
-                    request.headers.append(HttpHeaders.Authorization, "Bearer $newAccess")
-                    execute(request)
-                } else call
-            } else call
+            try {
+                execute(request)
+            } catch (e: ClientRequestException) {
+                val protectedEndpoint = !request.url.buildString().contains("/auth/")
+                if (e.response.status == HttpStatusCode.Unauthorized &&
+                    TokenStore.refreshToken != null &&
+                    protectedEndpoint
+                ) {
+                    val newAccess = tryRefresh()
+                    if (newAccess != null) {
+                        request.headers.remove(HttpHeaders.Authorization)
+                        request.headers.append(HttpHeaders.Authorization, "Bearer $newAccess")
+                        execute(request)
+                    } else throw e
+                } else throw e
+            }
         }
     }
 }
