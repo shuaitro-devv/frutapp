@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.ShoppingBasket
 import androidx.compose.material.icons.filled.Recycling
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
@@ -55,6 +56,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -139,12 +141,13 @@ class HomeScreen : Screen {
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
-                item { HomeHeader(onFavoritos = { navigator.push(MisFavoritosScreen()) }) }
+                item { HomeHeader(onFavoritos = { navigator.push(MisFavoritosScreen()) }, onNotificaciones = { navigator.push(NotificacionesScreen()) }, onCanastas = { navigator.push(MisCanastasScreen()) }) }
                 item {
                     HeroCarousel(
                         onOfertas = { navigator.push(OfertasScreen()) },
                         onFrutCoins = { navigator.push(FrutCoinsScreen()) },
                         onCanastas = { navigator.push(MisCanastasScreen()) },
+                        onReyVegetal = { navigator.push(cl.frutapp.app.navigation.rewards.ReyVegetalScreen()) },
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
                     )
                 }
@@ -225,7 +228,7 @@ private fun BoxScope.HomeLeaves() {
 }
 
 @Composable
-private fun HomeHeader(modifier: Modifier = Modifier, onFavoritos: () -> Unit = {}) {
+private fun HomeHeader(modifier: Modifier = Modifier, onFavoritos: () -> Unit = {}, onNotificaciones: () -> Unit = {}, onCanastas: () -> Unit = {}) {
     // Cabecera con ola verde de marca: saludo en blanco sobre el verde y la búsqueda montada
     // sobre la curva (mismo lenguaje visual que el onboarding).
     Box(modifier = modifier.fillMaxWidth()) {
@@ -248,8 +251,10 @@ private fun HomeHeader(modifier: Modifier = Modifier, onFavoritos: () -> Unit = 
                     )
                 }
                 HeaderIcon(Icons.Default.FavoriteBorder, onClick = onFavoritos)
-                Spacer(Modifier.width(10.dp))
-                HeaderIcon(Icons.Default.Notifications)
+                Spacer(Modifier.width(8.dp))
+                HeaderIcon(Icons.Filled.ShoppingBasket, onClick = onCanastas)
+                Spacer(Modifier.width(8.dp))
+                HeaderIcon(Icons.Default.Notifications, onClick = onNotificaciones, badge = cl.frutapp.app.data.NotificacionesStore.noLeidas)
             }
             Spacer(Modifier.height(18.dp))
             SearchBarMock(modifier = Modifier.padding(horizontal = 20.dp))
@@ -259,15 +264,35 @@ private fun HomeHeader(modifier: Modifier = Modifier, onFavoritos: () -> Unit = 
 }
 
 @Composable
-private fun HeaderIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit = {}) {
-    Box(
-        modifier = Modifier
-            .size(44.dp)
-            .background(Color.White.copy(alpha = 0.18f), CircleShape)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+private fun HeaderIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit = {}, badge: Int = 0) {
+    Box(modifier = Modifier.size(44.dp)) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .background(Color.White.copy(alpha = 0.18f), CircleShape)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+        }
+        if (badge > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 2.dp, y = (-2).dp)
+                    .size(18.dp)
+                    .background(FrutAppColors.AmberCoin, CircleShape)
+                    .clickable(onClick = onClick),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    if (badge > 9) "9+" else "$badge",
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
     }
 }
 
@@ -346,12 +371,13 @@ private data class BannerSlide(
 )
 
 @Composable
-private fun HeroCarousel(onOfertas: () -> Unit, onFrutCoins: () -> Unit, onCanastas: () -> Unit, modifier: Modifier = Modifier) {
-    val slides = remember(onOfertas, onFrutCoins, onCanastas) {
+private fun HeroCarousel(onOfertas: () -> Unit, onFrutCoins: () -> Unit, onCanastas: () -> Unit, onReyVegetal: () -> Unit, modifier: Modifier = Modifier) {
+    val slides = remember(onOfertas, onFrutCoins, onCanastas, onReyVegetal) {
         listOf(
             BannerSlide("Frescura que se nota,", "calidad que te acompaña", "Ver ofertas", Res.drawable.banner_frescos, 180.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas, fullBg = true),
             BannerSlide("Hasta 40% de", "descuento esta semana", "Ver ofertas", Res.drawable.banner_fruit, 150.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas, fullBg = true),
             BannerSlide("Mi canasta del mes,", "1 toque para volver a pedir", "Mis canastas", Res.drawable.canasta_frutas, 150.dp, FrutAppColors.Brand800, FrutAppColors.Brand400, onCanastas, fullBg = true),
+            BannerSlide("👑 Rey Vegetal,", "compra gratis al mejor reciclador", "Ver ranking", Res.drawable.canasta_frutas, 120.dp, FrutAppColors.Brand800, FrutAppColors.AmberCoin, onReyVegetal, fullBg = true),
             BannerSlide("Junta FrutCoins", "en cada compra", "Ver FrutCoins", Res.drawable.banner_frutcoins, 120.dp, FrutAppColors.Brand800, FrutAppColors.Brand400, onFrutCoins, fullBg = true)
         )
     }

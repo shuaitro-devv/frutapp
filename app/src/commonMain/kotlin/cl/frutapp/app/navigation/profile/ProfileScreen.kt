@@ -128,7 +128,7 @@ class ProfileScreen : Screen {
                             MenuItem(Icons.Filled.Slideshow, "Ver intro", onClick = { navigator.push(OnboardingScreen(desdeSplash = false)) }),
                             MenuItem(Icons.Filled.Description, "Términos y condiciones", onClick = { navigator.push(LegalDocScreen(LegalDocKind.TERMS)) }),
                             MenuItem(Icons.Filled.PrivacyTip, "Privacidad", onClick = { navigator.push(LegalDocScreen(LegalDocKind.PRIVACY)) }),
-                            MenuItem(Icons.Filled.Info, "Acerca de FrutApp", onClick = { comingSoon() })
+                            MenuItem(Icons.Filled.Info, "Acerca de FrutApp", onClick = { navigator.push(AcercaScreen()) })
                         )
                     )
 
@@ -144,6 +144,7 @@ class ProfileScreen : Screen {
                                 MetodosPagoStore.reset()
                                 FavoritesStore.clear()
                                 CanastaStore.reset()
+                                cl.frutapp.app.data.NotificacionesStore.reset()
                                 TokenStore.clear()
                                 navigator.replaceAll(LoginScreen())
                             }
