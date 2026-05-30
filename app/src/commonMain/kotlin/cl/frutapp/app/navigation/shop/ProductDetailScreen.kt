@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.ShoppingBasket
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -60,9 +61,11 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.CanastaStore
 import cl.frutapp.app.data.CartItem
 import cl.frutapp.app.data.CartStore
 import cl.frutapp.app.data.DemoCatalog
+import cl.frutapp.app.navigation.canastas.NuevaCanastaScreen
 import cl.frutapp.app.data.FavoritesStore
 import cl.frutapp.app.data.Producto
 import cl.frutapp.app.data.Resena
@@ -93,6 +96,7 @@ class ProductDetailScreen(
         var gramos by remember { mutableStateOf(editing?.gramos ?: 1000) }
         var cantidad by remember { mutableStateOf(editing?.cantidad ?: 1) }
         val favorito = FavoritesStore.isFavorite(producto.id)
+        var mostrarSelector by remember { mutableStateOf(false) }
 
         val totalSel = if (esKg) (producto.precioClp * gramos / 1000.0).toInt() * cantidad
         else producto.precioClp * cantidad
@@ -202,7 +206,7 @@ class ProductDetailScreen(
                 }
             }
 
-            Box(
+            Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
@@ -223,6 +227,99 @@ class ProductDetailScreen(
                         }
                     }
                 )
+                if (editing == null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp).clickable { mostrarSelector = true },
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.ShoppingBasket, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(16.dp))
+                        Text(
+                            "Agregar a una canasta",
+                            color = FrutAppColors.Brand600,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(start = 6.dp)
+                        )
+                    }
+                }
+            }
+
+            if (mostrarSelector) {
+                SelectorCanasta(
+                    onDismiss = { mostrarSelector = false },
+                    onSeleccionar = { canastaId ->
+                        CanastaStore.agregarProducto(canastaId, producto, cantidad, if (esKg) gramos else null)
+                        showToast("Agregado a la canasta")
+                        mostrarSelector = false
+                    },
+                    onNueva = {
+                        mostrarSelector = false
+                        navigator.push(NuevaCanastaScreen())
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun SelectorCanasta(
+    onDismiss: () -> Unit,
+    onSeleccionar: (Int) -> Unit,
+    onNueva: () -> Unit
+) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)) {
+            Text("Agregar a una canasta", color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "Elige una de tus canastas o crea una nueva.",
+                color = FrutAppColors.InkMuted, fontSize = 12.sp,
+                modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
+            )
+            if (CanastaStore.items.isEmpty()) {
+                Text(
+                    "Aún no tienes canastas propias.",
+                    color = FrutAppColors.InkSoft, fontSize = 13.sp,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            } else {
+                CanastaStore.items.forEach { c ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                            .background(FrutAppColors.Brand50, RoundedCornerShape(12.dp))
+                            .clickable { onSeleccionar(c.id) }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier.size(38.dp).background(Color.White, RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(c.emoji, fontSize = 20.sp)
+                        }
+                        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                            Text(c.nombre, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text("${c.cantidadProductos} producto(s)", color = FrutAppColors.InkSoft, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    .background(FrutAppColors.Brand400, RoundedCornerShape(12.dp))
+                    .clickable(onClick = onNueva)
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                Text("Crear canasta nueva", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp))
             }
         }
     }

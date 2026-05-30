@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.ShoppingBasket
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -101,11 +102,23 @@ class CartScreen : Screen {
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                            horizontalArrangement = Arrangement.Center,
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Filled.Lock, contentDescription = null, tint = FrutAppColors.InkSoft, modifier = Modifier.size(14.dp))
-                            Text("Paga 100% seguro", color = FrutAppColors.InkSoft, fontSize = 12.sp, modifier = Modifier.padding(start = 6.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Lock, contentDescription = null, tint = FrutAppColors.InkSoft, modifier = Modifier.size(14.dp))
+                                Text("Pago seguro", color = FrutAppColors.InkSoft, fontSize = 12.sp, modifier = Modifier.padding(start = 6.dp))
+                            }
+                            Row(
+                                modifier = Modifier.clickable {
+                                    val items = CartStore.items.map { cl.frutapp.app.data.CanastaItem(it.producto, it.cantidad, it.gramos) }
+                                    navigator.push(cl.frutapp.app.navigation.canastas.NuevaCanastaScreen(itemsIniciales = items))
+                                },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Filled.ShoppingBasket, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(14.dp))
+                                Text("Guardar como canasta", color = FrutAppColors.Brand600, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp))
+                            }
                         }
                     }
                 }

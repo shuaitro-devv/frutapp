@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalResourceApi::class)
 
-package cl.frutapp.app.navigation.rewards
+package cl.frutapp.app.navigation.canastas
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -33,7 +33,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -44,9 +43,8 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import cl.frutapp.app.data.HuellaVerdeStore
-import cl.frutapp.app.data.NivelRacha
-import cl.frutapp.app.data.StreakStore
+import cl.frutapp.app.data.Canasta
+import cl.frutapp.app.data.CanastaStore
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
@@ -55,39 +53,38 @@ import cl.frutapp.app.ui.shareImage
 import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
 import frutapp.app.generated.resources.Res
-import frutapp.app.generated.resources.huella_verde
 import frutapp.app.generated.resources.logo_white
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
 
 /**
- * Pantalla de "Compartir mi huella verde": preview de la tarjeta exacta que se va a compartir
- * + botón que la captura a imagen y abre el menú nativo. Patrón Instagram/Strava.
+ * Preview + share de una canasta como imagen — mismo patrón que CompartirHuellaScreen.
+ * El receptor del mensaje ve la imagen con el listado de productos + total + branding.
  */
-class CompartirHuellaScreen : Screen {
+class CompartirCanastaScreen(private val canastaId: Int) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val canasta = CanastaStore.get(canastaId)
+        if (canasta == null) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.White), contentAlignment = Alignment.Center) {
+                Text("Canasta no encontrada.", color = FrutAppColors.InkMuted, fontSize = 14.sp)
+            }
+            return
+        }
+
         val scope = rememberCoroutineScope()
         val capture = rememberCaptureLayer()
         var compartiendo by remember { mutableStateOf(false) }
 
-        val recic = HuellaVerdeStore.reciclajes
-        val gramos = HuellaVerdeStore.gramosAlCiclo
-        val coins = HuellaVerdeStore.coinsGanados
-        val ahorrado = HuellaVerdeStore.ahorradoClp
-        val dias = StreakStore.dias
-        val nivel = StreakStore.nivel
-
-        val caption = "🌿 Mi huella verde con FrutApp:\n" +
-            "$recic reciclajes · ${gramos}g al ciclo · $coins FrutCoins · ${formatClp(ahorrado)} ahorrado.\n" +
-            "🔥 $dias días en racha verde · ${nivel.emoji} nivel ${nivel.titulo}\n" +
-            "De la cosecha a tu mesa · y de vuelta al ciclo."
+        val items = canasta.items.joinToString("\n") { "• ${it.producto.nombre}" }
+        val caption = "🧺 ${canasta.emoji} ${canasta.nombre}:\n$items\n\n" +
+            "Total estimado: ~${formatClp(canasta.totalEstimado)}\n" +
+            "Compra esta canasta en FrutApp · De la cosecha a tu mesa."
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Top bar
                 Row(
                     modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -98,38 +95,29 @@ class CompartirHuellaScreen : Screen {
                     ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = FrutAppColors.Ink, modifier = Modifier.size(20.dp))
                     }
-                    Text("Compartir mi huella", color = FrutAppColors.Brand800, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 12.dp))
+                    Text("Compartir canasta", color = FrutAppColors.Brand800, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 12.dp))
                 }
 
                 Text(
-                    "Así se verá tu tarjeta:",
-                    color = FrutAppColors.InkMuted,
-                    fontSize = 13.sp,
+                    "Así se verá la tarjeta:",
+                    color = FrutAppColors.InkMuted, fontSize = 13.sp,
                     modifier = Modifier.padding(start = 24.dp, top = 4.dp, bottom = 12.dp)
                 )
 
-                // Preview de la tarjeta — wrapped en el CaptureLayer para que se pueda capturar.
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
                         .aspectRatio(1f)
                         .clip(RoundedCornerShape(24.dp))
                         .then(capture.modifier)
                 ) {
-                    ShareCardHuella(
-                        recic = recic,
-                        gramos = gramos,
-                        coins = coins,
-                        ahorrado = ahorrado,
-                        dias = dias,
-                        nivel = nivel
-                    )
+                    ShareCardCanasta(canasta)
                 }
 
                 Spacer(Modifier.weight(1f))
 
                 Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
                     FrutButtonPrimary(
-                        text = if (compartiendo) "Preparando…" else "Compartir mi huella",
+                        text = if (compartiendo) "Preparando…" else "Compartir canasta",
                         enabled = !compartiendo,
                         onClick = {
                             compartiendo = true
@@ -138,7 +126,7 @@ class CompartirHuellaScreen : Screen {
                                     val bitmap = capture.toImageBitmap()
                                     shareImage(bitmap, caption)
                                 }.onFailure {
-                                    showToast("No pudimos preparar la imagen. Intenta de nuevo.")
+                                    showToast("No pudimos preparar la imagen.")
                                 }
                                 compartiendo = false
                             }
@@ -152,34 +140,16 @@ class CompartirHuellaScreen : Screen {
     }
 }
 
-/**
- * Tarjeta cuadrada (1:1) con el resumen visual de la huella verde — pensada para que se
- * capture y comparta como imagen en WhatsApp / IG / etc.
- */
 @Composable
-fun ShareCardHuella(
-    recic: Int,
-    gramos: Int,
-    coins: Int,
-    ahorrado: Int,
-    dias: Int,
-    nivel: NivelRacha,
-    modifier: Modifier = Modifier
-) {
+private fun ShareCardCanasta(canasta: Canasta) {
     Box(
-        modifier = modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize()
             .background(Brush.verticalGradient(listOf(FrutAppColors.Brand600, FrutAppColors.Brand800)))
     ) {
-        // Hojas decorativas semi-transparentes para textura.
         Box(modifier = Modifier.size(180.dp).offset(x = (-60).dp, y = (-50).dp).background(Color.White.copy(alpha = 0.07f), CircleShape).align(Alignment.TopStart))
         Box(modifier = Modifier.size(160.dp).offset(x = 50.dp, y = 50.dp).background(Color.White.copy(alpha = 0.06f), CircleShape).align(Alignment.BottomEnd))
-        Box(modifier = Modifier.size(80.dp).offset(x = (-20).dp, y = (-20).dp).background(Color.White.copy(alpha = 0.10f), CircleShape).align(Alignment.BottomStart))
 
-        Column(
-            modifier = Modifier.fillMaxSize().padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Header: logo + @handle
+        Column(modifier = Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -194,59 +164,31 @@ fun ShareCardHuella(
                 Text("@frutapp.cl", color = Color.White.copy(alpha = 0.85f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
 
-            // Hero: huella + mascota racha overlap
-            Box(
-                modifier = Modifier.fillMaxWidth().height(160.dp).padding(top = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    painter = painterResource(Res.drawable.huella_verde),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(150.dp).offset(x = (-32).dp)
-                )
-                Image(
-                    painter = painterResource(nivel.mascota),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(110.dp).offset(x = 50.dp, y = 10.dp).rotate(8f)
-                )
-            }
+            Spacer(Modifier.height(20.dp))
+            // Emoji enorme + nombre canasta
+            Text(canasta.emoji, fontSize = 70.sp)
+            Text(canasta.nombre, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp))
+            Text("${canasta.cantidadProductos} productos · ~${formatClp(canasta.totalEstimado)}", color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 4.dp))
 
-            // Título grande: racha
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 10.dp)) {
-                Text("🔥", fontSize = 28.sp)
-                Text(
-                    "$dias días",
-                    color = Color.White,
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 6.dp)
-                )
-            }
-            Text(
-                "en racha verde · ${nivel.emoji} ${nivel.titulo}",
-                color = Color.White.copy(alpha = 0.9f),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium
-            )
-
-            // Grid 2x2 de stats abajo
             Spacer(Modifier.height(14.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                StatChipShare("$recic", "reciclajes", Modifier.weight(1f))
-                StatChipShare("${gramos}g", "al ciclo", Modifier.weight(1f))
-                StatChipShare("$coins", "coins", Modifier.weight(1f))
-                StatChipShare(formatClp(ahorrado), "ahorrado", Modifier.weight(1f))
+            // Mini-grid de productos: primeros 6 con imagen
+            val muestra = canasta.items.take(6)
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                muestra.chunked(3).forEach { fila ->
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        fila.forEach { item ->
+                            ProductoMini(item.producto.imagen, item.producto.nombre, Modifier.weight(1f))
+                        }
+                        // Padding si menos de 3 en la fila
+                        if (fila.size < 3) repeat(3 - fila.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
             }
 
             Spacer(Modifier.weight(1f))
             Text(
-                "De la cosecha a tu mesa · y de vuelta al ciclo",
-                color = Color.White.copy(alpha = 0.8f),
+                "De la cosecha a tu mesa · cómprala en FrutApp",
+                color = Color.White.copy(alpha = 0.85f),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center
@@ -256,14 +198,26 @@ fun ShareCardHuella(
 }
 
 @Composable
-private fun StatChipShare(valor: String, label: String, modifier: Modifier = Modifier) {
+private fun ProductoMini(imagen: org.jetbrains.compose.resources.DrawableResource, nombre: String, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
-            .background(Color.White.copy(alpha = 0.13f), RoundedCornerShape(10.dp))
-            .padding(horizontal = 6.dp, vertical = 8.dp),
+            .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+            .padding(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(valor, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-        Text(label, color = Color.White.copy(alpha = 0.85f), fontSize = 9.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        Image(
+            painter = painterResource(imagen),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxWidth().height(40.dp)
+        )
+        Text(
+            nombre,
+            color = Color.White,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            modifier = Modifier.padding(top = 4.dp)
+        )
     }
 }

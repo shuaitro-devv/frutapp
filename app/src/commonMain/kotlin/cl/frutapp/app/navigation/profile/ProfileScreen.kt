@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Park
+import androidx.compose.material.icons.filled.ShoppingBasket
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Slideshow
@@ -45,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.CanastaStore
 import cl.frutapp.app.data.CartStore
 import cl.frutapp.app.data.DireccionesStore
 import cl.frutapp.app.data.FavoritesStore
@@ -56,6 +58,7 @@ import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.legal.LegalDocKind
 import cl.frutapp.app.navigation.OnboardingScreen
 import cl.frutapp.app.navigation.auth.LoginScreen
+import cl.frutapp.app.navigation.canastas.MisCanastasScreen
 import cl.frutapp.app.navigation.legal.LegalDocScreen
 import cl.frutapp.app.navigation.rewards.FrutCoinsScreen
 import cl.frutapp.app.navigation.rewards.HuellaVerdeScreen
@@ -105,6 +108,7 @@ class ProfileScreen : Screen {
                         "Mis cuentas y direcciones",
                         listOf(
                             MenuItem(Icons.Filled.Park, "Mi huella verde", onClick = { navigator.push(HuellaVerdeScreen()) }),
+                            MenuItem(Icons.Filled.ShoppingBasket, "Mis canastas", onClick = { navigator.push(MisCanastasScreen()) }),
                             MenuItem(Icons.Filled.Place, "Direcciones", onClick = { navigator.push(DireccionesScreen()) }),
                             MenuItem(Icons.Filled.CreditCard, "Métodos de pago", onClick = { navigator.push(MetodosPagoScreen()) }),
                             MenuItem(Icons.Filled.Link, "Cuentas vinculadas", onClick = { comingSoon() })
@@ -139,6 +143,7 @@ class ProfileScreen : Screen {
                                 DireccionesStore.reset()
                                 MetodosPagoStore.reset()
                                 FavoritesStore.clear()
+                                CanastaStore.reset()
                                 TokenStore.clear()
                                 navigator.replaceAll(LoginScreen())
                             }

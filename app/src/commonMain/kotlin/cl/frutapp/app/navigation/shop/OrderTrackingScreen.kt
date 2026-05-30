@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.ShoppingBasket
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Icon
@@ -50,9 +51,11 @@ import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.data.fulfillmentLabel
 import cl.frutapp.app.data.huboItems
 import cl.frutapp.app.data.paymentMethodLabel
+import cl.frutapp.app.data.pedidoToCanastaItems
 import cl.frutapp.app.data.reorderIntoCart
 import cl.frutapp.app.data.toastMessage
 import cl.frutapp.app.data.remote.OrderApi
+import cl.frutapp.app.navigation.canastas.NuevaCanastaScreen
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.FrutTab
@@ -121,7 +124,17 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
                                 if (r.huboItems()) navigator.push(CartScreen())
                             }
                         },
-                        onCalificar = { navigator.push(CalificarPedidoScreen(o.items)) }
+                        onCalificar = { navigator.push(CalificarPedidoScreen(o.items)) },
+                        onGuardarCanasta = {
+                            scope.launch {
+                                val items = pedidoToCanastaItems(o.items)
+                                if (items.isEmpty()) {
+                                    showToast("No pudimos cargar los productos del pedido")
+                                } else {
+                                    navigator.push(NuevaCanastaScreen(itemsIniciales = items))
+                                }
+                            }
+                        }
                     )
                 }
 
@@ -135,7 +148,7 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
 }
 
 @Composable
-private fun Detail(o: OrderDto, modifier: Modifier, onReorder: () -> Unit, onCalificar: () -> Unit) {
+private fun Detail(o: OrderDto, modifier: Modifier, onReorder: () -> Unit, onCalificar: () -> Unit, onGuardarCanasta: () -> Unit) {
     val pasos = pasosFor(o.status)
     Column(modifier = modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
         Row(
@@ -213,6 +226,18 @@ private fun Detail(o: OrderDto, modifier: Modifier, onReorder: () -> Unit, onCal
         }
         Box(modifier = Modifier.padding(top = 16.dp)) {
             FrutButtonPrimary(text = "Volver a pedir", onClick = onReorder)
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp).clickable(onClick = onGuardarCanasta),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Filled.ShoppingBasket, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(16.dp))
+            Text(
+                "Guardar este pedido como canasta",
+                color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = 6.dp)
+            )
         }
         Spacer(Modifier.height(20.dp))
     }

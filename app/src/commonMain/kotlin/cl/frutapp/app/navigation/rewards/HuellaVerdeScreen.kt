@@ -171,7 +171,7 @@ private fun HeroCard(recic: Int, gramos: Int, coins: Int, ahorrado: Int) {
 
             Spacer(Modifier.weight(1f))
             Text(
-                "De la Vega a tu mesa · y de vuelta al ciclo",
+                "De la cosecha a tu mesa · y de vuelta al ciclo",
                 color = Color.White.copy(alpha = 0.8f),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,

@@ -36,3 +36,19 @@ fun ReorderResult?.toastMessage(): String = when {
 
 /** True si se agregó al menos un producto (corresponde navegar al carrito). */
 fun ReorderResult?.huboItems(): Boolean = this != null && agregados > 0
+
+/**
+ * Convierte los ítems de un pedido a [CanastaItem]s resolviendo contra el catálogo del
+ * backend por imageKey (igual mecanismo que [reorderIntoCart]). Devuelve lista vacía si
+ * el catálogo no se pudo cargar.
+ */
+suspend fun pedidoToCanastaItems(items: List<OrderItemDto>): List<CanastaItem> {
+    val catalogo = runCatching { CatalogApi().products() }.getOrNull().orEmpty()
+    if (catalogo.isEmpty()) return emptyList()
+    val porImagen = catalogo.associateBy { it.imageKey }
+    return items.mapNotNull { item ->
+        porImagen[item.imageKey]?.let { p ->
+            CanastaItem(p.toProducto(), item.cantidad, item.gramos)
+        }
+    }
+}

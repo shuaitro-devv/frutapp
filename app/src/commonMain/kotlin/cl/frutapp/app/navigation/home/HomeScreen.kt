@@ -66,6 +66,7 @@ import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.data.remote.CatalogApi
 import cl.frutapp.app.data.toProducto
+import cl.frutapp.app.navigation.canastas.MisCanastasScreen
 import cl.frutapp.app.navigation.catalog.CatalogScreen
 import cl.frutapp.app.navigation.offers.OfertasScreen
 import cl.frutapp.app.navigation.orders.MisPedidosScreen
@@ -84,6 +85,7 @@ import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.banner_frescos
 import frutapp.app.generated.resources.banner_fruit
 import frutapp.app.generated.resources.banner_frutcoins
+import frutapp.app.generated.resources.canasta_frutas
 import frutapp.app.generated.resources.cilantro
 import frutapp.app.generated.resources.hoja_decorativa
 import frutapp.app.generated.resources.lechuga
@@ -142,6 +144,7 @@ class HomeScreen : Screen {
                     HeroCarousel(
                         onOfertas = { navigator.push(OfertasScreen()) },
                         onFrutCoins = { navigator.push(FrutCoinsScreen()) },
+                        onCanastas = { navigator.push(MisCanastasScreen()) },
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
                     )
                 }
@@ -343,11 +346,12 @@ private data class BannerSlide(
 )
 
 @Composable
-private fun HeroCarousel(onOfertas: () -> Unit, onFrutCoins: () -> Unit, modifier: Modifier = Modifier) {
-    val slides = remember(onOfertas, onFrutCoins) {
+private fun HeroCarousel(onOfertas: () -> Unit, onFrutCoins: () -> Unit, onCanastas: () -> Unit, modifier: Modifier = Modifier) {
+    val slides = remember(onOfertas, onFrutCoins, onCanastas) {
         listOf(
             BannerSlide("Frescura que se nota,", "calidad que te acompaña", "Ver ofertas", Res.drawable.banner_frescos, 180.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas, fullBg = true),
             BannerSlide("Hasta 40% de", "descuento esta semana", "Ver ofertas", Res.drawable.banner_fruit, 150.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas, fullBg = true),
+            BannerSlide("Mi canasta del mes,", "1 toque para volver a pedir", "Mis canastas", Res.drawable.canasta_frutas, 150.dp, FrutAppColors.Brand800, FrutAppColors.Brand400, onCanastas, fullBg = true),
             BannerSlide("Junta FrutCoins", "en cada compra", "Ver FrutCoins", Res.drawable.banner_frutcoins, 120.dp, FrutAppColors.Brand800, FrutAppColors.Brand400, onFrutCoins, fullBg = true)
         )
     }
