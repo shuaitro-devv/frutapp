@@ -60,6 +60,7 @@ import cl.frutapp.app.data.CartStore
 import cl.frutapp.app.navigation.offers.OfertasScreen
 import cl.frutapp.app.navigation.rewards.FrutCoinsScreen
 import cl.frutapp.app.navigation.shop.CheckoutScreen
+import cl.frutapp.app.ui.coachmarkTarget
 import cl.frutapp.app.ui.theme.FrutAppColors
 
 enum class FrutTab { INICIO, EXPLORAR, CARRITO, PEDIDOS, PERFIL }
@@ -103,7 +104,7 @@ fun FrutBottomNav(
         CartButton(
             selected = selected == FrutTab.CARRITO,
             onClick = { onSelect(FrutTab.CARRITO) },
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = (-26).dp)
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = (-26).dp).coachmarkTarget("cart")
         )
     }
 }

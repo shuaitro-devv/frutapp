@@ -126,6 +126,11 @@ class ProfileScreen : Screen {
                         listOf(
                             MenuItem(Icons.Filled.SupportAgent, "Ayuda", onClick = { comingSoon() }),
                             MenuItem(Icons.Filled.Slideshow, "Ver intro", onClick = { navigator.push(OnboardingScreen(desdeSplash = false)) }),
+                            MenuItem(Icons.Filled.Info, "Ver tutorial del home", onClick = {
+                                cl.frutapp.app.data.CoachmarkStore.reset()
+                                cl.frutapp.app.data.CoachmarkStore.start()
+                                navigator.popUntilRoot()
+                            }),
                             MenuItem(Icons.Filled.Description, "Términos y condiciones", onClick = { navigator.push(LegalDocScreen(LegalDocKind.TERMS)) }),
                             MenuItem(Icons.Filled.PrivacyTip, "Privacidad", onClick = { navigator.push(LegalDocScreen(LegalDocKind.PRIVACY)) }),
                             MenuItem(Icons.Filled.Info, "Acerca de FrutApp", onClick = { navigator.push(AcercaScreen()) })
@@ -145,6 +150,7 @@ class ProfileScreen : Screen {
                                 FavoritesStore.clear()
                                 CanastaStore.reset()
                                 cl.frutapp.app.data.NotificacionesStore.reset()
+                                cl.frutapp.app.data.CoachmarkStore.reset()
                                 TokenStore.clear()
                                 navigator.replaceAll(LoginScreen())
                             }

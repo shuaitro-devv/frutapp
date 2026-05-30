@@ -79,6 +79,10 @@ import cl.frutapp.app.navigation.shop.CartScreen
 import cl.frutapp.app.navigation.shop.MisFavoritosScreen
 import cl.frutapp.app.navigation.shop.ProductDetailScreen
 import cl.frutapp.app.ui.components.BrandWaveHeader
+import cl.frutapp.app.data.CoachmarkStore
+import cl.frutapp.app.ui.CoachmarkOverlay
+import cl.frutapp.app.ui.CoachmarkStep
+import cl.frutapp.app.ui.coachmarkTarget
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.components.ProductCard
@@ -117,6 +121,7 @@ class HomeScreen : Screen {
                 .onSuccess { dtos -> if (dtos.isNotEmpty()) destacados = dtos.map { it.toProducto() }.take(6) }
         }
 
+        Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             bottomBar = {
                 FrutBottomNav(
@@ -141,14 +146,14 @@ class HomeScreen : Screen {
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
-                item { HomeHeader(onFavoritos = { navigator.push(MisFavoritosScreen()) }, onNotificaciones = { navigator.push(NotificacionesScreen()) }, onCanastas = { navigator.push(MisCanastasScreen()) }) }
+                item { HomeHeader(modifier = Modifier.coachmarkTarget("header"), onFavoritos = { navigator.push(MisFavoritosScreen()) }, onNotificaciones = { navigator.push(NotificacionesScreen()) }, onCanastas = { navigator.push(MisCanastasScreen()) }, onBuscar = { navigator.push(cl.frutapp.app.navigation.catalog.BuscadorScreen()) }) }
                 item {
                     HeroCarousel(
                         onOfertas = { navigator.push(OfertasScreen()) },
                         onFrutCoins = { navigator.push(FrutCoinsScreen()) },
                         onCanastas = { navigator.push(MisCanastasScreen()) },
                         onReyVegetal = { navigator.push(cl.frutapp.app.navigation.rewards.ReyVegetalScreen()) },
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp).coachmarkTarget("hero")
                     )
                 }
                 item {
@@ -156,11 +161,11 @@ class HomeScreen : Screen {
                         onOfertas = { navigator.push(OfertasScreen()) },
                         onFrutCoins = { navigator.push(FrutCoinsScreen()) },
                         onRecicla = { navigator.push(ReciclaScreen()) },
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp).coachmarkTarget("quick_access")
                     )
                 }
                 item { SectionHeader("Categorías", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 4.dp), onVerTodo = { navigator.push(CatalogScreen()) }) }
-                item { CategoriesRow(modifier = Modifier.padding(vertical = 8.dp)) }
+                item { CategoriesRow(modifier = Modifier.padding(vertical = 8.dp).coachmarkTarget("categorias"), onCategoria = { cat -> navigator.push(cl.frutapp.app.navigation.catalog.BuscadorScreen(categoriaPrefiltro = cat)) }) }
                 item { SectionHeader("Productos destacados", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp), onVerTodo = { navigator.push(CatalogScreen()) }) }
                 items(destacados.chunked(2)) { fila ->
                     Row(
@@ -190,8 +195,43 @@ class HomeScreen : Screen {
             HomeBottomFruits()
             }
         }
+
+        // Tour de bienvenida (coachmark): renderizado FUERA del Scaffold para que el
+        // overlay oscuro cubra TODO (incluye la barra de navegación inferior y el botón
+        // carrito flotante). Solo el target del paso actual queda iluminado.
+        LaunchedEffect(Unit) { CoachmarkStore.maybeAutoStart() }
+        CoachmarkOverlay(HOME_TOUR_STEPS)
+        }
     }
 }
+
+private val HOME_TOUR_STEPS = listOf(
+    CoachmarkStep(
+        key = "header",
+        titulo = "¡Hola! Bienvenido a FrutApp",
+        texto = "Acá arriba tienes el buscador y tus accesos rápidos: favoritos, canastas y notificaciones."
+    ),
+    CoachmarkStep(
+        key = "hero",
+        titulo = "Promos y novedades",
+        texto = "Banner con ofertas, canastas listas para pedir y el Rey Vegetal del mes."
+    ),
+    CoachmarkStep(
+        key = "quick_access",
+        titulo = "Tu corazón verde",
+        texto = "Ofertas, FrutCoins y Recicla. Esto último es lo que nos hace distintos."
+    ),
+    CoachmarkStep(
+        key = "categorias",
+        titulo = "Explora por tipo",
+        texto = "Frutas, verduras, hierbas y orgánicos. Toca una para ver el catálogo filtrado."
+    ),
+    CoachmarkStep(
+        key = "cart",
+        titulo = "Tu carrito siempre a mano",
+        texto = "El botón flotante te lleva al carrito desde cualquier pantalla. ¡Listo para empezar!"
+    )
+)
 
 @Composable
 private fun BoxScope.HomeBottomFruits() {
@@ -228,11 +268,11 @@ private fun BoxScope.HomeLeaves() {
 }
 
 @Composable
-private fun HomeHeader(modifier: Modifier = Modifier, onFavoritos: () -> Unit = {}, onNotificaciones: () -> Unit = {}, onCanastas: () -> Unit = {}) {
+private fun HomeHeader(modifier: Modifier = Modifier, onFavoritos: () -> Unit = {}, onNotificaciones: () -> Unit = {}, onCanastas: () -> Unit = {}, onBuscar: () -> Unit = {}) {
     // Cabecera con ola verde de marca: saludo en blanco sobre el verde y la búsqueda montada
     // sobre la curva (mismo lenguaje visual que el onboarding).
     Box(modifier = modifier.fillMaxWidth()) {
-        BrandWaveHeader(modifier = Modifier.align(Alignment.TopCenter), height = 215.dp)
+        BrandWaveHeader(modifier = Modifier.align(Alignment.TopCenter), height = 180.dp)
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(start = 20.dp, end = 20.dp, top = 12.dp),
@@ -257,7 +297,7 @@ private fun HomeHeader(modifier: Modifier = Modifier, onFavoritos: () -> Unit = 
                 HeaderIcon(Icons.Default.Notifications, onClick = onNotificaciones, badge = cl.frutapp.app.data.NotificacionesStore.noLeidas)
             }
             Spacer(Modifier.height(18.dp))
-            SearchBarMock(modifier = Modifier.padding(horizontal = 20.dp))
+            SearchBarMock(onClick = onBuscar, modifier = Modifier.padding(horizontal = 20.dp))
             Spacer(Modifier.height(4.dp))
         }
     }
@@ -337,14 +377,14 @@ private fun QuickItem(
 }
 
 @Composable
-private fun SearchBarMock(modifier: Modifier = Modifier) {
+private fun SearchBarMock(onClick: () -> Unit = {}, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(50.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(FrutAppColors.Cream)
-            .clickable { }
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -500,22 +540,25 @@ private fun SectionHeader(title: String, modifier: Modifier = Modifier, onVerTod
     }
 }
 
-private data class CategoriaUi(val label: String, val imagen: DrawableResource)
+private data class CategoriaUi(val categoria: Categoria, val imagen: DrawableResource)
 
 @Composable
-private fun CategoriesRow(modifier: Modifier = Modifier) {
+private fun CategoriesRow(modifier: Modifier = Modifier, onCategoria: (Categoria) -> Unit = {}) {
     val categorias = listOf(
-        CategoriaUi(Categoria.FRUTAS.label, Res.drawable.manzana_roja),
-        CategoriaUi(Categoria.VERDURAS.label, Res.drawable.zanahoria),
-        CategoriaUi(Categoria.HIERBAS.label, Res.drawable.cilantro),
-        CategoriaUi("Orgánicos", Res.drawable.lechuga)
+        CategoriaUi(Categoria.FRUTAS, Res.drawable.manzana_roja),
+        CategoriaUi(Categoria.VERDURAS, Res.drawable.zanahoria),
+        CategoriaUi(Categoria.HIERBAS, Res.drawable.cilantro),
+        CategoriaUi(Categoria.ORGANICOS, Res.drawable.lechuga)
     )
     Row(
         modifier = modifier.fillMaxWidth().padding(horizontal = 20.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         categorias.forEach { cat ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.clickable { onCategoria(cat.categoria) }
+            ) {
                 Box(
                     modifier = Modifier
                         .size(68.dp)
@@ -525,13 +568,13 @@ private fun CategoriesRow(modifier: Modifier = Modifier) {
                 ) {
                     Image(
                         painter = painterResource(cat.imagen),
-                        contentDescription = cat.label,
+                        contentDescription = cat.categoria.label,
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.size(46.dp).padding(4.dp)
                     )
                 }
                 Text(
-                    text = cat.label,
+                    text = cat.categoria.label,
                     style = MaterialTheme.typography.labelMedium,
                     color = FrutAppColors.Ink,
                     modifier = Modifier.padding(top = 6.dp)
