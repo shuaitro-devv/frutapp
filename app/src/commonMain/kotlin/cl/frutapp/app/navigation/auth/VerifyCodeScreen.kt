@@ -138,7 +138,13 @@ class VerifyCodeScreen(private val email: String) : Screen {
                                 TokenStore.save(resp.accessToken, resp.refreshToken, resp.user)
                                 navigator.replaceAll(HomeScreen())
                             }
-                            .onFailure { error = "Código inválido o expirado. Revisa tu correo o reenvíalo." }
+                            .onFailure { e ->
+                                cl.frutapp.app.ui.ErrorReporter.report(screen = "VerifyCode", action = "verify_email", error = e)
+                                val msg = e.message.orEmpty().lowercase()
+                                error = if (msg.contains("400") || msg.contains("404") || msg.contains("invalid") || msg.contains("expired"))
+                                    "Código inválido o expirado. Revisa tu correo o reenvíalo."
+                                else cl.frutapp.app.ui.mensajeAmigable(e, "verificar el código")
+                            }
                         loading = false
                     }
                 },

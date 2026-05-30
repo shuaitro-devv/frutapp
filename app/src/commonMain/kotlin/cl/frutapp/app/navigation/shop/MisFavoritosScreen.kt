@@ -59,7 +59,13 @@ class MisFavoritosScreen : Screen {
         // (slug), para cubrir productos venidos de cualquiera de los dos orígenes.
         var catalogo by remember { mutableStateOf<Map<String, Producto>?>(null) }
         LaunchedEffect(Unit) {
-            val backend = runCatching { CatalogApi().products() }.getOrNull()?.map { it.toProducto() } ?: emptyList()
+            val backendResult = runCatching { CatalogApi().products() }
+            val backend = backendResult.getOrNull()?.map { it.toProducto() } ?: run {
+                backendResult.exceptionOrNull()?.let {
+                    cl.frutapp.app.ui.ErrorReporter.report(screen = "MisFavoritos", action = "load_catalog", error = it)
+                }
+                emptyList()
+            }
             catalogo = (backend + DemoCatalog.productos).associateBy { it.id }
         }
 

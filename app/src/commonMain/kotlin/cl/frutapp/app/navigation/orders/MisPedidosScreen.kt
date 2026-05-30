@@ -81,7 +81,10 @@ class MisPedidosScreen : Screen {
         LaunchedEffect(Unit) {
             runCatching { OrderApi().list() }
                 .onSuccess { pedidos = it }
-                .onFailure { error = true }
+                .onFailure { e ->
+                    cl.frutapp.app.ui.ErrorReporter.report(screen = "MisPedidos", action = "list_orders", error = e)
+                    error = true
+                }
         }
 
         val tabs = listOf("Todos", "En curso", "Completados", "Cancelados")

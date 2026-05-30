@@ -91,7 +91,14 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
             while (true) {
                 runCatching { OrderApi().get(orderId) }
                     .onSuccess { order = it }
-                    .onFailure { if (order == null) error = true }
+                    .onFailure { e ->
+                        // Solo reporta el primer fallo (sin order); los reintentos posteriores
+                        // son ruido de polling, no eventos de error que valga la pena loggear.
+                        if (order == null) {
+                            cl.frutapp.app.ui.ErrorReporter.report(screen = "OrderTracking", action = "get_order", error = e)
+                            error = true
+                        }
+                    }
                 if (order?.status in setOf("ENTREGADO", "CANCELADO", "DEVOLUCION")) break
                 delay(8000)
             }

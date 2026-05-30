@@ -80,7 +80,9 @@ class ProfileScreen : Screen {
         val navigator = LocalNavigator.currentOrThrow
         val user = TokenStore.user
         LaunchedEffect(Unit) {
-            runCatching { OrderApi().frutCoins() }.onSuccess { RewardsStore.set(it.balance) }
+            runCatching { OrderApi().frutCoins() }
+                .onSuccess { RewardsStore.set(it.balance) }
+                .onFailure { e -> cl.frutapp.app.ui.ErrorReporter.report(screen = "Profile", action = "load_frutcoins", error = e) }
         }
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {

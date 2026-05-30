@@ -172,8 +172,16 @@ class RegisterScreen : Screen {
                             .onSuccess {
                                 navigator.push(VerifyCodeScreen(email = email.trim()))
                             }
-                            .onFailure {
-                                error = "No pudimos crear la cuenta. Revisa el correo (puede estar registrado) y la contraseña (mín. 6, con letras y números)."
+                            .onFailure { e ->
+                                cl.frutapp.app.ui.ErrorReporter.report(screen = "Register", action = "register", error = e)
+                                val msg = e.message.orEmpty().lowercase()
+                                error = when {
+                                    msg.contains("409") || msg.contains("conflict") || msg.contains("already") ->
+                                        "Ese correo ya está registrado. Intenta iniciar sesión o recupera tu contraseña."
+                                    msg.contains("422") || msg.contains("validation") || msg.contains("invalid") ->
+                                        "Revisa los datos: el correo debe ser válido y la contraseña al menos 6 caracteres con letras y números."
+                                    else -> cl.frutapp.app.ui.mensajeAmigable(e, "crear la cuenta")
+                                }
                             }
                         loading = false
                     }

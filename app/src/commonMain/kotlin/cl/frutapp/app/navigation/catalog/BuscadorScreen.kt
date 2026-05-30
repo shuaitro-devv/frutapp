@@ -78,6 +78,7 @@ class BuscadorScreen(private val categoriaPrefiltro: Categoria? = null) : Screen
         LaunchedEffect(Unit) {
             runCatching { CatalogApi().products() }
                 .onSuccess { dtos -> if (dtos.isNotEmpty()) catalogo = dtos.map { it.toProducto() } }
+                .onFailure { e -> cl.frutapp.app.ui.ErrorReporter.report(screen = "Buscador", action = "load_catalog", error = e) }
             // Si la pantalla viene prefiltrada por una categoría no enfocamos el campo: el
             // usuario está navegando por categoría, no quería teclado a la cara.
             if (categoriaPrefiltro == null) focusRequester.requestFocus()

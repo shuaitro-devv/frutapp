@@ -92,7 +92,13 @@ class ResetPasswordScreen(private val email: String) : Screen {
                             )
                         }
                             .onSuccess { navigator.popUntilRoot() }
-                            .onFailure { error = "Código inválido o expirado. Pídelo de nuevo." }
+                            .onFailure { e ->
+                                cl.frutapp.app.ui.ErrorReporter.report(screen = "ResetPassword", action = "reset_password", error = e)
+                                val msg = e.message.orEmpty().lowercase()
+                                error = if (msg.contains("400") || msg.contains("404") || msg.contains("invalid") || msg.contains("expired"))
+                                    "Código inválido o expirado. Pídelo de nuevo."
+                                else cl.frutapp.app.ui.mensajeAmigable(e, "cambiar la contraseña")
+                            }
                         loading = false
                     }
                 }

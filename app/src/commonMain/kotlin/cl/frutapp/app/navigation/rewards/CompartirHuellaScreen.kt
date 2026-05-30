@@ -138,7 +138,8 @@ class CompartirHuellaScreen : Screen {
                                 runCatching {
                                     val bitmap = capture.toImageBitmap()
                                     shareImage(bitmap, caption)
-                                }.onFailure {
+                                }.onFailure { e ->
+                                    cl.frutapp.app.ui.ErrorReporter.report(screen = "CompartirHuella", action = "share_image", error = e)
                                     showToast("No pudimos preparar la imagen. Intenta de nuevo.")
                                 }
                                 compartiendo = false

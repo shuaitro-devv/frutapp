@@ -126,7 +126,8 @@ class CompartirCanastaScreen(private val canastaId: Int) : Screen {
                                 runCatching {
                                     val bitmap = capture.toImageBitmap()
                                     shareImage(bitmap, caption)
-                                }.onFailure {
+                                }.onFailure { e ->
+                                    cl.frutapp.app.ui.ErrorReporter.report(screen = "CompartirCanasta", action = "share_image", error = e)
                                     showToast("No pudimos preparar la imagen.")
                                 }
                                 compartiendo = false

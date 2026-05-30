@@ -88,7 +88,15 @@ class LoginScreen : Screen {
                                     TokenStore.save(resp.accessToken, resp.refreshToken, resp.user)
                                     navigator.replace(HomeScreen())
                                 }
-                                .onFailure { error = "No pudimos iniciar sesión. Revisa tu correo y contraseña." }
+                                .onFailure { e ->
+                                    cl.frutapp.app.ui.ErrorReporter.report(screen = "Login", action = "login", error = e)
+                                    // En Login un 401/422 es credencial mala (no "sesión expirada"). Mensaje
+                                    // de red/server pasa por mensajeAmigable.
+                                    val msg = e.message.orEmpty().lowercase()
+                                    error = if (msg.contains("401") || msg.contains("unauthorized") || msg.contains("422") || msg.contains("invalid"))
+                                        "Correo o contraseña incorrectos."
+                                    else cl.frutapp.app.ui.mensajeAmigable(e, "iniciar sesión")
+                                }
                             loading = false
                         }
                     }

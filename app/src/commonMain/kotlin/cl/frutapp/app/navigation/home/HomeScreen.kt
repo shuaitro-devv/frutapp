@@ -119,6 +119,7 @@ class HomeScreen : Screen {
         LaunchedEffect(Unit) {
             runCatching { CatalogApi().products() }
                 .onSuccess { dtos -> if (dtos.isNotEmpty()) destacados = dtos.map { it.toProducto() }.take(6) }
+                .onFailure { e -> cl.frutapp.app.ui.ErrorReporter.report(screen = "Home", action = "load_catalog", error = e) }
         }
 
         Box(modifier = Modifier.fillMaxSize()) {

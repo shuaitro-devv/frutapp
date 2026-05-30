@@ -38,6 +38,10 @@ minio-data/
 *.aab
 captures/
 keystores/
+keystore/
+*.jks
+*.keystore
+keystore.properties
 release/
 
 # Compose Multiplatform iOS (futuro)

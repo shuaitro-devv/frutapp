@@ -76,8 +76,12 @@ class CalificarPedidoScreen(private val items: List<OrderItemDto>) : Screen {
         val autor = TokenStore.user?.name?.takeIf { it.isNotBlank() } ?: "Tú"
 
         LaunchedEffect(Unit) {
-            val catalogo = runCatching { CatalogApi().products() }.getOrNull()
+            val catalogoResult = runCatching { CatalogApi().products() }
+            val catalogo = catalogoResult.getOrNull()
             if (catalogo == null) {
+                catalogoResult.exceptionOrNull()?.let {
+                    cl.frutapp.app.ui.ErrorReporter.report(screen = "CalificarPedido", action = "load_catalog", error = it)
+                }
                 error = true
                 return@LaunchedEffect
             }

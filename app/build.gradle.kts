@@ -1,8 +1,18 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.multiplatform)
+}
+
+// Carga credenciales de firma desde keystore.properties (fuera del repo). Si no existe,
+// release queda sin firmar (útil en CI/dev de otros). La keystore real solo vive en el
+// equipo que firma releases para Play / instalación demo.
+val keystoreProps = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
 }
 
 kotlin {
@@ -71,6 +81,17 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        if (keystoreProps.isNotEmpty()) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -81,7 +102,7 @@ android {
         release {
             isMinifyEnabled = false
             buildConfigField("String", "API_BASE_URL", "\"https://frutapp-api.grandline.cl\"")
-            // signingConfig se configura al firmar para release
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }
 

@@ -74,6 +74,7 @@ class CatalogScreen : Screen {
         LaunchedEffect(Unit) {
             runCatching { CatalogApi().products() }
                 .onSuccess { dtos -> if (dtos.isNotEmpty()) productos = dtos.map { it.toProducto() } }
+                .onFailure { e -> cl.frutapp.app.ui.ErrorReporter.report(screen = "Catalog", action = "load_catalog", error = e) }
         }
 
         val filtros = remember {

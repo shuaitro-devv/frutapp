@@ -77,10 +77,14 @@ class FrutCoinsScreen : Screen {
         val navigator = LocalNavigator.currentOrThrow
         var movimientos by remember { mutableStateOf<List<FrutCoinsEntryDto>>(emptyList()) }
         LaunchedEffect(Unit) {
-            runCatching { OrderApi().frutCoins() }.onSuccess {
-                RewardsStore.set(it.balance)
-                movimientos = it.movimientos
-            }
+            runCatching { OrderApi().frutCoins() }
+                .onSuccess {
+                    RewardsStore.set(it.balance)
+                    movimientos = it.movimientos
+                }
+                .onFailure { e ->
+                    cl.frutapp.app.ui.ErrorReporter.report(screen = "FrutCoins", action = "load_balance", error = e)
+                }
         }
         val ganar = listOf(
             FormaGanar(Icons.Filled.ShoppingCart, "Por cada compra", "+50"),

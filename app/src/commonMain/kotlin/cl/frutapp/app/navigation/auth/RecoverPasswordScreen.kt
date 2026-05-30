@@ -70,7 +70,10 @@ class RecoverPasswordScreen : Screen {
                         scope.launch {
                             runCatching { AuthApi().forgotPassword(ForgotPasswordRequest(email = correo)) }
                                 .onSuccess { navigator.push(ResetPasswordScreen(email = correo)) }
-                                .onFailure { error = "No pudimos enviar el código. Intenta de nuevo." }
+                                .onFailure { e ->
+                                    cl.frutapp.app.ui.ErrorReporter.report(screen = "RecoverPassword", action = "forgot_password", error = e)
+                                    error = cl.frutapp.app.ui.mensajeAmigable(e, "enviar el código")
+                                }
                             loading = false
                         }
                     }
