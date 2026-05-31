@@ -37,12 +37,16 @@ object DatabaseFactory {
             // Robustez contra conexiones muertas tras horas idle (firewall / NAT /
             // Postgres timeout). Sin esto, la primera request del día agarra una
             // conexión cerrada del lado server y falla; la segunda anda.
-            connectionTestQuery = "SELECT 1"
+            // Postgres es JDBC4 — Hikari valida con Connection.isValid() nativo,
+            // sin necesidad de connectionTestQuery (la docs de Hikari recomienda
+            // NO setearlo en drivers JDBC4).
             keepaliveTime = 60_000           // ping cada 60s a conexiones idle
             maxLifetime = 600_000            // recicla conexiones cada 10 min
             idleTimeout = 300_000            // cierra idle > 5 min
-            validationTimeout = 5_000
-            connectionTimeout = 10_000
+            // En CI con Testcontainers, Postgres puede tardar unos segundos extra
+            // tras reportar "ready" antes de aceptar conexiones reales. Le damos
+            // hasta 30s para inicializar el pool en lugar de fallar al primer try.
+            initializationFailTimeout = 30_000
             validate()
         }
         return HikariDataSource(hikariConfig)
