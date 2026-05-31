@@ -34,6 +34,15 @@ object DatabaseFactory {
             maximumPoolSize = config.maxPoolSize
             isAutoCommit = false
             transactionIsolation = "TRANSACTION_REPEATABLE_READ"
+            // Robustez contra conexiones muertas tras horas idle (firewall / NAT /
+            // Postgres timeout). Sin esto, la primera request del día agarra una
+            // conexión cerrada del lado server y falla; la segunda anda.
+            connectionTestQuery = "SELECT 1"
+            keepaliveTime = 60_000           // ping cada 60s a conexiones idle
+            maxLifetime = 600_000            // recicla conexiones cada 10 min
+            idleTimeout = 300_000            // cierra idle > 5 min
+            validationTimeout = 5_000
+            connectionTimeout = 10_000
             validate()
         }
         return HikariDataSource(hikariConfig)

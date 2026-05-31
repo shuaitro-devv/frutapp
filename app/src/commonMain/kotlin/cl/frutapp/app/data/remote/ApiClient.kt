@@ -6,6 +6,7 @@ import cl.frutapp.shared.dto.RefreshRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ClientRequestException
+import io.ktor.client.plugins.HttpRequestRetry
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.HttpSend
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -68,6 +69,19 @@ object ApiClient {
         // mensajeAmigable. Con expectSuccess, status no-2xx lanza ClientRequestException
         // cuyo .message contiene "401 Unauthorized" / "422 Unprocessable Entity" / etc.
         expectSuccess = true
+        // Retry para errores transient — backend con pool de Postgres dormido o Traefik
+        // con cold start a veces falla el primer request y el segundo anda. Reintentamos
+        // solo errores de red, timeouts y 5xx; NUNCA 4xx (un 401 de login NO se reintenta,
+        // el usuario tipeó mal la clave). 2 reintentos con backoff 1s/2s.
+        install(HttpRequestRetry) {
+            // Con expectSuccess, 5xx llega como ServerResponseException; 4xx como
+            // ClientRequestException. Retry para TODO menos 4xx (no reintentamos
+            // credenciales inválidas ni datos malos del cliente).
+            retryOnExceptionIf(maxRetries = 2) { _, cause ->
+                cause !is ClientRequestException
+            }
+            exponentialDelay(base = 2.0, maxDelayMs = 4_000)
+        }
         // Adjunta el access token (JWT) en cada request si hay sesión (se lee en tiempo de request).
         defaultRequest {
             TokenStore.accessToken?.let { header(HttpHeaders.Authorization, "Bearer $it") }
