@@ -100,7 +100,7 @@ class MisPedidosScreen : Screen {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Mis pedidos", color = FrutAppColors.Brand800, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Text("Ayuda", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { })
+                    Text("Ayuda", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { navigator.push(cl.frutapp.app.navigation.profile.AyudaScreen()) })
                 }
 
                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

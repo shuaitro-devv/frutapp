@@ -52,6 +52,12 @@ object TokenStore {
         SessionStorage.putString(K_REFRESH, refresh)
     }
 
+    /** Actualiza solo el perfil del usuario (al editar nombre/teléfono); mantiene tokens. */
+    fun updateUser(user: UserDto) {
+        this.user = user
+        SessionStorage.putString(K_USER, json.encodeToString(UserDto.serializer(), user))
+    }
+
     fun clear() {
         accessToken = null
         refreshToken = null

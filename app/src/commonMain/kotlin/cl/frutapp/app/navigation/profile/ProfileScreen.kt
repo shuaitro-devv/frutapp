@@ -62,13 +62,13 @@ import cl.frutapp.app.navigation.canastas.MisCanastasScreen
 import cl.frutapp.app.navigation.legal.LegalDocScreen
 import cl.frutapp.app.navigation.rewards.FrutCoinsScreen
 import cl.frutapp.app.navigation.rewards.HuellaVerdeScreen
-import cl.frutapp.app.ui.comingSoon
+import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.theme.FrutAppColors
 
-private data class MenuItem(val icon: ImageVector, val label: String, val onClick: () -> Unit = {})
+private data class MenuItem(val icon: ImageVector, val label: String, val proximamente: Boolean = false, val onClick: () -> Unit = {})
 
 /**
  * Perfil (mockup 16): datos del usuario (reales, desde [TokenStore]), badge de FrutCoins,
@@ -103,6 +103,7 @@ class ProfileScreen : Screen {
                         telefono = user?.phone,
                         onFrutCoins = { navigator.push(FrutCoinsScreen()) },
                         onHuella = { navigator.push(HuellaVerdeScreen()) },
+                        onEditarPerfil = { navigator.push(EditarPerfilScreen()) },
                         modifier = Modifier.padding(horizontal = 20.dp)
                     )
 
@@ -113,14 +114,14 @@ class ProfileScreen : Screen {
                             MenuItem(Icons.Filled.ShoppingBasket, "Mis canastas", onClick = { navigator.push(MisCanastasScreen()) }),
                             MenuItem(Icons.Filled.Place, "Direcciones", onClick = { navigator.push(DireccionesScreen()) }),
                             MenuItem(Icons.Filled.CreditCard, "Métodos de pago", onClick = { navigator.push(MetodosPagoScreen()) }),
-                            MenuItem(Icons.Filled.Link, "Cuentas vinculadas", onClick = { comingSoon() })
+                            MenuItem(Icons.Filled.Link, "Cuentas vinculadas", proximamente = true, onClick = { showToast("Login con Google y Apple disponible próximamente") })
                         )
                     )
                     MenuSection(
                         "Preferencias",
                         listOf(
-                            MenuItem(Icons.Filled.Notifications, "Notificaciones", onClick = { comingSoon() }),
-                            MenuItem(Icons.Filled.Language, "Idioma", onClick = { comingSoon() })
+                            MenuItem(Icons.Filled.Notifications, "Notificaciones", onClick = { navigator.push(NotificacionesPrefsScreen()) }),
+                            MenuItem(Icons.Filled.Language, "Idioma", proximamente = true, onClick = { showToast("Por ahora la app está disponible en español") })
                         )
                     )
                     MenuSection(
@@ -179,7 +180,7 @@ class ProfileScreen : Screen {
 }
 
 @Composable
-private fun UserCard(nombre: String, email: String, telefono: String?, onFrutCoins: () -> Unit, onHuella: () -> Unit, modifier: Modifier = Modifier) {
+private fun UserCard(nombre: String, email: String, telefono: String?, onFrutCoins: () -> Unit, onHuella: () -> Unit, onEditarPerfil: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier.fillMaxWidth().background(FrutAppColors.Brand50, RoundedCornerShape(18.dp)).padding(16.dp)
     ) {
@@ -203,7 +204,7 @@ private fun UserCard(nombre: String, email: String, telefono: String?, onFrutCoi
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Editar perfil", color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { comingSoon() })
+            Text("Editar perfil", color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable(onClick = onEditarPerfil))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // Chip de racha verde (entry point sutil a Mi huella verde).
                 Box(
@@ -240,7 +241,15 @@ private fun MenuSection(titulo: String, items: List<MenuItem>) {
                     Icon(item.icon, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(20.dp))
                 }
                 Text(item.label, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f).padding(start = 12.dp))
-                Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = FrutAppColors.InkSoft, modifier = Modifier.size(20.dp))
+                if (item.proximamente) {
+                    Box(
+                        modifier = Modifier.background(FrutAppColors.Brand50, RoundedCornerShape(10.dp)).padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text("Próximamente", color = FrutAppColors.Brand600, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = FrutAppColors.InkSoft, modifier = Modifier.size(20.dp))
+                }
             }
         }
     }

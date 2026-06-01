@@ -106,7 +106,7 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
             Column(modifier = Modifier.fillMaxSize()) {
-                TrackTopBar(onBack = { navigator.pop() })
+                TrackTopBar(onBack = { navigator.pop() }, onAyuda = { navigator.push(cl.frutapp.app.navigation.profile.AyudaScreen()) })
 
                 val o = order
                 when {
@@ -295,7 +295,7 @@ private fun pasosFor(status: String): List<Paso> {
 }
 
 @Composable
-private fun TrackTopBar(onBack: () -> Unit) {
+private fun TrackTopBar(onBack: () -> Unit, onAyuda: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -307,7 +307,7 @@ private fun TrackTopBar(onBack: () -> Unit) {
             Icon(Icons.Filled.ArrowBack, contentDescription = "Volver", tint = FrutAppColors.Ink, modifier = Modifier.size(20.dp))
         }
         Text("Seguimiento de pedido", color = FrutAppColors.Brand800, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 12.dp).weight(1f))
-        Text("Ayuda", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { })
+        Text("Ayuda", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable(onClick = onAyuda))
     }
 }
 

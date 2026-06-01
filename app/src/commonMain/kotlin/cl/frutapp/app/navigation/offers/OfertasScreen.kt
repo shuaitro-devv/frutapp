@@ -104,7 +104,7 @@ class OfertasScreen : Screen {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Ofertas", color = FrutAppColors.Brand800, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Text("Ayuda", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { comingSoon() })
+                    Text("Ayuda", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { navigator.push(cl.frutapp.app.navigation.profile.AyudaScreen()) })
                 }
 
                 LazyColumn(modifier = Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp)) {
