@@ -117,9 +117,14 @@ private val ORGANIC_IMAGE_KEYS = setOf(
     "huevos", "miel"
 )
 
-/** Convierte el DTO del backend al modelo de UI que ya usa el Home. */
+/**
+ * Convierte el DTO del backend al modelo de UI. Usamos `slug` como id local en vez del
+ * UUID porque slug es estable y human-readable — los Packs de Ofertas y el
+ * DemoCatalog usan slugs como identificadores. CheckoutScreen detecta si el id no es
+ * UUID y hace lookup por nombre antes de enviar a la API.
+ */
 fun ProductDto.toProducto(): Producto = Producto(
-    id = id,
+    id = slug,
     nombre = name,
     precioClp = priceClp,
     unidad = unit,

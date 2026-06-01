@@ -191,7 +191,7 @@ class ProductDetailScreen(
                         BenefitCard(Icons.Filled.Favorite, "Antioxidantes", Modifier.weight(1f))
                     }
                 }
-                item { ReviewsSection(producto, onVerTodas = { comingSoon() }) }
+                item { ReviewsSection(producto, onVerTodas = { navigator.push(ResenasScreen(producto.id, producto.nombre)) }) }
                 item {
                     SectionTitle("También te puede gustar", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 10.dp))
                 }
@@ -675,7 +675,7 @@ private fun StarSelector(rating: Int, onRating: (Int) -> Unit) {
 }
 
 @Composable
-private fun StarRow(rating: Double, starSize: Dp) {
+internal fun StarRow(rating: Double, starSize: Dp) {
     Row {
         for (i in 1..5) {
             val icon = when {
@@ -689,7 +689,7 @@ private fun StarRow(rating: Double, starSize: Dp) {
 }
 
 @Composable
-private fun ReviewCard(r: Resena, onEditar: (() -> Unit)? = null) {
+internal fun ReviewCard(r: Resena, onEditar: (() -> Unit)? = null) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
             .background(FrutAppColors.Brand50, RoundedCornerShape(14.dp)).padding(14.dp)

@@ -116,7 +116,13 @@ class FrutCoinsScreen : Screen {
 
                     SectionTitle("Canjea tus FrutCoins", Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
                     Column(modifier = Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        recompensas.forEach { RecompensaCard(it, RewardsStore.balance) }
+                        recompensas.forEach { r ->
+                            RecompensaCard(
+                                item = r,
+                                balance = RewardsStore.balance,
+                                onCanjear = { navigator.push(CanjearScreen(r.titulo, r.costo)) }
+                            )
+                        }
                     }
 
                     SectionTitle("Desafíos FrutCoins", Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
@@ -238,7 +244,7 @@ private fun GanarRow(item: FormaGanar) {
 }
 
 @Composable
-private fun RecompensaCard(item: Recompensa, balance: Int) {
+private fun RecompensaCard(item: Recompensa, balance: Int, onCanjear: () -> Unit) {
     val alcanza = balance >= item.costo
     Row(
         modifier = Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp))
@@ -258,10 +264,15 @@ private fun RecompensaCard(item: Recompensa, balance: Int) {
             Box(
                 modifier = Modifier
                     .background(if (alcanza) FrutAppColors.Brand400 else FrutAppColors.Brand100, RoundedCornerShape(12.dp))
-                    .clickable { comingSoon() }
+                    .clickable(enabled = alcanza, onClick = onCanjear)
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                Text("Canjear", color = if (alcanza) Color.White else FrutAppColors.InkSoft, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (alcanza) "Canjear" else "Te faltan",
+                    color = if (alcanza) Color.White else FrutAppColors.InkSoft,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }

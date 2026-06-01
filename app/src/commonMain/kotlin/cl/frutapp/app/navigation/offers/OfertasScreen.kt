@@ -64,7 +64,13 @@ private data class Oferta(val producto: Producto, val descuento: Int) {
     val precioOferta: Int get() = (producto.precioClp * (100 - descuento) / 100)
 }
 
-private data class Pack(val nombre: String, val detalle: String, val precio: Int, val antes: Int)
+data class Pack(
+    val nombre: String,
+    val detalle: String,
+    val precio: Int,
+    val antes: Int,
+    val productosIds: List<String>
+)
 
 /**
  * Ofertas (mockup 17): banner hero, ofertas destacadas con descuento, countdown de
@@ -92,8 +98,20 @@ class OfertasScreen : Screen {
             }
         }
         val packs = listOf(
-            Pack("Pack Saludable", "5 frutas + 3 verduras de temporada", 8990, 11990),
-            Pack("Pack Familiar", "Canasta semanal para 4 personas", 18990, 24990)
+            Pack(
+                nombre = "Pack Saludable",
+                detalle = "5 frutas + 3 verduras de temporada",
+                precio = 8990,
+                antes = 11990,
+                productosIds = listOf("manzana-roja", "platano", "naranja", "kiwi", "frutilla", "lechuga", "zanahoria", "tomate")
+            ),
+            Pack(
+                nombre = "Pack Familiar",
+                detalle = "Canasta semanal para 4 personas",
+                precio = 18990,
+                antes = 24990,
+                productosIds = listOf("palta-hass", "manzana-roja", "naranja", "platano", "sandia", "lechuga", "tomate", "papa", "cebolla", "zanahoria", "brocoli", "huevos")
+            )
         )
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
@@ -134,7 +152,7 @@ class OfertasScreen : Screen {
                     }
                     item { LimitedOffer(modifier = Modifier.padding(20.dp)) }
                     item { SectionTitle("Packs con descuento", Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 6.dp)) }
-                    items(packs.size) { i -> PackCard(packs[i]) }
+                    items(packs.size) { i -> PackCard(packs[i], onClick = { navigator.push(PackDetailScreen(packs[i])) }) }
                 }
 
                 FrutBottomNav(selected = FrutTab.INICIO, onSelect = { navigator.popUntilRoot() })
@@ -241,11 +259,11 @@ private fun LimitedOffer(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun PackCard(pack: Pack) {
+private fun PackCard(pack: Pack, onClick: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)
             .background(FrutAppColors.Brand50, RoundedCornerShape(16.dp))
-            .clickable { comingSoon() }
+            .clickable(onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

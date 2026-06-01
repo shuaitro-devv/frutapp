@@ -16,6 +16,15 @@ object RewardsStore {
         balance = value
     }
 
+    /**
+     * Resta `amount` del balance (canje de recompensa). Cliente-only por ahora — cuando
+     * el backend tenga POST /v1/frutcoins/redeem, llamamos primero y solo si responde
+     * 200 actualizamos acá.
+     */
+    fun spend(amount: Int) {
+        balance = (balance - amount).coerceAtLeast(0)
+    }
+
     /** Al cerrar sesión. */
     fun reset() {
         balance = 0
