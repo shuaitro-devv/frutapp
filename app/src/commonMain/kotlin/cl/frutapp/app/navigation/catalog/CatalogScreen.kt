@@ -152,13 +152,18 @@ class CatalogScreen : Screen {
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             fila.forEach { p ->
+                                val defGramos = if (p.unidad == "kg") 1000 else null
+                                val linea = CartStore.items.firstOrNull { it.producto.id == p.id && it.gramos == defGramos }
                                 ProductCard(
                                     name = p.nombre,
                                     price = formatClp(p.precioClp),
                                     image = p.imagen,
                                     unit = p.unidad,
-                                    onAdd = { CartStore.add(p, 1, if (p.unidad == "kg") 1000 else null) },
+                                    onAdd = { CartStore.add(p, 1, defGramos) },
                                     onClick = { navigator.push(ProductDetailScreen(p)) },
+                                    quantity = linea?.cantidad ?: 0,
+                                    onIncrement = { CartStore.add(p, 1, defGramos) },
+                                    onDecrement = { linea?.let { CartStore.setCantidad(it, it.cantidad - 1) } },
                                     modifier = Modifier.weight(1f)
                                 )
                             }
