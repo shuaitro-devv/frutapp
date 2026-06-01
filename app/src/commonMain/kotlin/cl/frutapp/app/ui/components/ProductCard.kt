@@ -74,10 +74,6 @@ fun ProductCard(
     onIncrement: () -> Unit = onAdd,
     onDecrement: () -> Unit = {}
 ) {
-    val scope = rememberCoroutineScope()
-    val addScale = remember { Animatable(1f) }
-    var added by remember { mutableStateOf(false) }
-    var addJob by remember { mutableStateOf<Job?>(null) }
     Card(
         modifier = modifier.clickable(onClick = onClick),
         shape = FrutAppShapes.large,
@@ -127,73 +123,14 @@ fun ProductCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                if (quantity <= 0) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .scale(addScale.value)
-                            .background(if (added) FrutAppColors.Brand600 else FrutAppColors.Brand400, CircleShape)
-                            .clickable {
-                                onAdd()
-                                showToast("Agregado al carrito")
-                                addJob?.cancel()
-                                addJob = scope.launch {
-                                    added = true
-                                    addScale.animateTo(0.8f, tween(90))
-                                    addScale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
-                                    delay(550)
-                                    added = false
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = if (added) Icons.Default.Check else Icons.Default.Add,
-                            contentDescription = "Agregar",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier
-                            .scale(addScale.value)
-                            .height(36.dp)
-                            .background(FrutAppColors.Brand400, RoundedCornerShape(18.dp)),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        StepBtn(Icons.Default.Remove, "Quitar uno", onDecrement)
-                        Text(
-                            "$quantity",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 3.dp)
-                        )
-                        StepBtn(Icons.Default.Add, "Agregar uno") {
-                            onIncrement()
-                            addJob?.cancel()
-                            addJob = scope.launch {
-                                addScale.animateTo(0.85f, tween(80))
-                                addScale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
-                            }
-                        }
-                    }
-                }
+                QuantityStepper(
+                    quantity = quantity,
+                    onAdd = onAdd,
+                    onIncrement = onIncrement,
+                    onDecrement = onDecrement
+                )
             }
         }
     }
 }
 
-@Composable
-private fun StepBtn(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(30.dp)
-            .clip(CircleShape)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(icon, contentDescription = desc, tint = Color.White, modifier = Modifier.size(16.dp))
-    }
-}

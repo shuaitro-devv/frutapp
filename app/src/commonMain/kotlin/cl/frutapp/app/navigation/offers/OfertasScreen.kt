@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
+import cl.frutapp.app.ui.components.QuantityStepper
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -231,35 +232,13 @@ private fun OfferCard(oferta: Oferta, modifier: Modifier = Modifier, onClick: ()
             val defGramos = if (p.unidad == "kg") 1000 else null
             val pConDesc = p.copy(precioClp = oferta.precioOferta)
             val linea = CartStore.items.firstOrNull { it.producto.id == p.id && it.gramos == defGramos }
-            val cantidad = linea?.cantidad ?: 0
-            if (cantidad <= 0) {
-                Box(
-                    modifier = Modifier.size(34.dp).background(FrutAppColors.Brand400, CircleShape)
-                        .clickable { CartStore.add(pConDesc, 1, defGramos) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = "Agregar", tint = Color.White, modifier = Modifier.size(20.dp))
-                }
-            } else {
-                Row(
-                    modifier = Modifier.height(34.dp).background(FrutAppColors.Brand400, RoundedCornerShape(17.dp)),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier.size(34.dp).clickable { linea?.let { CartStore.setCantidad(it, it.cantidad - 1) } },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Filled.Remove, contentDescription = "Quitar uno", tint = Color.White, modifier = Modifier.size(18.dp))
-                    }
-                    Text("$cantidad", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
-                    Box(
-                        modifier = Modifier.size(34.dp).clickable { CartStore.add(pConDesc, 1, defGramos) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Filled.Add, contentDescription = "Agregar uno", tint = Color.White, modifier = Modifier.size(18.dp))
-                    }
-                }
-            }
+            QuantityStepper(
+                quantity = linea?.cantidad ?: 0,
+                onAdd = { CartStore.add(pConDesc, 1, defGramos) },
+                onIncrement = { CartStore.add(pConDesc, 1, defGramos) },
+                onDecrement = { linea?.let { CartStore.setCantidad(it, it.cantidad - 1) } },
+                size = 34.dp
+            )
         }
     }
 }
