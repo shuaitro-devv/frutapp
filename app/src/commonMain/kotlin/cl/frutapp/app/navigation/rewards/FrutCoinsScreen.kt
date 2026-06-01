@@ -104,7 +104,7 @@ class FrutCoinsScreen : Screen {
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
             Column(modifier = Modifier.fillMaxSize()) {
-                TopBar(onBack = { navigator.pop() })
+                TopBar(onBack = { navigator.pop() }, onHistorial = { navigator.push(HistorialCoinsScreen()) })
 
                 Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                     Balance(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
@@ -156,7 +156,7 @@ class FrutCoinsScreen : Screen {
 }
 
 @Composable
-private fun TopBar(onBack: () -> Unit) {
+private fun TopBar(onBack: () -> Unit, onHistorial: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -168,7 +168,7 @@ private fun TopBar(onBack: () -> Unit) {
             Icon(Icons.Filled.ArrowBack, contentDescription = "Volver", tint = FrutAppColors.Ink, modifier = Modifier.size(20.dp))
         }
         Text("FrutCoins", color = FrutAppColors.Brand800, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 12.dp).weight(1f))
-        Text("Historial", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { comingSoon() })
+        Text("Historial", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable(onClick = onHistorial))
     }
 }
 
@@ -278,7 +278,7 @@ private fun RecompensaCard(item: Recompensa, balance: Int, onCanjear: () -> Unit
     }
 }
 
-private fun motivoLabel(motivo: String): String = when (motivo) {
+internal fun motivoLabel(motivo: String): String = when (motivo) {
     "COMPRA" -> "Compra"
     "CANJE" -> "Canje"
     "REEMBOLSO" -> "Reembolso"
@@ -287,7 +287,7 @@ private fun motivoLabel(motivo: String): String = when (motivo) {
 }
 
 @Composable
-private fun MovimientoRow(item: FrutCoinsEntryDto) {
+internal fun MovimientoRow(item: FrutCoinsEntryDto) {
     val positivo = item.delta >= 0
     Row(
         modifier = Modifier.fillMaxWidth().background(FrutAppColors.Brand50, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
