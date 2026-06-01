@@ -31,6 +31,9 @@ enum class Categoria(val label: String) {
     FRUTAS("Frutas"),
     VERDURAS("Verduras"),
     HIERBAS("Hierbas"),
+    DESPENSA("Despensa"),
+    // ORGANICOS no es una categoría de DB — es un filtro transversal que aplica el flag
+    // producto.organico. Lo dejamos en el enum por compatibilidad con el chip del Home.
     ORGANICOS("Orgánicos")
 }
 
