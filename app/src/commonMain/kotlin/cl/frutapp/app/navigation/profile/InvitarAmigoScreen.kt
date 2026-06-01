@@ -38,7 +38,6 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.ui.components.FrutButtonPrimary
-import cl.frutapp.app.ui.shareText
 import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
 
@@ -53,8 +52,6 @@ class InvitarAmigoScreen : Screen {
             val base = user?.name?.substringBefore(' ')?.filter { it.isLetter() }?.uppercase()?.take(6)
             "FRUT-" + (base?.ifBlank { null } ?: "AMIGO")
         }
-        val mensaje = "¡Únete a FrutApp! Frutas y verduras frescas de la feria, directo a tu casa. " +
-            "Usa mi código $code en tu registro y ganamos FrutCoins los dos. 🍎"
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -112,7 +109,7 @@ class InvitarAmigoScreen : Screen {
                     }
 
                     Box(modifier = Modifier.padding(top = 16.dp)) {
-                        FrutButtonPrimary(text = "Compartir invitación", onClick = { shareText(mensaje) })
+                        FrutButtonPrimary(text = "Compartir invitación", onClick = { navigator.push(CompartirInvitacionScreen(code)) })
                     }
 
                     // Cómo funciona

@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -49,6 +51,16 @@ class SplashScreen : Screen {
         val navigator = LocalNavigator.currentOrThrow
         val scale = remember { Animatable(0.8f) }
         val alpha = remember { Animatable(0f) }
+        // Guard: si BiometricAuth invoca onSuccess/onError más de una vez (algunas
+        // implementaciones lo hacen) o si el LaunchedEffect se reinicia, navegar dos
+        // veces a la misma Screen rompe Voyager con
+        // "Key cl.frutapp.app.navigation.auth.LoginScreen:transition was used multiple times".
+        // El State sobrevive recomposiciones pero se resetea si la pantalla se recrea
+        // por completo (intencional: en ese caso reiniciamos el flujo de splash).
+        var navigated by remember { mutableStateOf(false) }
+        fun goOnce(action: () -> Unit) {
+            if (!navigated) { navigated = true; action() }
+        }
 
         LaunchedEffect(Unit) {
             alpha.animateTo(1f, tween(600))
@@ -56,13 +68,13 @@ class SplashScreen : Screen {
             delay(1200)
             when {
                 // Sin sesión → onboarding (intro), que al terminar lleva a Login.
-                !TokenStore.isLoggedIn -> navigator.replace(OnboardingScreen())
+                !TokenStore.isLoggedIn -> goOnce { navigator.replace(OnboardingScreen()) }
                 // Con sesión pero sin huella disponible → Home directo (no bloquear).
-                !BiometricAuth.isAvailable() -> navigator.replace(HomeScreen())
+                !BiometricAuth.isAvailable() -> goOnce { navigator.replace(HomeScreen()) }
                 // Con sesión + huella → pedir huella; al cancelar/fallar, fallback a Login.
                 else -> BiometricAuth.authenticate(
-                    onSuccess = { navigator.replace(HomeScreen()) },
-                    onError = { navigator.replace(LoginScreen()) }
+                    onSuccess = { goOnce { navigator.replace(HomeScreen()) } },
+                    onError = { goOnce { navigator.replace(LoginScreen()) } }
                 )
             }
         }
