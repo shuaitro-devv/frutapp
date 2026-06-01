@@ -3,6 +3,7 @@ package cl.frutapp.app.ui
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -20,6 +21,17 @@ fun initToast(context: Context) {
 
 actual fun showToast(message: String) {
     appCtx?.let { Toast.makeText(it, message, Toast.LENGTH_SHORT).show() }
+}
+
+actual fun openUrl(url: String) {
+    val ctx = appCtx ?: return
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    // Si no hay app que lo maneje (ej. mailto sin cliente), evitamos el ActivityNotFoundException.
+    runCatching { ctx.startActivity(intent) }.onFailure {
+        showToast("No encontramos una app para abrir esto.")
+    }
 }
 
 actual fun shareText(text: String) {

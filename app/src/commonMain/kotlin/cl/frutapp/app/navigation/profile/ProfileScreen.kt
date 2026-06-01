@@ -93,7 +93,7 @@ class ProfileScreen : Screen {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Perfil", color = FrutAppColors.Brand800, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Text("Ayuda", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { comingSoon() })
+                    Text("Ayuda", color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { navigator.push(AyudaScreen()) })
                 }
 
                 Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
@@ -126,7 +126,7 @@ class ProfileScreen : Screen {
                     MenuSection(
                         "Más opciones",
                         listOf(
-                            MenuItem(Icons.Filled.SupportAgent, "Ayuda", onClick = { comingSoon() }),
+                            MenuItem(Icons.Filled.SupportAgent, "Ayuda", onClick = { navigator.push(AyudaScreen()) }),
                             MenuItem(Icons.Filled.Slideshow, "Ver intro", onClick = { navigator.push(OnboardingScreen(desdeSplash = false)) }),
                             MenuItem(Icons.Filled.Info, "Ver tutorial del home", onClick = {
                                 cl.frutapp.app.data.CoachmarkStore.reset()

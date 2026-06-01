@@ -9,6 +9,12 @@ expect fun showToast(message: String)
 expect fun shareText(text: String)
 
 /**
+ * Abre una URL en la app que el sistema asocie (https → navegador, tel: → marcador,
+ * mailto: → mail, https://wa.me/... → WhatsApp). En Android: Intent.ACTION_VIEW.
+ */
+expect fun openUrl(url: String)
+
+/**
  * Comparte una imagen (con caption opcional) usando el menú nativo de compartir.
  * En Android: escribe a cache + FileProvider + Intent.ACTION_SEND con MIME image/png.
  * @param chooserTitle texto que aparece en el header del selector del sistema (default
