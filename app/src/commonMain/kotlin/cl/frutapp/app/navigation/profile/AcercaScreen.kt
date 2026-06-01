@@ -55,9 +55,8 @@ class AcercaScreen : Screen {
         val navigator = LocalNavigator.currentOrThrow
 
         val equipo = listOf(
-            IntegranteEquipo("Sebastián Huaitro", "Jefe TI · CTO", "S"),
-            IntegranteEquipo("Mauricio González", "Comercial · Ventas", "M"),
-            IntegranteEquipo("Diego Calabuig", "Logística · Operaciones", "D")
+            IntegranteEquipo("Sebastián Huaitro", "Co-Founder", "S"),
+            IntegranteEquipo("Mauricio González", "Co-Founder", "M")
         )
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
