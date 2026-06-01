@@ -166,7 +166,12 @@ class HomeScreen : Screen {
                     )
                 }
                 item { SectionHeader("Categorías", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 4.dp), onVerTodo = { navigator.push(CatalogScreen()) }) }
-                item { CategoriesRow(modifier = Modifier.padding(vertical = 8.dp).coachmarkTarget("categorias"), onCategoria = { cat -> navigator.push(cl.frutapp.app.navigation.catalog.BuscadorScreen(categoriaPrefiltro = cat)) }) }
+                item { CategoriesRow(modifier = Modifier.padding(vertical = 8.dp).coachmarkTarget("categorias"), onCategoria = { cat ->
+                    // El chip "Orgánicos" filtra cross-categoría por flag producto.organico;
+                    // los demás filtran por categoría exacta.
+                    if (cat == Categoria.ORGANICOS) navigator.push(cl.frutapp.app.navigation.catalog.BuscadorScreen(soloOrganicos = true))
+                    else navigator.push(cl.frutapp.app.navigation.catalog.BuscadorScreen(categoriaPrefiltro = cat))
+                }) }
                 item { SectionHeader("Productos destacados", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp), onVerTodo = { navigator.push(CatalogScreen()) }) }
                 items(destacados.chunked(2)) { fila ->
                     Row(

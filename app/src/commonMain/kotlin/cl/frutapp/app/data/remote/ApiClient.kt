@@ -5,6 +5,7 @@ import cl.frutapp.shared.dto.AuthResponse
 import cl.frutapp.shared.dto.RefreshRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.network.sockets.ConnectTimeoutException
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.HttpRequestRetry
 import io.ktor.client.plugins.HttpTimeout
@@ -41,10 +42,15 @@ object ApiClient {
     }
     private val refreshMutex = Mutex()
 
-    /** Intenta refrescar el access token con el refresh token. Devuelve el nuevo access o null. */
+    /**
+     * Intenta refrescar el access token con el refresh token. Devuelve el nuevo access o null.
+     * Usa try/catch en vez de runCatching para PROPAGAR CancellationException — sin esto,
+     * un screen cancelado durante el refresh swallea la cancelación y el HTTP post puede
+     * completar tras el logout, re-escribiendo tokens que el usuario acababa de borrar.
+     */
     private suspend fun tryRefresh(): String? = refreshMutex.withLock {
         val rt = TokenStore.refreshToken ?: return@withLock null
-        runCatching {
+        try {
             val resp = refreshClient.post("$baseUrl/v1/auth/refresh") {
                 contentType(ContentType.Application.Json)
                 setBody(RefreshRequest(rt))
@@ -57,7 +63,11 @@ object ApiClient {
                 TokenStore.clear()
                 null
             }
-        }.getOrNull()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e // estructura de coroutines: re-tirar siempre.
+        } catch (_: Throwable) {
+            null
+        }
     }
 
     val client: HttpClient = HttpClient {
@@ -74,11 +84,19 @@ object ApiClient {
         // solo errores de red, timeouts y 5xx; NUNCA 4xx (un 401 de login NO se reintenta,
         // el usuario tipeó mal la clave). 2 reintentos con backoff 1s/2s.
         install(HttpRequestRetry) {
-            // Con expectSuccess, 5xx llega como ServerResponseException; 4xx como
-            // ClientRequestException. Retry para TODO menos 4xx (no reintentamos
-            // credenciales inválidas ni datos malos del cliente).
+            // Solo reintentamos fallos de CONEXIÓN (TCP nunca se estableció → el server
+            // no recibió la request, retry es seguro incluso para POSTs no idempotentes).
+            // NO reintentamos:
+            //   - HttpRequestTimeoutException / SocketTimeoutException: el server pudo
+            //     haber procesado la mutación (crear orden, invalidar código de email).
+            //   - ClientRequestException (4xx): error del cliente, retry no ayuda.
+            //   - ServerResponseException (5xx): mismo motivo de no-retry que timeouts.
+            //   - CancellationException: respetar structured concurrency.
+            // Trade-off: reintentamos MENOS de lo deseable (algunos 5xx transient serían
+            // safe-to-retry), pero ganamos seguridad contra órdenes/emails duplicados.
+            // Cubrir más casos requiere idempotency keys en el backend.
             retryOnExceptionIf(maxRetries = 2) { _, cause ->
-                cause !is ClientRequestException
+                cause is ConnectTimeoutException
             }
             exponentialDelay(base = 2.0, maxDelayMs = 4_000)
         }

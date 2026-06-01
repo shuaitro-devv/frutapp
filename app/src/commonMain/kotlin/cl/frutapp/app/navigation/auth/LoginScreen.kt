@@ -90,12 +90,20 @@ class LoginScreen : Screen {
                                 }
                                 .onFailure { e ->
                                     cl.frutapp.app.ui.ErrorReporter.report(screen = "Login", action = "login", error = e)
-                                    // En Login un 401/422 es credencial mala (no "sesión expirada"). Mensaje
-                                    // de red/server pasa por mensajeAmigable.
+                                    // El backend embebe el detalle en el body del 401 (ej. "Verifica tu correo
+                                    // para iniciar sesión." vs credencial cualquiera). Chequeamos PRIMERO los
+                                    // mensajes específicos del body antes del genérico 401 — sino siempre cae
+                                    // en "Correo o contraseña incorrectos" y el usuario pierde el hint útil.
                                     val msg = e.message.orEmpty().lowercase()
-                                    error = if (msg.contains("401") || msg.contains("unauthorized") || msg.contains("422") || msg.contains("invalid"))
-                                        "Correo o contraseña incorrectos."
-                                    else cl.frutapp.app.ui.mensajeAmigable(e, "iniciar sesión")
+                                    error = when {
+                                        msg.contains("verifica tu correo") || msg.contains("verifica el correo") ->
+                                            "Verifica tu correo: revisa tu inbox y haz clic en el botón del mail para activar la cuenta."
+                                        msg.contains("429") || msg.contains("too many") ->
+                                            "Demasiados intentos. Espera un momento y vuelve a intentar."
+                                        msg.contains("401") || msg.contains("unauthorized") || msg.contains("422") ->
+                                            "Correo o contraseña incorrectos."
+                                        else -> cl.frutapp.app.ui.mensajeAmigable(e, "iniciar sesión")
+                                    }
                                 }
                             loading = false
                         }

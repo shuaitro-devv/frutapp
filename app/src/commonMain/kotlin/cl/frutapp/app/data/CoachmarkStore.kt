@@ -35,11 +35,12 @@ object CoachmarkStore {
         get() = SessionStorage.getString(KEY_SHOWN) == "1"
 
     /**
-     * Defensa secundaria: si el persist a SessionStorage fallara (caso raro: Keystore
-     * corrupto, EncryptedSharedPreferences no disponible), igual evitamos mostrar el
-     * tour más de una vez dentro del mismo proceso. Se setea a true al
-     * arrancar/saltar/completar — el siguiente cold start lo resetea, pero ese cold
-     * start volvería a evaluar el flag persistido.
+     * Defensa secundaria contra fallo de persist: si SessionStorage falla por algún
+     * motivo (Keystore corrupto, EncryptedSharedPreferences no disponible), evitamos
+     * mostrar el tour más de una vez por proceso. SOLO se setea cuando el usuario
+     * cierra el tour explícitamente (skip/complete) — si lo seteáramos en
+     * `maybeAutoStart` antes de start(), una navegación lejos del Home pre-cierre
+     * lo perdería sin persistir nada y el próximo cold start lo volvería a mostrar.
      */
     private var shownEsteProceso = false
 
@@ -73,10 +74,13 @@ object CoachmarkStore {
         SessionStorage.putString(KEY_SHOWN, "1")
     }
 
-    /** Si nunca se mostró en este dispositivo (o en este proceso), arrancarlo. */
+    /**
+     * Si nunca se mostró en este dispositivo (o en este proceso), arrancarlo. Si el
+     * tour YA está activo (currentStep >= 0) — ej. user navegó al Buscador y volvió
+     * a Home — no lo reiniciamos: el LaunchedEffect del HomeScreen sigue cubriéndolo.
+     */
     fun maybeAutoStart() {
-        if (shownEsteProceso || shown) return
-        shownEsteProceso = true
+        if (isActive || shownEsteProceso || shown) return
         start()
     }
 

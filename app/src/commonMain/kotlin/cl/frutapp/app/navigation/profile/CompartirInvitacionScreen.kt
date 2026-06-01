@@ -119,7 +119,7 @@ class CompartirInvitacionScreen(private val code: String) : Screen {
                             scope.launch {
                                 runCatching {
                                     val bitmap = capture.toImageBitmap()
-                                    shareImage(bitmap, caption)
+                                    shareImage(bitmap, caption, chooserTitle = "Compartir invitación")
                                 }.onFailure { e ->
                                     cl.frutapp.app.ui.ErrorReporter.report(screen = "CompartirInvitacion", action = "share_image", error = e)
                                     showToast("No pudimos preparar la imagen. Intenta de nuevo.")

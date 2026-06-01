@@ -34,7 +34,7 @@ actual fun shareText(text: String) {
     ctx.startActivity(chooser)
 }
 
-actual suspend fun shareImage(bitmap: ImageBitmap, caption: String) {
+actual suspend fun shareImage(bitmap: ImageBitmap, caption: String, chooserTitle: String) {
     val ctx = appCtx ?: return
     // Escribir el PNG a cache/shared en un hilo IO; FileProvider lo expone con URI seguro.
     val uri = withContext(Dispatchers.IO) {
@@ -52,7 +52,7 @@ actual suspend fun shareImage(bitmap: ImageBitmap, caption: String) {
         if (caption.isNotBlank()) putExtra(Intent.EXTRA_TEXT, caption)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    val chooser = Intent.createChooser(send, "Compartir mi huella verde").apply {
+    val chooser = Intent.createChooser(send, chooserTitle).apply {
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     ctx.startActivity(chooser)

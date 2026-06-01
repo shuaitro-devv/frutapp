@@ -56,6 +56,11 @@ private fun categoriaFor(categoryId: String): Categoria = when (categoryId) {
     else -> Categoria.FRUTAS
 }
 
+// Quick fix p/ demo: el backend aún no tiene flag `organico` en `products`. Lo
+// derivamos por imageKey (mismo set que en DemoCatalog). Cuando se agregue la
+// columna real en una migration Flyway, este Set desaparece y leemos de ProductDto.
+private val ORGANIC_IMAGE_KEYS = setOf("palta_hass", "lechuga", "cilantro")
+
 /** Convierte el DTO del backend al modelo de UI que ya usa el Home. */
 fun ProductDto.toProducto(): Producto = Producto(
     id = id,
@@ -63,5 +68,6 @@ fun ProductDto.toProducto(): Producto = Producto(
     precioClp = priceClp,
     unidad = unit,
     categoria = categoriaFor(categoryId),
-    imagen = drawableForImageKey(imageKey)
+    imagen = drawableForImageKey(imageKey),
+    organico = imageKey in ORGANIC_IMAGE_KEYS
 )

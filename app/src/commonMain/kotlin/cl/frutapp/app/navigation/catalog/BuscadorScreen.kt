@@ -65,8 +65,14 @@ import org.jetbrains.compose.resources.painterResource
  * @param categoriaPrefiltro si viene, la pantalla arranca filtrada por esa categoría y
  *   solo busca dentro de ella; el header muestra el nombre de la categoría en vez de
  *   "Todos los productos". Lo usan los chips de categoría del Home.
+ * @param soloOrganicos si viene true, la pantalla arranca filtrada por el flag
+ *   `producto.organico` (cross-cuts categorías). Mutuamente excluyente con
+ *   categoriaPrefiltro; lo usa el chip "Orgánicos" del Home.
  */
-class BuscadorScreen(private val categoriaPrefiltro: Categoria? = null) : Screen {
+class BuscadorScreen(
+    private val categoriaPrefiltro: Categoria? = null,
+    private val soloOrganicos: Boolean = false
+) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
@@ -79,13 +85,17 @@ class BuscadorScreen(private val categoriaPrefiltro: Categoria? = null) : Screen
             runCatching { CatalogApi().products() }
                 .onSuccess { dtos -> if (dtos.isNotEmpty()) catalogo = dtos.map { it.toProducto() } }
                 .onFailure { e -> cl.frutapp.app.ui.ErrorReporter.report(screen = "Buscador", action = "load_catalog", error = e) }
-            // Si la pantalla viene prefiltrada por una categoría no enfocamos el campo: el
-            // usuario está navegando por categoría, no quería teclado a la cara.
-            if (categoriaPrefiltro == null) focusRequester.requestFocus()
+            // Si la pantalla viene prefiltrada (categoría u orgánicos) no enfocamos el campo:
+            // el usuario está navegando por filtro, no quería teclado a la cara.
+            if (categoriaPrefiltro == null && !soloOrganicos) focusRequester.requestFocus()
         }
 
-        val universo = remember(catalogo, categoriaPrefiltro) {
-            if (categoriaPrefiltro == null) catalogo else catalogo.filter { it.categoria == categoriaPrefiltro }
+        val universo = remember(catalogo, categoriaPrefiltro, soloOrganicos) {
+            when {
+                soloOrganicos -> catalogo.filter { it.organico }
+                categoriaPrefiltro != null -> catalogo.filter { it.categoria == categoriaPrefiltro }
+                else -> catalogo
+            }
         }
         val resultados = remember(universo, query) {
             val q = query.trim().lowercase()
@@ -114,7 +124,11 @@ class BuscadorScreen(private val categoriaPrefiltro: Categoria? = null) : Screen
                         Icon(Icons.Filled.Search, contentDescription = null, tint = FrutAppColors.InkMuted, modifier = Modifier.size(20.dp))
                         Box(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
                             if (query.isEmpty()) Text(
-                                text = categoriaPrefiltro?.let { "Buscar en ${it.label.lowercase()}…" } ?: "Buscar frutas o verduras…",
+                                text = when {
+                                    soloOrganicos -> "Buscar en orgánicos…"
+                                    categoriaPrefiltro != null -> "Buscar en ${categoriaPrefiltro.label.lowercase()}…"
+                                    else -> "Buscar frutas o verduras…"
+                                },
                                 color = FrutAppColors.InkSoft, fontSize = 14.sp
                             )
                             BasicTextField(
@@ -138,10 +152,11 @@ class BuscadorScreen(private val categoriaPrefiltro: Categoria? = null) : Screen
                 }
 
                 if (resultados.isEmpty()) {
-                    EmptyResultados(query, categoriaPrefiltro, universoVacio = universo.isEmpty())
+                    EmptyResultados(query, categoriaPrefiltro, soloOrganicos, universoVacio = universo.isEmpty())
                 } else {
                     val encabezado = when {
                         query.isNotBlank() -> "${resultados.size} resultado${if (resultados.size != 1) "s" else ""}"
+                        soloOrganicos -> "Orgánicos · ${resultados.size}"
                         categoriaPrefiltro != null -> "${categoriaPrefiltro.label} · ${resultados.size}"
                         else -> "Todos los productos · ${resultados.size}"
                     }
@@ -184,9 +199,10 @@ private fun ResultadoRow(producto: Producto, onClick: () -> Unit) {
 }
 
 @Composable
-private fun EmptyResultados(query: String, categoria: Categoria?, universoVacio: Boolean) {
+private fun EmptyResultados(query: String, categoria: Categoria?, soloOrganicos: Boolean, universoVacio: Boolean) {
     val (titulo, detalle) = when {
         query.isNotBlank() -> "Sin resultados" to "No encontramos productos para \"$query\"."
+        soloOrganicos && universoVacio -> "Aún no hay orgánicos" to "Estamos sumando proveedores certificados y muy pronto los verás acá."
         categoria != null && universoVacio -> "Aún no hay ${categoria.label.lowercase()}" to "Estamos sumando proveedores y muy pronto los verás acá."
         else -> "Sin resultados" to "Aún no podemos cargar el catálogo."
     }
