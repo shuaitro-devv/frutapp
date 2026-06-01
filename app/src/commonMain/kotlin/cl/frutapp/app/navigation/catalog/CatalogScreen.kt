@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalResourceApi::class)
+@file:OptIn(ExperimentalResourceApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package cl.frutapp.app.navigation.catalog
 
@@ -23,10 +23,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.RadioButtonChecked
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,6 +69,13 @@ import org.jetbrains.compose.resources.ExperimentalResourceApi
 
 private data class Filtro(val label: String, val match: (Producto) -> Boolean)
 
+private enum class OrdenCatalogo(val label: String) {
+    RECOMENDADOS("Recomendados"),
+    PRECIO_ASC("Precio: menor a mayor"),
+    PRECIO_DESC("Precio: mayor a menor"),
+    NOMBRE_AZ("Nombre A-Z")
+}
+
 /**
  * Catálogo (mockup 07): búsqueda + chips de categoría con filtrado en cliente sobre el
  * catálogo (backend con fallback a [DemoCatalog]). Tab "Explorar" del bottom nav.
@@ -88,10 +102,22 @@ class CatalogScreen : Screen {
         }
         var filtroSel by remember { mutableStateOf(0) }
         var query by remember { mutableStateOf("") }
+        var orden by remember { mutableStateOf(OrdenCatalogo.RECOMENDADOS) }
+        var soloOrganicos by remember { mutableStateOf(false) }
+        var sheetAbierto by remember { mutableStateOf(false) }
+        val filtrosActivos = orden != OrdenCatalogo.RECOMENDADOS || soloOrganicos
 
-        val visibles = productos.filter {
-            filtros[filtroSel].match(it) && it.nombre.contains(query.trim(), ignoreCase = true)
-        }
+        val visibles = productos
+            .filter { filtros[filtroSel].match(it) && it.nombre.contains(query.trim(), ignoreCase = true) }
+            .filter { !soloOrganicos || it.organico }
+            .let { lista ->
+                when (orden) {
+                    OrdenCatalogo.RECOMENDADOS -> lista
+                    OrdenCatalogo.PRECIO_ASC -> lista.sortedBy { it.precioClp }
+                    OrdenCatalogo.PRECIO_DESC -> lista.sortedByDescending { it.precioClp }
+                    OrdenCatalogo.NOMBRE_AZ -> lista.sortedBy { it.nombre.lowercase() }
+                }
+            }
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -104,11 +130,22 @@ class CatalogScreen : Screen {
                         Text("Catálogo", color = FrutAppColors.Brand800, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                         Text("Frescura seleccionada para ti", color = FrutAppColors.InkMuted, fontSize = 13.sp)
                     }
-                    Box(
-                        modifier = Modifier.size(44.dp).background(FrutAppColors.Brand50, CircleShape).clickable { },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Filled.Tune, contentDescription = "Filtros", tint = FrutAppColors.Brand600, modifier = Modifier.size(22.dp))
+                    Box(modifier = Modifier.size(44.dp)) {
+                        Box(
+                            modifier = Modifier.size(44.dp).background(FrutAppColors.Brand50, CircleShape).clickable { sheetAbierto = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.Tune, contentDescription = "Filtros", tint = FrutAppColors.Brand600, modifier = Modifier.size(22.dp))
+                        }
+                        // Indicador visual cuando hay un orden o filtro distinto del default activo.
+                        if (filtrosActivos) {
+                            Box(
+                                modifier = Modifier.size(12.dp)
+                                    .background(FrutAppColors.Brand600, CircleShape)
+                                    .border(2.dp, Color.White, CircleShape)
+                                    .align(Alignment.TopEnd)
+                            )
+                        }
                     }
                 }
 
@@ -192,7 +229,130 @@ class CatalogScreen : Screen {
                     }
                 )
             }
+
+            if (sheetAbierto) {
+                val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+                ModalBottomSheet(
+                    onDismissRequest = { sheetAbierto = false },
+                    sheetState = sheetState,
+                    containerColor = Color.White
+                ) {
+                    FiltrosSheet(
+                        orden = orden,
+                        onOrden = { orden = it },
+                        soloOrganicos = soloOrganicos,
+                        onSoloOrganicos = { soloOrganicos = it },
+                        onLimpiar = {
+                            orden = OrdenCatalogo.RECOMENDADOS
+                            soloOrganicos = false
+                        },
+                        onAplicar = { sheetAbierto = false }
+                    )
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun FiltrosSheet(
+    orden: OrdenCatalogo,
+    onOrden: (OrdenCatalogo) -> Unit,
+    soloOrganicos: Boolean,
+    onSoloOrganicos: (Boolean) -> Unit,
+    onLimpiar: () -> Unit,
+    onAplicar: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Filtros y orden", color = FrutAppColors.Brand800, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "Limpiar",
+                color = FrutAppColors.Brand600,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable(onClick = onLimpiar)
+            )
+        }
+
+        Text(
+            "Ordenar por",
+            color = FrutAppColors.Brand800,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+        )
+        OrdenCatalogo.values().forEach { opcion ->
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { onOrden(opcion) }.padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    if (opcion == orden) Icons.Filled.RadioButtonChecked else Icons.Filled.RadioButtonUnchecked,
+                    contentDescription = null,
+                    tint = if (opcion == orden) FrutAppColors.Brand600 else FrutAppColors.InkMuted,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    opcion.label,
+                    color = FrutAppColors.Ink,
+                    fontSize = 14.sp,
+                    fontWeight = if (opcion == orden) FontWeight.SemiBold else FontWeight.Normal,
+                    modifier = Modifier.padding(start = 12.dp)
+                )
+            }
+        }
+
+        Text(
+            "Filtrar por",
+            color = FrutAppColors.Brand800,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 14.dp, bottom = 4.dp)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable { onSoloOrganicos(!soloOrganicos) }.padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Solo orgánicos", color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Productos con certificación o de huerto familiar.",
+                    color = FrutAppColors.InkMuted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+            Switch(
+                checked = soloOrganicos,
+                onCheckedChange = onSoloOrganicos,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = FrutAppColors.Brand600,
+                    uncheckedThumbColor = Color.White,
+                    uncheckedTrackColor = FrutAppColors.InkSoft
+                )
+            )
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        Box(
+            modifier = Modifier.fillMaxWidth().height(50.dp)
+                .background(FrutAppColors.Brand400, RoundedCornerShape(14.dp))
+                .clickable(onClick = onAplicar),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                Text("Aplicar", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
     }
 }
 
