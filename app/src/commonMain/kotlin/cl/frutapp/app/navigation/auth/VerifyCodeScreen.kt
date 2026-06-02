@@ -93,7 +93,16 @@ class VerifyCodeScreen(private val email: String) : Screen {
             }
         }
 
-        AuthScaffold(showBackButton = true, onBack = { navigator.pop() }) {
+        // 'Volver': sale del limbo de verificacion → limpia pendingEmail y replaceAll a Login.
+        // Antes era pop()/popUntilRoot, pero como ahora VerifyCode puede ser la pantalla raiz
+        // (cuando el splash detecta pendingEmail), pop no llevaba a ningun lado: el usuario
+        // quedaba atrapado sin forma de cambiar de correo o empezar de nuevo.
+        val salirDelLimbo: () -> Unit = {
+            TokenStore.clearPendingEmail()
+            navigator.replaceAll(LoginScreen())
+        }
+
+        AuthScaffold(showBackButton = true, onBack = salirDelLimbo) {
             Box(
                 modifier = Modifier.size(56.dp).background(FrutAppColors.Brand50, CircleShape),
                 contentAlignment = Alignment.Center
@@ -165,7 +174,7 @@ class VerifyCodeScreen(private val email: String) : Screen {
             )
             FrutButtonOutline(
                 text = "Volver al inicio de sesión",
-                onClick = { navigator.popUntilRoot() },
+                onClick = salirDelLimbo,
                 modifier = Modifier.padding(top = 12.dp)
             )
         }

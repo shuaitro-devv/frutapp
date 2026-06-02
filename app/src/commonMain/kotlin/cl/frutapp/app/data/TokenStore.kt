@@ -14,6 +14,10 @@ object TokenStore {
     private const val K_ACCESS = "access_token"
     private const val K_REFRESH = "refresh_token"
     private const val K_USER = "user"
+    // Email "en limbo": registrado pero pendiente de verificar codigo. Persiste para que si
+    // el usuario cierra la app despues del register y antes del OTP, al volver caiga directo
+    // en VerifyCode (no en Login) — modela el tercer estado de la sesion: 'verificando'.
+    private const val K_PENDING_EMAIL = "pending_email"
     private val json = Json { ignoreUnknownKeys = true }
 
     // Estado de Compose: las pantallas que leen user/accessToken recomponen al cambiar.
@@ -22,6 +26,8 @@ object TokenStore {
     var refreshToken: String? = null
         private set
     var user: UserDto? by mutableStateOf(null)
+        private set
+    var pendingEmail: String? by mutableStateOf(null)
         private set
 
     val isLoggedIn: Boolean get() = accessToken != null
@@ -33,6 +39,7 @@ object TokenStore {
         user = SessionStorage.getString(K_USER)?.let {
             runCatching { json.decodeFromString(UserDto.serializer(), it) }.getOrNull()
         }
+        pendingEmail = SessionStorage.getString(K_PENDING_EMAIL)
     }
 
     fun save(access: String, refresh: String, user: UserDto) {
@@ -42,6 +49,20 @@ object TokenStore {
         SessionStorage.putString(K_ACCESS, access)
         SessionStorage.putString(K_REFRESH, refresh)
         SessionStorage.putString(K_USER, json.encodeToString(UserDto.serializer(), user))
+        // Una sesion autenticada cierra el limbo: ya no estamos 'verificando'.
+        clearPendingEmail()
+    }
+
+    fun markPendingEmail(email: String) {
+        pendingEmail = email
+        SessionStorage.putString(K_PENDING_EMAIL, email)
+    }
+
+    fun clearPendingEmail() {
+        if (pendingEmail != null) {
+            pendingEmail = null
+            SessionStorage.remove(K_PENDING_EMAIL)
+        }
     }
 
     /** Actualiza solo los tokens (al refrescar el access token); mantiene el usuario. */
@@ -65,5 +86,7 @@ object TokenStore {
         SessionStorage.remove(K_ACCESS)
         SessionStorage.remove(K_REFRESH)
         SessionStorage.remove(K_USER)
+        // Logout NO arrastra el limbo: el usuario quiere salir limpio.
+        clearPendingEmail()
     }
 }

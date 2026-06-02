@@ -190,6 +190,9 @@ class RegisterScreen : Screen {
                             )
                         }
                             .onSuccess {
+                                // Marcamos el limbo: si el usuario cierra la app antes de
+                                // tipear el codigo, al volver caera directo en VerifyCode.
+                                cl.frutapp.app.data.TokenStore.markPendingEmail(email.trim())
                                 navigator.push(VerifyCodeScreen(email = email.trim()))
                             }
                             .onFailure { e ->

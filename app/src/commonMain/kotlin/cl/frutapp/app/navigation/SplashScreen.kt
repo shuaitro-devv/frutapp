@@ -32,6 +32,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.BiometricAuth
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.navigation.auth.LoginScreen
+import cl.frutapp.app.navigation.auth.VerifyCodeScreen
 import cl.frutapp.app.navigation.home.HomeScreen
 import cl.frutapp.app.ui.components.FrutLoader
 import cl.frutapp.app.ui.theme.FrutAppColors
@@ -66,8 +67,15 @@ class SplashScreen : Screen {
             alpha.animateTo(1f, tween(600))
             scale.animateTo(1f, tween(600))
             delay(1200)
+            val pending = TokenStore.pendingEmail
             when {
-                // Sin sesión → onboarding (intro), que al terminar lleva a Login.
+                // Sin sesión PERO con registro a medias (cuenta creada, codigo no ingresado):
+                // ruteamos directo a VerifyCode para no obligar al usuario a empezar de cero.
+                // Si quiere salir del limbo, en VerifyCode el boton 'Volver al inicio de sesion'
+                // limpia pendingEmail y lo lleva a Login.
+                !TokenStore.isLoggedIn && pending != null ->
+                    goOnce { navigator.replace(VerifyCodeScreen(email = pending)) }
+                // Sin sesión y sin limbo → onboarding (intro), que al terminar lleva a Login.
                 !TokenStore.isLoggedIn -> goOnce { navigator.replace(OnboardingScreen()) }
                 // Con sesión pero sin huella disponible → Home directo (no bloquear).
                 !BiometricAuth.isAvailable() -> goOnce { navigator.replace(HomeScreen()) }
