@@ -53,8 +53,8 @@ object EmailTemplates {
 
             <table role="presentation" cellspacing="0" cellpadding="0" align="center" style="margin:0 auto 26px;">
               <tr>
-                <td style="background-color:#EAF3DE;border:1px solid #CFE7BF;border-radius:18px;padding:18px 28px;">
-                  <span style="display:block;color:#27500A;font-size:34px;line-height:1;font-weight:800;letter-spacing:10px;">$code</span>
+                <td style="background-color:#EAF3DE;border:2px solid #CFE7BF;border-radius:18px;padding:22px 20px;text-align:center;">
+                  <span style="display:inline-block;color:#27500A;font-size:42px;line-height:1;font-weight:800;letter-spacing:6px;font-family:'Courier New',Consolas,monospace;white-space:nowrap;">$code</span>
                 </td>
               </tr>
             </table>
@@ -85,8 +85,8 @@ object EmailTemplates {
 
             <table role="presentation" cellspacing="0" cellpadding="0" align="center" style="margin:0 auto 26px;">
               <tr>
-                <td style="background-color:#EAF3DE;border:1px solid #CFE7BF;border-radius:18px;padding:18px 28px;">
-                  <span style="display:block;color:#27500A;font-size:34px;line-height:1;font-weight:800;letter-spacing:10px;">$code</span>
+                <td style="background-color:#EAF3DE;border:2px solid #CFE7BF;border-radius:18px;padding:22px 20px;text-align:center;">
+                  <span style="display:inline-block;color:#27500A;font-size:42px;line-height:1;font-weight:800;letter-spacing:6px;font-family:'Courier New',Consolas,monospace;white-space:nowrap;">$code</span>
                 </td>
               </tr>
             </table>
@@ -136,8 +136,8 @@ object EmailTemplates {
 
             <table role="presentation" cellspacing="0" cellpadding="0" align="center" style="margin:0 auto 26px;">
               <tr>
-                <td style="background-color:#EAF3DE;border:1px solid #CFE7BF;border-radius:18px;padding:18px 28px;">
-                  <span style="display:block;color:#27500A;font-size:34px;line-height:1;font-weight:800;letter-spacing:10px;">$code</span>
+                <td style="background-color:#EAF3DE;border:2px solid #CFE7BF;border-radius:18px;padding:22px 20px;text-align:center;">
+                  <span style="display:inline-block;color:#27500A;font-size:42px;line-height:1;font-weight:800;letter-spacing:6px;font-family:'Courier New',Consolas,monospace;white-space:nowrap;">$code</span>
                 </td>
               </tr>
             </table>

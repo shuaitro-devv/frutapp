@@ -40,23 +40,37 @@ class AuthService(
     }
 
     /** Crea la cuenta SIN activar y envía un código de verificación al correo. No
-     *  entrega tokens: el usuario inicia sesión recién al verificar (ver [verifyEmail]). */
+     *  entrega tokens: el usuario inicia sesión recién al verificar (ver [verifyEmail]).
+     *
+     *  Cuenta no verificada en el medio: si ya existe un usuario con ese correo pero NO
+     *  verificó, NO tiramos 409 — sobrescribimos password/name/phone y le mandamos un
+     *  código nuevo. Caso real (test del hermano de Sebastián): usuario se registra,
+     *  no verifica, intenta de nuevo y antes recibía 'Ya está registrado' y quedaba
+     *  bloqueado sin forma de recuperar. */
     suspend fun register(req: RegisterRequest) {
         if (req.name.isBlank()) throw ValidationException("El nombre es obligatorio.")
         val email = normalizeEmail(req.email)
         validatePassword(req.password)
-        if (users.findByEmail(email) != null) {
+        val existente = users.findByEmail(email)
+        if (existente != null && existente.emailVerified) {
             throw ConflictException("Ya existe una cuenta con ese correo.")
         }
-        val user = users.create(
-            name = req.name.trim(),
-            email = email,
-            phone = req.phone?.trim()?.ifBlank { null },
-            passwordHash = PasswordHasher.hash(req.password),
-            role = "CUSTOMER",
-            consentVersion = req.consentVersion
-        )
-        rbac.assignRole(user.id, "cliente")
+        val user = if (existente != null) {
+            // Cuenta no verificada → actualizar credenciales y reenviar código.
+            users.updatePassword(existente.id, PasswordHasher.hash(req.password))
+            existente
+        } else {
+            val nuevo = users.create(
+                name = req.name.trim(),
+                email = email,
+                phone = req.phone?.trim()?.ifBlank { null },
+                passwordHash = PasswordHasher.hash(req.password),
+                role = "CUSTOMER",
+                consentVersion = req.consentVersion
+            )
+            rbac.assignRole(nuevo.id, "cliente")
+            nuevo
+        }
         sendVerificationCode(user)
     }
 
@@ -135,7 +149,10 @@ class AuthService(
         sendSafely(EmailTemplates.passwordReset(to = user.email, code = code))
     }
 
-    /** Cambia la contraseña validando el código; invalida el código y cierra sesiones. */
+    /** Cambia la contraseña validando el código; invalida el código y cierra sesiones.
+     *  Si el usuario aún no verificó el correo, lo marca verificado acá — recibir el
+     *  código de recuperación ya prueba acceso al correo, no tiene sentido pedir un
+     *  segundo paso de verificación que dejaría la cuenta sin acceso. */
     suspend fun resetPassword(req: ResetPasswordRequest) {
         val email = normalizeEmail(req.email)
         validatePassword(req.newPassword)
@@ -144,6 +161,7 @@ class AuthService(
             ?: throw UnauthorizedException("Código inválido o expirado.")
         if (!passwordResetTokens.consume(tokenId)) throw UnauthorizedException("Código inválido o expirado.")
         users.updatePassword(user.id, PasswordHasher.hash(req.newPassword))
+        if (!user.emailVerified) users.markEmailVerified(user.id)
         refreshTokens.revokeAllForUser(user.id)
         sendSafely(EmailTemplates.passwordChanged(to = user.email, name = user.name.substringBefore(' ')))
     }
