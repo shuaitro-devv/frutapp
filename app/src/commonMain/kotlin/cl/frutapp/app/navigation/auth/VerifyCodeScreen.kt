@@ -67,6 +67,32 @@ class VerifyCodeScreen(private val email: String) : Screen {
             }
         }
 
+        // Funcion compartida: usada tanto por el boton 'Verificar codigo' como por el
+        // auto-submit cuando completas los 6 digitos. UX: el usuario no deberia tener que
+        // pegar el codigo y despues volver a tocar un boton — apenas entran los 6 digitos
+        // disparamos verify automaticamente.
+        val submit: () -> Unit = {
+            if (!loading && code.length == 6) {
+                error = null
+                loading = true
+                scope.launch {
+                    runCatching { AuthApi().verifyEmail(VerifyEmailRequest(email = email, code = code)) }
+                        .onSuccess { resp ->
+                            TokenStore.save(resp.accessToken, resp.refreshToken, resp.user)
+                            navigator.replaceAll(HomeScreen())
+                        }
+                        .onFailure { e ->
+                            cl.frutapp.app.ui.ErrorReporter.report(screen = "VerifyCode", action = "verify_email", error = e)
+                            val msg = e.message.orEmpty().lowercase()
+                            error = if (msg.contains("400") || msg.contains("404") || msg.contains("invalid") || msg.contains("expired"))
+                                "Código inválido o expirado. Revisa tu correo o reenvíalo."
+                            else cl.frutapp.app.ui.mensajeAmigable(e, "verificar el código")
+                        }
+                    loading = false
+                }
+            }
+        }
+
         AuthScaffold(showBackButton = true, onBack = { navigator.pop() }) {
             Box(
                 modifier = Modifier.size(56.dp).background(FrutAppColors.Brand50, CircleShape),
@@ -83,7 +109,11 @@ class VerifyCodeScreen(private val email: String) : Screen {
 
             OtpInput(
                 value = code,
-                onValueChange = { code = it },
+                onValueChange = { nuevo ->
+                    code = nuevo
+                    // Auto-submit al completar los 6 digitos.
+                    if (nuevo.length == 6) submit()
+                },
                 modifier = Modifier.padding(top = 28.dp)
             )
 
@@ -129,25 +159,7 @@ class VerifyCodeScreen(private val email: String) : Screen {
 
             FrutButtonPrimary(
                 text = if (loading) "Verificando…" else "Verificar código",
-                onClick = {
-                    error = null
-                    loading = true
-                    scope.launch {
-                        runCatching { AuthApi().verifyEmail(VerifyEmailRequest(email = email, code = code)) }
-                            .onSuccess { resp ->
-                                TokenStore.save(resp.accessToken, resp.refreshToken, resp.user)
-                                navigator.replaceAll(HomeScreen())
-                            }
-                            .onFailure { e ->
-                                cl.frutapp.app.ui.ErrorReporter.report(screen = "VerifyCode", action = "verify_email", error = e)
-                                val msg = e.message.orEmpty().lowercase()
-                                error = if (msg.contains("400") || msg.contains("404") || msg.contains("invalid") || msg.contains("expired"))
-                                    "Código inválido o expirado. Revisa tu correo o reenvíalo."
-                                else cl.frutapp.app.ui.mensajeAmigable(e, "verificar el código")
-                            }
-                        loading = false
-                    }
-                },
+                onClick = submit,
                 enabled = code.length == 6 && !loading,
                 modifier = Modifier.padding(top = 20.dp)
             )

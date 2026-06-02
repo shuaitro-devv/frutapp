@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +27,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -52,12 +54,15 @@ class RegisterScreen : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        var name by remember { mutableStateOf("") }
-        var email by remember { mutableStateOf("") }
-        var phone by remember { mutableStateOf("") }
-        var password by remember { mutableStateOf("") }
-        var confirm by remember { mutableStateOf("") }
-        var acceptTerms by remember { mutableStateOf(false) }
+        // rememberSaveable: sobrevive a navegacion a otra pantalla (ej. abrir Terminos y
+        // Condiciones) y a process death. Con remember normal, volver del LegalDocScreen
+        // recreaba el composable y borraba todo lo escrito.
+        var name by rememberSaveable { mutableStateOf("") }
+        var email by rememberSaveable { mutableStateOf("") }
+        var phone by rememberSaveable { mutableStateOf("") }
+        var password by rememberSaveable { mutableStateOf("") }
+        var confirm by rememberSaveable { mutableStateOf("") }
+        var acceptTerms by rememberSaveable { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
         var loading by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
@@ -70,20 +75,35 @@ class RegisterScreen : Screen {
             Column(modifier = Modifier.fillMaxWidth().padding(top = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 FrutTextField(
                     value = name,
+                    // capitalization=Words: el teclado capitaliza la primera letra de cada
+                    // palabra del nombre. Si el usuario pega 'juan perez' lo dejamos como
+                    // viene; solo afectamos lo que tecleen nuevo.
                     onValueChange = { name = it },
                     label = "Nombre completo",
-                    leadingIcon = Icons.Default.Person
+                    leadingIcon = Icons.Default.Person,
+                    capitalization = KeyboardCapitalization.Words
                 )
                 FrutTextField(
                     value = email,
-                    onValueChange = { email = it },
+                    // Email siempre minusculas — el backend ya hace lowercase, pero el
+                    // visual mientras teclea era con may al inicio (KeyboardType.Email
+                    // por defecto da capitalize=None, OK; pero por si el teclado lo cambio).
+                    onValueChange = { email = it.lowercase() },
                     label = "Correo electrónico",
                     leadingIcon = Icons.Default.Email,
                     keyboardType = KeyboardType.Email
                 )
                 FrutTextField(
                     value = phone,
-                    onValueChange = { phone = it },
+                    // El label ya indica '+56', el usuario solo debe escribir su numero local.
+                    // Si pega/escribe '+56' o '56', lo descartamos del inicio. Solo digitos.
+                    onValueChange = { nuevo ->
+                        val soloDigitos = nuevo.filter { it.isDigit() }
+                        phone = when {
+                            soloDigitos.startsWith("56") -> soloDigitos.removePrefix("56")
+                            else -> soloDigitos
+                        }
+                    },
                     label = "Número de teléfono (+56)",
                     leadingIcon = Icons.Default.Phone,
                     keyboardType = KeyboardType.Phone

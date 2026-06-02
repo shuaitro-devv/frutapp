@@ -1,5 +1,6 @@
 package cl.frutapp.app.navigation.auth
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -117,13 +119,22 @@ class LoginScreen : Screen {
                 SocialButtons(onGoogle = {}, onApple = {})
             }
 
-            Text(
-                text = "Al continuar, aceptas nuestros Términos y Condiciones y Política de Privacidad.",
-                color = FrutAppColors.InkSoft,
-                fontSize = 11.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(top = 18.dp, start = 12.dp, end = 12.dp)
-            )
+            // Fondo blanco semi-opaco + padding p/ que se lea siempre encima de las
+            // frutas decorativas del AuthScaffold (BottomFruits). Antes el texto quedaba
+            // con plátano/manzana/etc. detrás y era ilegible.
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(top = 18.dp)
+                    .background(Color.White.copy(alpha = 0.92f), androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = "Al continuar, aceptas nuestros Términos y Condiciones y Política de Privacidad.",
+                    color = FrutAppColors.InkSoft,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
