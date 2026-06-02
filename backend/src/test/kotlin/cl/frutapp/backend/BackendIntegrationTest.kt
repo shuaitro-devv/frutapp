@@ -271,8 +271,13 @@ class BackendIntegrationTest {
             assertFailsWith<ValidationException> { auth.register(RegisterRequest("X", "no-es-correo", null, "abc123", "1.0")) }
             val email = "dup${System.nanoTime()}@frutapp.local"
             auth.register(RegisterRequest("X", email, null, "abc123", "1.0"))
-            assertFailsWith<ConflictException> { auth.register(RegisterRequest("X", email, null, "abc123", "1.0")) }
+            // Cuenta NO verificada: re-registrar NO debe lanzar 409. Sobrescribimos password
+            // y reenviamos codigo (fix observacion #6 del test del hermano: usuario quedaba
+            // en limbo si registraba, no verificaba e intentaba de nuevo).
+            auth.register(RegisterRequest("X", email, null, "abc123", "1.0"))
             users.markEmailVerified(users.findByEmail(email)!!.id)
+            // Recien con la cuenta YA verificada, un re-register debe rebotar con Conflict.
+            assertFailsWith<ConflictException> { auth.register(RegisterRequest("X", email, null, "abc123", "1.0")) }
             assertFailsWith<UnauthorizedException> { auth.login(LoginRequest(email, "otra999")) }
             assertFailsWith<ValidationException> {
                 adminUsers.createUser(AdminCreateUserRequest("Y", "staffx${System.nanoTime()}@frutapp.local", null, listOf("rol-inexistente")))
