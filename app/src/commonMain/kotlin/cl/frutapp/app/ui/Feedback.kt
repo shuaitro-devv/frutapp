@@ -1,9 +1,19 @@
 package cl.frutapp.app.ui
 
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.ImageBitmap
 
 /** Mensaje breve provisto por la plataforma (Android: Toast). */
 expect fun showToast(message: String)
+
+/**
+ * Intercepta el back fisico/gesto del sistema en la pantalla que lo declara, redirigiendolo
+ * a [onBack] en vez de dejar que la plataforma haga el comportamiento default (Android: pop).
+ * Necesario en flujos donde 'volver' no es 'pop simple' sino una transicion semantica
+ * (limpiar estado, replaceAll a otra pantalla). En Android usa androidx.activity.compose.BackHandler.
+ */
+@Composable
+expect fun PlatformBackHandler(enabled: Boolean = true, onBack: () -> Unit)
 
 /** Abre el diálogo nativo de compartir con el texto dado (Android: ACTION_SEND). */
 expect fun shareText(text: String)

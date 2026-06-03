@@ -93,16 +93,26 @@ class VerifyCodeScreen(private val email: String) : Screen {
             }
         }
 
-        // 'Volver': sale del limbo de verificacion → limpia pendingEmail y replaceAll a Login.
-        // Antes era pop()/popUntilRoot, pero como ahora VerifyCode puede ser la pantalla raiz
-        // (cuando el splash detecta pendingEmail), pop no llevaba a ningun lado: el usuario
-        // quedaba atrapado sin forma de cambiar de correo o empezar de nuevo.
-        val salirDelLimbo: () -> Unit = {
-            TokenStore.clearPendingEmail()
-            navigator.replaceAll(LoginScreen())
+        // 'Volver' contextual:
+        //  - Si VerifyCode fue pushed desde Register (canPop=true), pop preserva el stack —
+        //    el usuario vuelve a Register con sus datos intactos por rememberSaveable, util
+        //    para corregir un correo mal tipeado. NO limpiamos pendingEmail: si finalmente
+        //    re-registra, markPendingEmail lo sobreescribe; si cierra la app, al volver lo
+        //    rescatamos via Splash.
+        //  - Si VerifyCode es la raiz (canPop=false, llegamos por el splash auto-route),
+        //    pop solo cerraria la app. Aca SI queremos sacar al usuario del limbo: limpiamos
+        //    pendingEmail y replaceAll a Login para que no quede atrapado en VerifyCode
+        //    en proximos cold-starts.
+        val volverContextual: () -> Unit = {
+            if (navigator.canPop) {
+                navigator.pop()
+            } else {
+                TokenStore.clearPendingEmail()
+                navigator.replaceAll(LoginScreen())
+            }
         }
 
-        AuthScaffold(showBackButton = true, onBack = salirDelLimbo) {
+        AuthScaffold(showBackButton = true, onBack = volverContextual) {
             Box(
                 modifier = Modifier.size(56.dp).background(FrutAppColors.Brand50, CircleShape),
                 contentAlignment = Alignment.Center
@@ -119,9 +129,14 @@ class VerifyCodeScreen(private val email: String) : Screen {
             OtpInput(
                 value = code,
                 onValueChange = { nuevo ->
+                    // Auto-submit SOLO en la transicion de <6 → ==6 (primera vez que se
+                    // completan los 6 digitos). Si ya estaba en 6 y el usuario edita un digito
+                    // (despues de un error 'codigo invalido'), no queremos redisparar el verify
+                    // en cada keystroke — el backend rate-limitea y amplificariamos los intentos
+                    // gastados. Si el usuario quiere reintentar, toca el boton 'Verificar codigo'.
+                    val cruzoAlSeis = code.length < 6 && nuevo.length == 6
                     code = nuevo
-                    // Auto-submit al completar los 6 digitos.
-                    if (nuevo.length == 6) submit()
+                    if (cruzoAlSeis) submit()
                 },
                 modifier = Modifier.padding(top = 28.dp)
             )
@@ -174,7 +189,12 @@ class VerifyCodeScreen(private val email: String) : Screen {
             )
             FrutButtonOutline(
                 text = "Volver al inicio de sesión",
-                onClick = salirDelLimbo,
+                // Este boton SI tiene semantica de 'me rindo, sacame de aca' — siempre limpia
+                // pendingEmail y va a Login, independiente de como llegamos a VerifyCode.
+                onClick = {
+                    TokenStore.clearPendingEmail()
+                    navigator.replaceAll(LoginScreen())
+                },
                 modifier = Modifier.padding(top = 12.dp)
             )
         }

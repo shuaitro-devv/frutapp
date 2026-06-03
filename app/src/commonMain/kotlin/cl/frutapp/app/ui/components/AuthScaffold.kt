@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import cl.frutapp.app.ui.PlatformBackHandler
 import cl.frutapp.app.ui.theme.FrutAppColors
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.hoja_decorativa
@@ -58,6 +59,11 @@ fun AuthScaffold(
     onBack: () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit
 ) {
+    // El back fisico/gesto del sistema dispara el MISMO onBack que la flecha in-screen.
+    // Sin esto, Voyager hacia pop() por default y bypaseaba las semanticas custom (ej. en
+    // VerifyCodeScreen 'salir del limbo' no se disparaba con el back del sistema, dejando
+    // al usuario atrapado: cierra la app, abre, Splash lo vuelve a meter a VerifyCode).
+    PlatformBackHandler(enabled = showBackButton, onBack = onBack)
     Box(modifier = modifier.fillMaxSize().background(Color.White)) {
         // Hojas decorativas — pegadas a las esquinas superiores y empujadas hacia arriba
         // para no cruzarse con el logo (el logo es transparente y el verde se confundía).

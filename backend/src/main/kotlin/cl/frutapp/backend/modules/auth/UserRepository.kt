@@ -81,6 +81,27 @@ class UserRepository {
         Unit
     }
 
+    /** Refresca datos editables del usuario en un solo UPDATE. Cualquier parametro null se
+     *  ignora — solo se escriben los campos provistos. Usado al re-registrar una cuenta no
+     *  verificada para que el segundo intento de nombre/telefono/consent NO se descarte. */
+    suspend fun updateProfileFields(
+        userId: UUID,
+        name: String? = null,
+        phone: String? = null,
+        consentVersion: String? = null
+    ) = dbQuery {
+        UsersTable.update({ (UsersTable.id eq userId) and UsersTable.deletedAt.isNull() }) {
+            if (name != null) it[UsersTable.name] = name
+            if (phone != null) it[UsersTable.phone] = phone
+            if (consentVersion != null) {
+                it[UsersTable.consentVersion] = consentVersion
+                it[UsersTable.consentAt] = Clock.System.now()
+            }
+            it[UsersTable.updatedAt] = Clock.System.now()
+        }
+        Unit
+    }
+
     private fun toRow(row: ResultRow) = UserRow(
         id = row[UsersTable.id],
         name = row[UsersTable.name],

@@ -270,14 +270,25 @@ class BackendIntegrationTest {
         runBlocking {
             assertFailsWith<ValidationException> { auth.register(RegisterRequest("X", "no-es-correo", null, "abc123", "1.0")) }
             val email = "dup${System.nanoTime()}@frutapp.local"
-            auth.register(RegisterRequest("X", email, null, "abc123", "1.0"))
-            // Cuenta NO verificada: re-registrar NO debe lanzar 409. Sobrescribimos password
-            // y reenviamos codigo (fix observacion #6 del test del hermano: usuario quedaba
-            // en limbo si registraba, no verificaba e intentaba de nuevo).
-            auth.register(RegisterRequest("X", email, null, "abc123", "1.0"))
-            users.markEmailVerified(users.findByEmail(email)!!.id)
+            auth.register(RegisterRequest("Xnombre", email, "+56911111111", "abc123", "1.0"))
+            // Cuenta NO verificada: re-registrar NO debe lanzar 409. Sobrescribimos password,
+            // name, phone y consent (fix observacion #6 del test del hermano + finding del
+            // code-review post-fix: el comentario prometia overwrite pero solo password se
+            // actualizaba). Cambiamos el nombre y telefono para lockear el contrato.
+            auth.register(RegisterRequest("Ynombre", email, "+56922222222", "nueva456", "2.0"))
+            val rowTrasOverwrite = users.findByEmail(email)!!
+            assertEquals("Ynombre", rowTrasOverwrite.name)
+            assertEquals("+56922222222", rowTrasOverwrite.phone)
+            users.markEmailVerified(rowTrasOverwrite.id)
             // Recien con la cuenta YA verificada, un re-register debe rebotar con Conflict.
-            assertFailsWith<ConflictException> { auth.register(RegisterRequest("X", email, null, "abc123", "1.0")) }
+            assertFailsWith<ConflictException> { auth.register(RegisterRequest("Z", email, null, "abc123", "1.0")) }
+            // La password del PRIMER register (abc123) ya no funciona — fue sobrescrita por la
+            // del segundo. Si alguien refactoriza register() y silenciosamente skipea el update,
+            // este assert lo caza.
+            assertFailsWith<UnauthorizedException> { auth.login(LoginRequest(email, "abc123")) }
+            // La password del SEGUNDO register sí entra (cuenta ya esta verificada por arriba).
+            val res = auth.login(LoginRequest(email, "nueva456"))
+            assertTrue(res.accessToken.isNotEmpty())
             assertFailsWith<UnauthorizedException> { auth.login(LoginRequest(email, "otra999")) }
             assertFailsWith<ValidationException> {
                 adminUsers.createUser(AdminCreateUserRequest("Y", "staffx${System.nanoTime()}@frutapp.local", null, listOf("rol-inexistente")))

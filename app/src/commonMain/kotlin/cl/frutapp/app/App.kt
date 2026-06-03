@@ -39,15 +39,28 @@ fun App() {
                 LaunchedEffect(TokenStore.accessToken) {
                     if (TokenStore.accessToken != null) {
                         hadSession = true
-                    } else if (hadSession) {
-                        // accessToken paso de !=null a null durante esta vida del proceso:
-                        // sesion realmente expiro. Mostrar toast y volver a Login.
+                        return@LaunchedEffect
+                    }
+                    if (!hadSession) return@LaunchedEffect
+                    // accessToken paso de !=null a null en este proceso. Distinguimos DOS casos:
+                    // (a) expiracion real (refresh token invalidado server-side) — queremos toast
+                    //     + replaceAll(Login) para sacar al usuario de una pantalla muerta;
+                    // (b) logout voluntario desde ProfileScreen, que ya llamo TokenStore.clear()
+                    //     + navigator.replaceAll(LoginScreen()) por su cuenta — NO queremos
+                    //     mostrar 'sesion expiro' (mentira) ni dispatchear otro replaceAll (dos
+                    //     LoginScreen consecutivos rompe Voyager con 'Key was used multiple times').
+                    // Mirar navigator.lastItem: si ya estamos en una pantalla de auth, fue
+                    // deliberado (logout, expiracion ya manejada, o splash redirigiendo).
+                    val lastItem = navigator.lastItem
+                    val yaEstaEnAuth = lastItem is LoginScreen ||
+                        lastItem::class.qualifiedName?.contains("OnboardingScreen") == true ||
+                        lastItem::class.qualifiedName?.contains("VerifyCodeScreen") == true ||
+                        lastItem::class.qualifiedName?.contains("SplashScreen") == true
+                    hadSession = false
+                    if (!yaEstaEnAuth) {
                         showToast("Tu sesión expiró. Vuelve a iniciar sesión.")
                         navigator.replaceAll(LoginScreen())
-                        hadSession = false
                     }
-                    // accessToken==null en arranque fresco (sin sesion previa en este proceso):
-                    // no hacemos nada — Splash decide a donde ir (Onboarding / Login / VerifyCode).
                 }
                 SlideTransition(navigator)
             }

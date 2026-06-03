@@ -33,37 +33,66 @@ class AuthService(
      *  (evita el oráculo de enumeración por timing). Se calcula una sola vez. */
     private val dummyHash: String by lazy { PasswordHasher.hash("frutapp-timing-dummy") }
 
-    /** Envía un correo sin tumbar el flujo principal si el proveedor falla. */
+    /** Envía un correo sin tumbar el flujo principal si el proveedor falla.
+     *  CancellationException se RE-LANZA: si el caller fue cancelado (cliente desconecto,
+     *  request timeout), tragarla con runCatching rompe structured concurrency — el
+     *  coroutine seguiria con lineas posteriores como si nada y loggeariamos un falso
+     *  'no se pudo enviar correo' que en realidad fue un cancel. */
     private suspend fun sendSafely(email: Email) {
         runCatching { emailSender.send(email) }
-            .onFailure { logger.error("No se pudo enviar correo a {}", email.to, it) }
+            .onFailure { e ->
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                logger.error("No se pudo enviar correo a {}", email.to, e)
+            }
     }
 
     /** Crea la cuenta SIN activar y envía un código de verificación al correo. No
      *  entrega tokens: el usuario inicia sesión recién al verificar (ver [verifyEmail]).
      *
-     *  Cuenta no verificada en el medio: si ya existe un usuario con ese correo pero NO
-     *  verificó, NO tiramos 409 — sobrescribimos password/name/phone y le mandamos un
-     *  código nuevo. Caso real (test del hermano de Sebastián): usuario se registra,
+     *  Cuenta no verificada en el medio: si ya existe un usuario CUSTOMER con ese correo
+     *  pero NO verificó, NO tiramos 409 — sobrescribimos password/name/phone/consent y
+     *  reenviamos código. Caso real (test del hermano de Sebastián): usuario se registra,
      *  no verifica, intenta de nuevo y antes recibía 'Ya está registrado' y quedaba
-     *  bloqueado sin forma de recuperar. */
+     *  bloqueado sin forma de recuperar.
+     *
+     *  Cuentas con rol staff (PICKER, DELIVERY, ADMIN, etc.) NUNCA se sobrescriben aunque
+     *  esten no verificadas — protege contra account-takeover si AdminUserService.createUser
+     *  fallo mid-flight dejando un row de staff sin verificar. Para esos casos, el path
+     *  legitimo es completar la invitacion via resetPassword (que usa el codigo recibido). */
     suspend fun register(req: RegisterRequest) {
         if (req.name.isBlank()) throw ValidationException("El nombre es obligatorio.")
         val email = normalizeEmail(req.email)
         validatePassword(req.password)
+        val nombreLimpio = req.name.trim()
+        val telefonoLimpio = req.phone?.trim()?.ifBlank { null }
         val existente = users.findByEmail(email)
-        if (existente != null && existente.emailVerified) {
-            throw ConflictException("Ya existe una cuenta con ese correo.")
+        if (existente != null) {
+            // Solo permitimos overwrite si el row es un CUSTOMER no verificado. Cualquier
+            // otra cuenta (verificada o con rol staff) responde 409 para no exponer un
+            // vector de toma de cuenta.
+            if (existente.emailVerified || existente.role != "CUSTOMER") {
+                throw ConflictException("Ya existe una cuenta con ese correo.")
+            }
         }
         val user = if (existente != null) {
-            // Cuenta no verificada → actualizar credenciales y reenviar código.
+            // CUSTOMER no verificado → sobrescribir credenciales+perfil y reenviar codigo.
             users.updatePassword(existente.id, PasswordHasher.hash(req.password))
-            existente
+            users.updateProfileFields(
+                userId = existente.id,
+                name = nombreLimpio,
+                phone = telefonoLimpio,
+                consentVersion = req.consentVersion
+            )
+            // assignRole idempotente por si el create previo logro insertar el row pero
+            // assignRole fallo (sin transaccion). Sin esto, el reintento dejaria al usuario
+            // sin rol 'cliente' aunque su cuenta exista.
+            rbac.assignRole(existente.id, "cliente")
+            existente.copy(name = nombreLimpio, phone = telefonoLimpio)
         } else {
             val nuevo = users.create(
-                name = req.name.trim(),
+                name = nombreLimpio,
                 email = email,
-                phone = req.phone?.trim()?.ifBlank { null },
+                phone = telefonoLimpio,
                 passwordHash = PasswordHasher.hash(req.password),
                 role = "CUSTOMER",
                 consentVersion = req.consentVersion

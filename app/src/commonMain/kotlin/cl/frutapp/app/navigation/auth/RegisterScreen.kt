@@ -60,8 +60,13 @@ class RegisterScreen : Screen {
         var name by rememberSaveable { mutableStateOf("") }
         var email by rememberSaveable { mutableStateOf("") }
         var phone by rememberSaveable { mutableStateOf("") }
-        var password by rememberSaveable { mutableStateOf("") }
-        var confirm by rememberSaveable { mutableStateOf("") }
+        // password/confirm intencionalmente con remember (no rememberSaveable): rememberSaveable
+        // serializa al SavedStateBundle del Activity y Android puede flushearlo a disco en
+        // process death. Mantener la password en texto plano fuera de memoria es un riesgo
+        // innecesario — y el usuario no necesita que sobreviva navegacion: el link de Terminos
+        // y Condiciones se abre via push (no destruye RegisterScreen), asi que remember basta.
+        var password by remember { mutableStateOf("") }
+        var confirm by remember { mutableStateOf("") }
         var acceptTerms by rememberSaveable { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
         var loading by remember { mutableStateOf(false) }
@@ -95,13 +100,20 @@ class RegisterScreen : Screen {
                 )
                 FrutTextField(
                     value = phone,
-                    // El label ya indica '+56', el usuario solo debe escribir su numero local.
-                    // Si pega/escribe '+56' o '56', lo descartamos del inicio. Solo digitos.
+                    // El label ya indica '+56'; el usuario solo debe escribir su numero local.
+                    // Filtro a solo digitos siempre (descarta '+', espacios, guiones). El strip
+                    // de '56' SOLO corre cuando el largo total sugiere que viene country-code
+                    // dentro del mismo campo (>= 11 digitos = '56' + numero chileno completo de
+                    // 9). Antes lo hacia en CADA keystroke con length>=2 y se comia los digitos
+                    // legitimos del usuario al tipear ('5','6','9' → al llegar a '56' lo dejaba
+                    // en vacio, despues '9' empezaba de cero — el usuario veia digitos
+                    // desaparecer). Asi el strip solo actua cuando hace fisicamente sentido.
                     onValueChange = { nuevo ->
                         val soloDigitos = nuevo.filter { it.isDigit() }
-                        phone = when {
-                            soloDigitos.startsWith("56") -> soloDigitos.removePrefix("56")
-                            else -> soloDigitos
+                        phone = if (soloDigitos.length >= 11 && soloDigitos.startsWith("56")) {
+                            soloDigitos.removePrefix("56")
+                        } else {
+                            soloDigitos
                         }
                     },
                     label = "Número de teléfono (+56)",
