@@ -43,6 +43,12 @@ import cl.frutapp.app.ui.theme.FrutAppColors
 
 private enum class TipoSustitucion { SUSTITUIR, REDUCIR, FALTANTE }
 
+private fun TipoSustitucion.aEstado(): EstadoItem = when (this) {
+    TipoSustitucion.SUSTITUIR -> EstadoItem.SUSTITUIDO
+    TipoSustitucion.REDUCIR -> EstadoItem.REDUCIDO
+    TipoSustitucion.FALTANTE -> EstadoItem.FALTANTE
+}
+
 private data class Alternativa(val emoji: String, val nombre: String, val cantidad: String, val stock: String, val sufStock: Boolean)
 
 /**
@@ -50,10 +56,14 @@ private data class Alternativa(val emoji: String, val nombre: String, val cantid
  * - Sustituir por similar: muestra una lista de alternativas (radio).
  * - Reducir cantidad: indicar cuanto entregar.
  * - Reportar faltante: no hay alternativas.
+ *
+ * [onConfirmar] recibe el [EstadoItem] resultante (SUSTITUIDO/REDUCIDO/FALTANTE) para que
+ * el picklist actualice el estado del item — asi cada item del pedido siempre termina
+ * 'resuelto' y el handoff sabe el desglose real.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SustitucionModal(item: ItemPicklist, onCerrar: () -> Unit, onConfirmar: () -> Unit) {
+fun SustitucionModal(item: ItemPicklist, onCerrar: () -> Unit, onConfirmar: (EstadoItem) -> Unit) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var tipo by remember { mutableStateOf(TipoSustitucion.SUSTITUIR) }
     var alternativaSel by remember { mutableStateOf(0) }
@@ -146,7 +156,7 @@ fun SustitucionModal(item: ItemPicklist, onCerrar: () -> Unit, onConfirmar: () -
             Spacer(Modifier.height(20.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 FrutButtonOutline(text = "Cancelar", onClick = onCerrar, modifier = Modifier.weight(1f))
-                FrutButtonPrimary(text = "Confirmar acción", onClick = onConfirmar, modifier = Modifier.weight(1.4f))
+                FrutButtonPrimary(text = "Confirmar acción", onClick = { onConfirmar(tipo.aEstado()) }, modifier = Modifier.weight(1.4f))
             }
         }
     }

@@ -25,9 +25,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Icon
@@ -62,14 +64,17 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val data = remember(pedidoId) { picklistMock(pedidoId) }
-        // Estado local del check de cada item — espejo de EstadoItem.COMPLETADO. Cuando
-        // exista el endpoint, esto sera un PATCH al backend y el estado vendra del servidor.
-        var marcados by remember(pedidoId) {
-            mutableStateOf(data.items.filter { it.estado != EstadoItem.PENDIENTE }.map { it.numero }.toSet())
+        // State machine por item: Map<numeroItem, EstadoItem>. Cada item siempre tiene un
+        // estado; el boton 'listo' se desbloquea cuando ninguno queda en PENDIENTE.
+        // Cuando exista el endpoint, esto sera un PATCH al backend por item.
+        var estados by remember(pedidoId) {
+            mutableStateOf(data.items.associate { it.numero to it.estado })
         }
-        // Modal abierto: null = ninguno; ej. PesoVariable o Sustitucion
         var modalAbierto by remember { mutableStateOf<ModalPicklist?>(null) }
         var itemModal by remember { mutableStateOf<ItemPicklist?>(null) }
+
+        val resueltos = estados.values.count { it.resuelto() }
+        val totalResueltos = data.totalItems
 
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
             TopBar(
@@ -82,7 +87,7 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
                 tiempoMin = data.tiempoEstimadoMin,
                 sector = data.sector,
                 destino = data.destino,
-                progreso = marcados.size.toFloat() / data.totalItems
+                progreso = resueltos.toFloat() / totalResueltos
             )
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
@@ -98,18 +103,23 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(data.items, key = { it.numero }) { item ->
-                    val checkeado = item.numero in marcados
+                    val estado = estados[item.numero] ?: EstadoItem.PENDIENTE
                     ItemCard(
                         item = item,
-                        checkeado = checkeado,
+                        estado = estado,
                         onToggle = {
-                            // Si es peso variable y aun no esta confirmado, abrimos el modal
-                            // de peso real (picker-03). Si no, toggle simple.
-                            if (item.pesoVariable && !checkeado) {
-                                itemModal = item
-                                modalAbierto = ModalPicklist.PESO
+                            // Si esta PENDIENTE: peso variable → modal; sino → COMPLETADO.
+                            // Si ya esta resuelto en cualquier estado: tap lo regresa a PENDIENTE
+                            // (el picker puede 'deshacer' su decision antes de cerrar el pedido).
+                            if (estado == EstadoItem.PENDIENTE) {
+                                if (item.pesoVariable) {
+                                    itemModal = item
+                                    modalAbierto = ModalPicklist.PESO
+                                } else {
+                                    estados = estados + (item.numero to EstadoItem.COMPLETADO)
+                                }
                             } else {
-                                marcados = if (checkeado) marcados - item.numero else marcados + item.numero
+                                estados = estados + (item.numero to EstadoItem.PENDIENTE)
                             }
                         },
                         onSwap = {
@@ -122,23 +132,22 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
             BotonesInferior(
                 onIncidencia = { showToast("Reportar incidencia - Próximamente") },
                 onListo = {
-                    if (marcados.size == data.totalItems) {
-                        navigator.replace(PickerListoScreen(data.pedidoId))
+                    val pendientes = estados.values.count { it == EstadoItem.PENDIENTE }
+                    if (pendientes == 0) {
+                        navigator.replace(PickerListoScreen(data.pedidoId, estados))
                     } else {
-                        showToast("Aún quedan ${data.totalItems - marcados.size} items por completar")
+                        showToast("Aún quedan $pendientes items por resolver")
                     }
                 }
             )
         }
 
-        // Modales (picker-03 y picker-04). Los renderizamos aca con visibilidad condicional;
-        // el contenido vive en sus propios composables reusables.
         if (modalAbierto == ModalPicklist.PESO && itemModal != null) {
             PesoVariableModal(
                 item = itemModal!!,
                 onCerrar = { modalAbierto = null; itemModal = null },
                 onConfirmar = {
-                    marcados = marcados + itemModal!!.numero
+                    estados = estados + (itemModal!!.numero to EstadoItem.COMPLETADO)
                     modalAbierto = null
                     itemModal = null
                 }
@@ -148,8 +157,8 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
             SustitucionModal(
                 item = itemModal!!,
                 onCerrar = { modalAbierto = null; itemModal = null },
-                onConfirmar = {
-                    marcados = marcados + itemModal!!.numero
+                onConfirmar = { nuevoEstado ->
+                    estados = estados + (itemModal!!.numero to nuevoEstado)
                     modalAbierto = null
                     itemModal = null
                 }
@@ -250,16 +259,21 @@ private fun DonutProgreso(progreso: Float, total: Int, modifier: Modifier = Modi
 }
 
 @Composable
-private fun ItemCard(item: ItemPicklist, checkeado: Boolean, onToggle: () -> Unit, onSwap: () -> Unit) {
+private fun ItemCard(item: ItemPicklist, estado: EstadoItem, onToggle: () -> Unit, onSwap: () -> Unit) {
+    // Toda la card es tappeable para marcar/desmarcar. El borde refleja el estado:
+    // verde fuerte si esta resuelto, gris si pendiente.
+    val resuelto = estado.resuelto()
+    val borde = if (resuelto) bordeColorPorEstado(estado) else FrutAppColors.Brand100
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.White, RoundedCornerShape(14.dp))
             .border(
-                width = if (checkeado) 2.dp else 1.dp,
-                color = if (checkeado) FrutAppColors.Brand400 else FrutAppColors.Brand100,
+                width = if (resuelto) 2.dp else 1.dp,
+                color = borde,
                 shape = RoundedCornerShape(14.dp)
             )
+            .clickable(onClick = onToggle)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -289,12 +303,15 @@ private fun ItemCard(item: ItemPicklist, checkeado: Boolean, onToggle: () -> Uni
                     Text("Peso variable", color = FrutAppColors.Brand600, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
+            // Chip de resolucion cuando el estado es distinto de COMPLETADO (que ya
+            // se nota con el check verde): sustituido / reducido / faltante.
+            ChipResolucion(estado = estado)
             Spacer(Modifier.height(4.dp))
             Text("Pasillo ${item.pasillo} · Estante ${item.estante}", color = FrutAppColors.InkMuted, fontSize = 11.sp)
         }
         Spacer(Modifier.width(8.dp))
         Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            CheckBoxGrande(checked = checkeado, onClick = onToggle)
+            EstadoBoxGrande(estado = estado, onClick = onToggle)
             IconButton(onClick = onSwap, modifier = Modifier.size(28.dp)) {
                 Icon(Icons.Filled.SwapHoriz, "Sustituir", tint = FrutAppColors.InkSoft, modifier = Modifier.size(18.dp))
             }
@@ -302,28 +319,62 @@ private fun ItemCard(item: ItemPicklist, checkeado: Boolean, onToggle: () -> Uni
     }
 }
 
+/** Color de borde fuerte segun el tipo de resolucion. */
+private fun bordeColorPorEstado(estado: EstadoItem): Color = when (estado) {
+    EstadoItem.COMPLETADO -> FrutAppColors.Brand400
+    EstadoItem.SUSTITUIDO -> Color(0xFF3B82F6) // azul
+    EstadoItem.REDUCIDO -> Color(0xFFD97706)   // ambar
+    EstadoItem.FALTANTE -> Color(0xFFB91C1C)   // rojo
+    EstadoItem.PENDIENTE -> FrutAppColors.Brand100
+}
+
 @Composable
-private fun CheckBoxGrande(checked: Boolean, onClick: () -> Unit) {
+private fun ChipResolucion(estado: EstadoItem) {
+    if (estado == EstadoItem.PENDIENTE || estado == EstadoItem.COMPLETADO) return
+    val (bg, fg, label) = when (estado) {
+        EstadoItem.SUSTITUIDO -> Triple(Color(0xFFDBEAFE), Color(0xFF1E40AF), "Sustituido")
+        EstadoItem.REDUCIDO -> Triple(Color(0xFFFEF3C7), Color(0xFF92400E), "Cantidad reducida")
+        EstadoItem.FALTANTE -> Triple(Color(0xFFFEE2E2), Color(0xFFB91C1C), "Faltante reportado")
+        else -> return
+    }
+    Spacer(Modifier.height(4.dp))
+    Row(
+        modifier = Modifier.background(bg, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, color = fg, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun EstadoBoxGrande(estado: EstadoItem, onClick: () -> Unit) {
+    val (bg, fg, icon, desc) = when (estado) {
+        EstadoItem.PENDIENTE -> EstadoBoxStyle(Color.White, FrutAppColors.Brand100, null, "Marcar")
+        EstadoItem.COMPLETADO -> EstadoBoxStyle(FrutAppColors.Brand400, FrutAppColors.Brand400, Icons.Filled.Check, "Completado")
+        EstadoItem.SUSTITUIDO -> EstadoBoxStyle(Color(0xFF3B82F6), Color(0xFF3B82F6), Icons.Filled.SwapHoriz, "Sustituido")
+        EstadoItem.REDUCIDO -> EstadoBoxStyle(Color(0xFFD97706), Color(0xFFD97706), Icons.Filled.Remove, "Reducido")
+        EstadoItem.FALTANTE -> EstadoBoxStyle(Color(0xFFB91C1C), Color(0xFFB91C1C), Icons.Filled.Close, "Faltante")
+    }
     Box(
         modifier = Modifier
             .size(40.dp)
-            .background(
-                color = if (checked) FrutAppColors.Brand400 else Color.White,
-                shape = RoundedCornerShape(10.dp)
-            )
-            .border(
-                width = 2.dp,
-                color = if (checked) FrutAppColors.Brand400 else FrutAppColors.Brand100,
-                shape = RoundedCornerShape(10.dp)
-            )
+            .background(color = bg, shape = RoundedCornerShape(10.dp))
+            .border(width = 2.dp, color = fg, shape = RoundedCornerShape(10.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        if (checked) {
-            Icon(Icons.Filled.Check, "Completado", tint = Color.White, modifier = Modifier.size(24.dp))
+        if (icon != null) {
+            Icon(icon, desc, tint = Color.White, modifier = Modifier.size(24.dp))
         }
     }
 }
+
+private data class EstadoBoxStyle(
+    val bg: Color,
+    val fg: Color,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector?,
+    val desc: String
+)
 
 @Composable
 private fun BotonesInferior(onIncidencia: () -> Unit, onListo: () -> Unit) {

@@ -6,8 +6,23 @@ package cl.frutapp.app.navigation.picker
  * items vienen del repositorio.
  */
 
-/** Estado de cada item del picklist. */
-enum class EstadoItem { PENDIENTE, COMPLETADO, SUSTITUIDO, FALTANTE }
+/**
+ * Estado de cada item del picklist. El pedido solo cierra (boton 'Marcar como listo' se
+ * habilita) cuando ningun item esta PENDIENTE — cada uno tiene que estar resuelto en
+ * alguna forma. Esto fuerza al picker a indicar QUE paso con lo que no logro obtener,
+ * lo que da el feedback loop para mejorar surtido/proveedor/SLA en lugar de un balde
+ * negro de 'el pedido salio con cosas faltantes pero no sabemos cuales'.
+ *
+ *  - PENDIENTE: el picker todavia no toco el item.
+ *  - COMPLETADO: encontrado tal cual; incluye peso variable confirmado.
+ *  - SUSTITUIDO: cambiado por una alternativa similar (modal sustitucion).
+ *  - REDUCIDO: cantidad menor a la solicitada (modal sustitucion → reducir).
+ *  - FALTANTE: reportado sin reemplazo posible (modal sustitucion → reportar faltante).
+ */
+enum class EstadoItem { PENDIENTE, COMPLETADO, SUSTITUIDO, REDUCIDO, FALTANTE }
+
+/** Resuelto = ya no requiere accion del picker (boton 'listo' puede desbloquearse). */
+fun EstadoItem.resuelto(): Boolean = this != EstadoItem.PENDIENTE
 
 data class ItemPicklist(
     val numero: Int,

@@ -51,10 +51,22 @@ import cl.frutapp.app.ui.theme.FrutAppColors
  * hero con check grande, stats finales del trabajo, destino+picker, chip de incidencias,
  * card de proximo paso (entregar al equipo de despacho) y botones de listo/ver detalle.
  */
-class PickerListoScreen(private val pedidoId: String) : Screen {
+class PickerListoScreen(
+    private val pedidoId: String,
+    private val estados: Map<Int, EstadoItem> = emptyMap()
+) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        // Desglose del pedido: completos / sustituidos / reducidos / faltantes. Si llegamos
+        // sin estados (caso: vista de detalle del tab 'Listos' del historial), mostramos un
+        // desglose default tipico para no quedar con todo en cero.
+        val completos = if (estados.isEmpty()) 12 else estados.values.count { it == EstadoItem.COMPLETADO }
+        val sustituidos = estados.values.count { it == EstadoItem.SUSTITUIDO }
+        val reducidos = estados.values.count { it == EstadoItem.REDUCIDO }
+        val faltantes = estados.values.count { it == EstadoItem.FALTANTE }
+        val incidencias = sustituidos + reducidos + faltantes
+        val total = if (estados.isEmpty()) 12 else estados.size
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
             Row(
                 modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 6.dp, vertical = 8.dp),
@@ -105,14 +117,14 @@ class PickerListoScreen(private val pedidoId: String) : Screen {
                 Text("Pedido listo", color = FrutAppColors.Brand800, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "Todos los productos fueron preparados correctamente.",
+                    text = if (incidencias == 0) "Todos los productos fueron preparados correctamente."
+                           else "El pedido salió con $incidencias resoluciones registradas.",
                     color = FrutAppColors.InkMuted,
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 24.dp)
                 )
                 Spacer(Modifier.height(20.dp))
-                // Stats
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -121,9 +133,21 @@ class PickerListoScreen(private val pedidoId: String) : Screen {
                         .padding(14.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    StatItem(icon = Icons.Filled.Inventory2, valor = "12", label = "Total")
-                    StatItem(icon = Icons.Filled.CheckCircle, valor = "12 de 12", label = "Progreso")
+                    StatItem(icon = Icons.Filled.Inventory2, valor = "$total", label = "Total")
+                    StatItem(icon = Icons.Filled.CheckCircle, valor = "$completos de $total", label = "Completos")
                     StatItem(icon = Icons.Filled.AccessTime, valor = "18 min", label = "Duración")
+                }
+                // Desglose por tipo de resolucion solo aparece si hubo alguna distinta a COMPLETADO.
+                if (incidencias > 0) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (sustituidos > 0) ResolucionBox(label = "Sustituidos", valor = sustituidos, color = androidx.compose.ui.graphics.Color(0xFF3B82F6), modifier = Modifier.weight(1f))
+                        if (reducidos > 0) ResolucionBox(label = "Reducidos", valor = reducidos, color = androidx.compose.ui.graphics.Color(0xFFD97706), modifier = Modifier.weight(1f))
+                        if (faltantes > 0) ResolucionBox(label = "Faltantes", valor = faltantes, color = androidx.compose.ui.graphics.Color(0xFFB91C1C), modifier = Modifier.weight(1f))
+                    }
                 }
                 Spacer(Modifier.height(12.dp))
                 // Destino + picker
@@ -146,7 +170,10 @@ class PickerListoScreen(private val pedidoId: String) : Screen {
                     ) {
                         Icon(Icons.Filled.Check, null, tint = FrutAppColors.Brand600, modifier = Modifier.size(13.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("0 incidencias", color = FrutAppColors.Brand800, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = if (incidencias == 0) "0 incidencias" else "$incidencias ${if (incidencias == 1) "incidencia" else "incidencias"}",
+                            color = FrutAppColors.Brand800, fontSize = 12.sp, fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
                 Spacer(Modifier.height(12.dp))
@@ -184,6 +211,20 @@ class PickerListoScreen(private val pedidoId: String) : Screen {
                 FrutButtonOutline(text = "Ver detalle", onClick = { navigator.pop() })
             }
         }
+    }
+}
+
+@Composable
+private fun ResolucionBox(label: String, valor: Int, color: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .background(color.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
+            .border(1.dp, color.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+            .padding(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("$valor", color = color, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = color, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
