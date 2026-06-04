@@ -32,11 +32,16 @@ import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -48,8 +53,11 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import androidx.compose.material.icons.filled.Cancel
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
+import cl.frutapp.app.ui.components.StaffActionsSheet
+import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
 
 /**
@@ -62,8 +70,10 @@ class RepartidorDetalleScreen(private val pedidoId: String) : Screen {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val despacho = remember(pedidoId) { despachoPorId(pedidoId) }
+        var menuAbierto by remember { mutableStateOf(false) }
+        var dialogoCancelar by remember { mutableStateOf(false) }
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
-            TopBar(estado = "Listo para retiro", onBack = { navigator.pop() })
+            TopBar(estado = "Listo para retiro", onBack = { navigator.pop() }, onMenu = { menuAbierto = true })
             Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp)) {
                 Text(despacho.id, color = FrutAppColors.Brand800, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(12.dp))
@@ -93,11 +103,44 @@ class RepartidorDetalleScreen(private val pedidoId: String) : Screen {
                 FrutButtonPrimary(text = "Iniciar retiro", onClick = { navigator.replace(RepartidorEnCaminoScreen(pedidoId)) }, modifier = Modifier.weight(1.4f))
             }
         }
+        if (menuAbierto) {
+            StaffActionsSheet(
+                titulo = "Opciones de la entrega",
+                acciones = accionesRepartidor(
+                    onPausar = { showToast("Entrega pausada - Próximamente"); navigator.popUntilRoot() },
+                    onReportar = { navigator.push(RepartidorIncidenciaScreen(pedidoId)) },
+                    onCambiarDireccion = { showToast("Solicitar cambio de dirección - Próximamente") },
+                    onLlamarCliente = { showToast("Llamar al cliente - Próximamente") },
+                    onChatCliente = { showToast("Abrir chat - Próximamente") },
+                    onHistorial = { showToast("Ver historial - Próximamente") },
+                    onCancelar = { dialogoCancelar = true }
+                ),
+                onCerrar = { menuAbierto = false }
+            )
+        }
+        if (dialogoCancelar) {
+            AlertDialog(
+                onDismissRequest = { dialogoCancelar = false },
+                icon = { Icon(Icons.Filled.Cancel, null, tint = Color(0xFFB91C1C)) },
+                title = { Text("¿Cancelar entrega?", fontWeight = FontWeight.Bold) },
+                text = { Text("La entrega se marcará como cancelada y deberá registrarse el motivo a soporte. Esta acción no se puede deshacer.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        dialogoCancelar = false
+                        showToast("Entrega cancelada (mock)")
+                        navigator.popUntilRoot()
+                    }) { Text("Sí, cancelar", color = Color(0xFFB91C1C), fontWeight = FontWeight.Bold) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { dialogoCancelar = false }) { Text("Volver") }
+                }
+            )
+        }
     }
 }
 
 @Composable
-private fun TopBar(estado: String, onBack: () -> Unit) {
+private fun TopBar(estado: String, onBack: () -> Unit, onMenu: () -> Unit = {}) {
     Row(
         modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 6.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -117,7 +160,7 @@ private fun TopBar(estado: String, onBack: () -> Unit) {
             Spacer(Modifier.width(6.dp))
             Text(estado, color = FrutAppColors.Brand800, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
         }
-        IconButton(onClick = {}) {
+        IconButton(onClick = onMenu) {
             Icon(Icons.Filled.MoreVert, "Más", tint = FrutAppColors.Brand800)
         }
     }

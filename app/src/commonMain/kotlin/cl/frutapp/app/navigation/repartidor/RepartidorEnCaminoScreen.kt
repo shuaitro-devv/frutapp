@@ -24,18 +24,25 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.DeliveryDining
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.NoEncryption
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Traffic
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -49,6 +56,8 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
+import cl.frutapp.app.ui.components.StaffActionsSheet
+import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
 
 /**
@@ -61,6 +70,8 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val despacho = remember(pedidoId) { despachoPorId(pedidoId) }
+        var menuAbierto by remember { mutableStateOf(false) }
+        var dialogoCancelar by remember { mutableStateOf(false) }
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
             Row(
                 modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 6.dp, vertical = 8.dp),
@@ -74,12 +85,10 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
                     Text("Pedido ${despacho.id}", color = FrutAppColors.InkMuted, fontSize = 11.sp)
                 }
                 Row(
-                    modifier = Modifier.clickable { }.padding(6.dp),
+                    modifier = Modifier.clickable { menuAbierto = true }.padding(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.HelpOutline, null, tint = FrutAppColors.Brand600, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Ayuda", color = FrutAppColors.Brand600, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Icon(Icons.Filled.MoreVert, null, tint = FrutAppColors.Brand600, modifier = Modifier.size(20.dp))
                 }
             }
             Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp)) {
@@ -101,6 +110,39 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
                 FrutButtonOutline(text = "Problema", onClick = { navigator.push(RepartidorIncidenciaScreen(pedidoId)) }, modifier = Modifier.weight(1f))
                 FrutButtonPrimary(text = "Llegué al destino", onClick = { navigator.replace(RepartidorEntregaScreen(pedidoId)) }, modifier = Modifier.weight(1.4f))
             }
+        }
+        if (menuAbierto) {
+            StaffActionsSheet(
+                titulo = "Opciones de la entrega",
+                acciones = accionesRepartidor(
+                    onPausar = { showToast("Entrega pausada - Próximamente") },
+                    onReportar = { navigator.push(RepartidorIncidenciaScreen(pedidoId)) },
+                    onCambiarDireccion = { showToast("Cambiar dirección - Próximamente") },
+                    onLlamarCliente = { showToast("Llamar - Próximamente") },
+                    onChatCliente = { showToast("Chat - Próximamente") },
+                    onHistorial = { showToast("Historial - Próximamente") },
+                    onCancelar = { dialogoCancelar = true }
+                ),
+                onCerrar = { menuAbierto = false }
+            )
+        }
+        if (dialogoCancelar) {
+            AlertDialog(
+                onDismissRequest = { dialogoCancelar = false },
+                icon = { Icon(Icons.Filled.Cancel, null, tint = Color(0xFFB91C1C)) },
+                title = { Text("¿Cancelar entrega?", fontWeight = FontWeight.Bold) },
+                text = { Text("La entrega se marcará como cancelada y deberá registrarse el motivo a soporte.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        dialogoCancelar = false
+                        showToast("Entrega cancelada (mock)")
+                        navigator.popUntilRoot()
+                    }) { Text("Sí, cancelar", color = Color(0xFFB91C1C), fontWeight = FontWeight.Bold) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { dialogoCancelar = false }) { Text("Volver") }
+                }
+            )
         }
     }
 }
