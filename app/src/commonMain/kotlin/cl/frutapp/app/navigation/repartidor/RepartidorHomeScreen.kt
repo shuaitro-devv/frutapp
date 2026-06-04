@@ -12,7 +12,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.NearMe
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.LocalShipping
@@ -34,8 +38,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.TokenStore
+import cl.frutapp.app.navigation.auth.LoginScreen
+import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.StaffBottomNav
+import cl.frutapp.app.ui.components.StaffCenterButton
+import cl.frutapp.app.ui.components.StaffQuickAction
 import cl.frutapp.app.ui.components.StaffTab
+import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
 
 /**
@@ -48,6 +60,7 @@ import cl.frutapp.app.ui.theme.FrutAppColors
 class RepartidorHomeScreen : Screen {
     @Composable
     override fun Content() {
+        val navigator = LocalNavigator.currentOrThrow
         var selectedTab by rememberSaveable { mutableStateOf("despachos") }
 
         val tabs = remember {
@@ -59,12 +72,33 @@ class RepartidorHomeScreen : Screen {
             )
         }
 
+        // Centro destacado del repartidor: las acciones recurrentes en ruta son navegar al
+        // destino, marcar llegada y reportar problemas. Por ahora todo no-op con toast.
+        val center = StaffCenterButton(
+            icon = Icons.Filled.NearMe,
+            contentDescription = "Acción rápida",
+            selected = false,
+            onClick = { showToast("Acción rápida - Próximamente") },
+            quickActions = listOf(
+                StaffQuickAction(Icons.Filled.Map, "Navegar a destino") {
+                    showToast("Navegar - Próximamente")
+                },
+                StaffQuickAction(Icons.Filled.QrCodeScanner, "Escanear entrega") {
+                    showToast("Escanear - Próximamente")
+                },
+                StaffQuickAction(Icons.Filled.ReportProblem, "Reportar incidencia") {
+                    showToast("Reportar - Próximamente")
+                }
+            )
+        )
+
         Scaffold(
             bottomBar = {
                 StaffBottomNav(
                     tabs = tabs,
                     selectedId = selectedTab,
-                    onSelect = { selectedTab = it }
+                    onSelect = { selectedTab = it },
+                    center = center
                 )
             },
             containerColor = FrutAppColors.Background
@@ -72,14 +106,24 @@ class RepartidorHomeScreen : Screen {
             val tituloTab = tabs.firstOrNull { it.id == selectedTab }?.label ?: ""
             ProximamentePlaceholder(
                 modifier = Modifier.fillMaxSize().padding(innerPadding),
-                titulo = tituloTab
+                titulo = tituloTab,
+                onLogout = if (selectedTab == "perfil") {
+                    {
+                        TokenStore.clear()
+                        navigator.replaceAll(LoginScreen())
+                    }
+                } else null
             )
         }
     }
 }
 
 @Composable
-private fun ProximamentePlaceholder(modifier: Modifier = Modifier, titulo: String) {
+private fun ProximamentePlaceholder(
+    modifier: Modifier = Modifier,
+    titulo: String,
+    onLogout: (() -> Unit)? = null
+) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
@@ -116,6 +160,14 @@ private fun ProximamentePlaceholder(modifier: Modifier = Modifier, titulo: Strin
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 32.dp)
             )
+            if (onLogout != null) {
+                Spacer(Modifier.height(28.dp))
+                FrutButtonOutline(
+                    text = "Cerrar sesión",
+                    onClick = onLogout,
+                    modifier = Modifier.padding(horizontal = 48.dp)
+                )
+            }
         }
     }
 }

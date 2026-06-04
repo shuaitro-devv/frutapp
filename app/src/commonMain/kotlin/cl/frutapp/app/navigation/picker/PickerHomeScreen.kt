@@ -9,10 +9,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.ReportProblem
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Person
@@ -35,8 +39,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
 import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.TokenStore
+import cl.frutapp.app.navigation.auth.LoginScreen
+import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.StaffBottomNav
+import cl.frutapp.app.ui.components.StaffCenterButton
+import cl.frutapp.app.ui.components.StaffQuickAction
 import cl.frutapp.app.ui.components.StaffTab
+import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
 
 /**
@@ -50,6 +62,7 @@ import cl.frutapp.app.ui.theme.FrutAppColors
 class PickerHomeScreen : Screen {
     @Composable
     override fun Content() {
+        val navigator = LocalNavigator.currentOrThrow
         var selectedTab by rememberSaveable { mutableStateOf("cola") }
 
         val tabs = remember {
@@ -61,12 +74,34 @@ class PickerHomeScreen : Screen {
             )
         }
 
+        // Centro destacado: por ahora todo no-op con toast 'Próximamente'. Cuando esten
+        // los flujos reales se cablean a: tomar siguiente pedido, escanear codigo y reportar
+        // problema (estas son las acciones recurrentes del picker durante el turno).
+        val center = StaffCenterButton(
+            icon = Icons.Filled.Bolt,
+            contentDescription = "Acción rápida",
+            selected = false,
+            onClick = { showToast("Acción rápida - Próximamente") },
+            quickActions = listOf(
+                StaffQuickAction(Icons.Filled.PlayCircle, "Tomar siguiente") {
+                    showToast("Tomar siguiente - Próximamente")
+                },
+                StaffQuickAction(Icons.Filled.QrCodeScanner, "Escanear código") {
+                    showToast("Escanear - Próximamente")
+                },
+                StaffQuickAction(Icons.Filled.ReportProblem, "Reportar problema") {
+                    showToast("Reportar - Próximamente")
+                }
+            )
+        )
+
         Scaffold(
             bottomBar = {
                 StaffBottomNav(
                     tabs = tabs,
                     selectedId = selectedTab,
-                    onSelect = { selectedTab = it }
+                    onSelect = { selectedTab = it },
+                    center = center
                 )
             },
             containerColor = FrutAppColors.Background
@@ -74,7 +109,16 @@ class PickerHomeScreen : Screen {
             val tituloTab = tabs.firstOrNull { it.id == selectedTab }?.label ?: ""
             ProximamentePlaceholder(
                 modifier = Modifier.fillMaxSize().padding(innerPadding),
-                titulo = tituloTab
+                titulo = tituloTab,
+                // En Perfil mostramos un boton de cerrar sesion ad-hoc para poder cambiar de
+                // usuario durante testing — el placeholder se queda hasta que se construya
+                // la pantalla Perfil real del picker (que tendra logout entre otras cosas).
+                onLogout = if (selectedTab == "perfil") {
+                    {
+                        TokenStore.clear()
+                        navigator.replaceAll(LoginScreen())
+                    }
+                } else null
             )
         }
     }
@@ -86,7 +130,11 @@ class PickerHomeScreen : Screen {
  * queda como tab fallback si alguna no esta lista todavia.
  */
 @Composable
-private fun ProximamentePlaceholder(modifier: Modifier = Modifier, titulo: String) {
+private fun ProximamentePlaceholder(
+    modifier: Modifier = Modifier,
+    titulo: String,
+    onLogout: (() -> Unit)? = null
+) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
@@ -123,6 +171,14 @@ private fun ProximamentePlaceholder(modifier: Modifier = Modifier, titulo: Strin
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 32.dp)
             )
+            if (onLogout != null) {
+                Spacer(Modifier.height(28.dp))
+                FrutButtonOutline(
+                    text = "Cerrar sesión",
+                    onClick = onLogout,
+                    modifier = Modifier.padding(horizontal = 48.dp)
+                )
+            }
         }
     }
 }
