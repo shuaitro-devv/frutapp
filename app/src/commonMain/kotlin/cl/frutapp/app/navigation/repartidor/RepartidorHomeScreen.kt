@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -104,16 +105,26 @@ class RepartidorHomeScreen : Screen {
             containerColor = FrutAppColors.Background
         ) { innerPadding ->
             val tituloTab = tabs.firstOrNull { it.id == selectedTab }?.label ?: ""
-            ProximamentePlaceholder(
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
-                titulo = tituloTab,
-                onLogout = if (selectedTab == "perfil") {
-                    {
-                        TokenStore.clear()
-                        navigator.replaceAll(LoginScreen())
+            Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                when (selectedTab) {
+                    "despachos" -> RepartidorColaContent()
+                    "perfil" -> Column(modifier = Modifier.fillMaxSize()) {
+                        // Hasta tener una pantalla 'Perfil' propia, mostramos el saldo del
+                        // repartidor en esta tab y agregamos el boton de logout al final.
+                        Box(modifier = Modifier.weight(1f)) { RepartidorSaldoContent() }
+                        Box(modifier = Modifier.fillMaxWidth().background(androidx.compose.ui.graphics.Color.White).padding(16.dp)) {
+                            cl.frutapp.app.ui.components.FrutButtonOutline(
+                                text = "Cerrar sesión",
+                                onClick = {
+                                    TokenStore.clear()
+                                    navigator.replaceAll(LoginScreen())
+                                }
+                            )
+                        }
                     }
-                } else null
-            )
+                    else -> ProximamentePlaceholder(modifier = Modifier.fillMaxSize(), titulo = tituloTab)
+                }
+            }
         }
     }
 }

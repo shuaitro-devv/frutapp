@@ -107,19 +107,29 @@ class PickerHomeScreen : Screen {
             containerColor = FrutAppColors.Background
         ) { innerPadding ->
             val tituloTab = tabs.firstOrNull { it.id == selectedTab }?.label ?: ""
-            ProximamentePlaceholder(
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
-                titulo = tituloTab,
-                // En Perfil mostramos un boton de cerrar sesion ad-hoc para poder cambiar de
-                // usuario durante testing — el placeholder se queda hasta que se construya
-                // la pantalla Perfil real del picker (que tendra logout entre otras cosas).
-                onLogout = if (selectedTab == "perfil") {
-                    {
-                        TokenStore.clear()
-                        navigator.replaceAll(LoginScreen())
-                    }
-                } else null
-            )
+            // Cada tab renderiza su propia pantalla. Las que todavia no estan construidas
+            // caen al ProximamentePlaceholder. Cuando se sumen mas pantallas reales (picker-02
+            // detalle/picklist se accede via tap en un pedido — vive en su propio Screen), se
+            // van agregando ramas al `when` y removiendo del placeholder.
+            Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                when (selectedTab) {
+                    "cola" -> PickerColaContent()
+                    "perfil" -> ProximamentePlaceholder(
+                        modifier = Modifier.fillMaxSize(),
+                        titulo = tituloTab,
+                        // Logout ad-hoc en Perfil mientras no se construye la pantalla real —
+                        // permite cambiar de usuario para testear los otros perfiles.
+                        onLogout = {
+                            TokenStore.clear()
+                            navigator.replaceAll(LoginScreen())
+                        }
+                    )
+                    else -> ProximamentePlaceholder(
+                        modifier = Modifier.fillMaxSize(),
+                        titulo = tituloTab
+                    )
+                }
+            }
         }
     }
 }
