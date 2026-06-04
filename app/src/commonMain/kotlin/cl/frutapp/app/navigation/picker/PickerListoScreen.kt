@@ -228,6 +228,9 @@ class PickerListoScreen(
                             showToast("Pedido pausado - vuelto a la cola")
                             navigator.popUntilRoot()
                         }
+                        PickerOpcion.REPORTAR -> {
+                            navigator.push(PickerIncidenciaScreen(pedidoId))
+                        }
                         PickerOpcion.CANCELAR -> {
                             showToast("Cancelado (mock)")
                             navigator.popUntilRoot()

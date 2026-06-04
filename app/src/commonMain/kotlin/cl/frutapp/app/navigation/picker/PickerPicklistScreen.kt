@@ -134,7 +134,7 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
                 }
             }
             BotonesInferior(
-                onIncidencia = { showToast("Reportar incidencia - Próximamente") },
+                onIncidencia = { navigator.push(PickerIncidenciaScreen(data.pedidoId)) },
                 onListo = {
                     val pendientes = estados.values.count { it == EstadoItem.PENDIENTE }
                     if (pendientes == 0) {
@@ -176,6 +176,9 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
                         PickerOpcion.PAUSAR -> {
                             showToast("Pedido pausado - vuelto a la cola")
                             navigator.pop()
+                        }
+                        PickerOpcion.REPORTAR -> {
+                            navigator.push(PickerIncidenciaScreen(data.pedidoId))
                         }
                         PickerOpcion.CANCELAR -> {
                             showToast("Cancelado (mock)")
