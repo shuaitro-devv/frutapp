@@ -58,7 +58,7 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val despacho = remember(pedidoId) { despachosMock().first { it.id == pedidoId } }
+        val despacho = remember(pedidoId) { despachoPorId(pedidoId) }
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background)) {
             Row(
                 modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 6.dp, vertical = 8.dp),

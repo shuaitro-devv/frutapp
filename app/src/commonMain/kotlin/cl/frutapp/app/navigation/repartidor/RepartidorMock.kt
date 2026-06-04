@@ -36,6 +36,13 @@ data class DespachoItem(
     }
 }
 
+/** Busca un despacho por ID en la cola; si no aparece (caso: vino de las listas
+ *  secundarias 'En ruta' o 'Entregados' con sus propios IDs mock), devuelve el primer
+ *  item de la cola como fallback razonable para que las pantallas de detalle no exploten
+ *  con NoSuchElementException. Cuando exista el backend, este lookup pasa a ser un GET. */
+internal fun despachoPorId(id: String): DespachoItem =
+    despachosMock().firstOrNull { it.id == id } ?: despachosMock().first()
+
 internal fun despachosMock(): List<DespachoItem> = listOf(
     DespachoItem(
         id = "#FRU-2026-672341", cliente = "María Fernanda Silva", sector = "Sector Centro",

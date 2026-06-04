@@ -59,7 +59,7 @@ class RepartidorDetalleScreen(private val pedidoId: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val despacho = remember(pedidoId) { despachosMock().first { it.id == pedidoId } }
+        val despacho = remember(pedidoId) { despachoPorId(pedidoId) }
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background)) {
             TopBar(estado = "Listo para retiro", onBack = { navigator.pop() })
             Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp)) {

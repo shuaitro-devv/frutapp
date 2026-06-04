@@ -54,7 +54,7 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val despacho = remember(pedidoId) { despachosMock().first { it.id == pedidoId } }
+        val despacho = remember(pedidoId) { despachoPorId(pedidoId) }
         val codigoDemo = "4821" // En real, el cliente lo dice y el repartidor lo tipea.
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background)) {
             Row(

@@ -64,7 +64,7 @@ class RepartidorIncidenciaScreen(private val pedidoId: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val despacho = remember(pedidoId) { despachosMock().first { it.id == pedidoId } }
+        val despacho = remember(pedidoId) { despachoPorId(pedidoId) }
         var motivo by remember { mutableStateOf(MotivoIncidencia.AUSENTE) }
         var detalle by remember { mutableStateOf("") }
 
