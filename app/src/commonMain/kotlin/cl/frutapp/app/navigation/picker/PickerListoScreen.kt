@@ -31,6 +31,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -58,6 +62,7 @@ class PickerListoScreen(
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        var opcionesAbierto by remember { mutableStateOf(false) }
         // Desglose del pedido: completos / sustituidos / reducidos / faltantes. Si llegamos
         // sin estados (caso: vista de detalle del tab 'Listos' del historial), mostramos un
         // desglose default tipico para no quedar con todo en cero.
@@ -92,7 +97,7 @@ class PickerListoScreen(
                     Spacer(Modifier.width(4.dp))
                     Text("Completado", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
-                IconButton(onClick = { showToast("Más opciones - Próximamente") }) {
+                IconButton(onClick = { opcionesAbierto = true }) {
                     Icon(Icons.Filled.MoreVert, "Más", tint = FrutAppColors.Brand800)
                 }
             }
@@ -208,8 +213,29 @@ class PickerListoScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FrutButtonPrimary(text = "Listo para despacho", onClick = { navigator.popUntilRoot() })
-                FrutButtonOutline(text = "Ver detalle", onClick = { navigator.pop() })
+                FrutButtonOutline(
+                    text = "Ver detalle",
+                    onClick = { navigator.push(PickerDetalleHandoffScreen(pedidoId, estados)) }
+                )
             }
+        }
+        if (opcionesAbierto) {
+            PickerOpcionesSheet(
+                onCerrar = { opcionesAbierto = false },
+                onElegir = { opcion ->
+                    when (opcion) {
+                        PickerOpcion.PAUSAR -> {
+                            showToast("Pedido pausado - vuelto a la cola")
+                            navigator.popUntilRoot()
+                        }
+                        PickerOpcion.CANCELAR -> {
+                            showToast("Cancelado (mock)")
+                            navigator.popUntilRoot()
+                        }
+                        else -> showToast("${opcion.titulo} - Próximamente")
+                    }
+                }
+            )
         }
     }
 }

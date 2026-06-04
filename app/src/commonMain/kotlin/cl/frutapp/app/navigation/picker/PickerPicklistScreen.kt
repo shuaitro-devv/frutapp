@@ -72,6 +72,7 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
         }
         var modalAbierto by remember { mutableStateOf<ModalPicklist?>(null) }
         var itemModal by remember { mutableStateOf<ItemPicklist?>(null) }
+        var opcionesAbierto by remember { mutableStateOf(false) }
 
         val resueltos = estados.values.count { it.resuelto() }
         val totalResueltos = data.totalItems
@@ -80,14 +81,17 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
             TopBar(
                 pedidoId = data.pedidoId,
                 onBack = { navigator.pop() },
-                onMenu = { showToast("Más opciones - Próximamente") }
+                onMenu = { opcionesAbierto = true }
             )
             StatStrip(
                 total = data.totalItems,
                 tiempoMin = data.tiempoEstimadoMin,
                 sector = data.sector,
                 destino = data.destino,
-                progreso = resueltos.toFloat() / totalResueltos
+                completos = estados.values.count { it == EstadoItem.COMPLETADO },
+                sustituidos = estados.values.count { it == EstadoItem.SUSTITUIDO },
+                reducidos = estados.values.count { it == EstadoItem.REDUCIDO },
+                faltantes = estados.values.count { it == EstadoItem.FALTANTE }
             )
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
@@ -164,6 +168,24 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
                 }
             )
         }
+        if (opcionesAbierto) {
+            PickerOpcionesSheet(
+                onCerrar = { opcionesAbierto = false },
+                onElegir = { opcion ->
+                    when (opcion) {
+                        PickerOpcion.PAUSAR -> {
+                            showToast("Pedido pausado - vuelto a la cola")
+                            navigator.pop()
+                        }
+                        PickerOpcion.CANCELAR -> {
+                            showToast("Cancelado (mock)")
+                            navigator.pop()
+                        }
+                        else -> showToast("${opcion.titulo} - Próximamente")
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -202,7 +224,16 @@ private fun TopBar(pedidoId: String, onBack: () -> Unit, onMenu: () -> Unit) {
 }
 
 @Composable
-private fun StatStrip(total: Int, tiempoMin: Int, sector: String, destino: String, progreso: Float) {
+private fun StatStrip(
+    total: Int,
+    tiempoMin: Int,
+    sector: String,
+    destino: String,
+    completos: Int,
+    sustituidos: Int,
+    reducidos: Int,
+    faltantes: Int
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -218,7 +249,14 @@ private fun StatStrip(total: Int, tiempoMin: Int, sector: String, destino: Strin
         Divider()
         StatCell(Icons.Filled.LocationOn, sector, destino, modifier = Modifier.weight(1.4f))
         Divider()
-        DonutProgreso(progreso = progreso, total = total, modifier = Modifier.padding(start = 8.dp))
+        DonutSegmentado(
+            total = total,
+            completos = completos,
+            sustituidos = sustituidos,
+            reducidos = reducidos,
+            faltantes = faltantes,
+            modifier = Modifier.padding(start = 8.dp)
+        )
     }
 }
 
@@ -238,23 +276,45 @@ private fun Divider() {
 }
 
 @Composable
-private fun DonutProgreso(progreso: Float, total: Int, modifier: Modifier = Modifier) {
-    val completados = (progreso * total).toInt()
+private fun DonutSegmentado(
+    total: Int,
+    completos: Int,
+    sustituidos: Int,
+    reducidos: Int,
+    faltantes: Int,
+    modifier: Modifier = Modifier
+) {
+    val resueltos = completos + sustituidos + reducidos + faltantes
     Box(modifier = modifier.size(48.dp), contentAlignment = Alignment.Center) {
         androidx.compose.foundation.Canvas(modifier = Modifier.size(48.dp)) {
             val stroke = 5.dp.toPx()
+            // Anillo base (gris claro) — representa el 100%, los items sin resolver quedan aqui.
             drawArc(
                 color = FrutAppColors.Brand100,
                 startAngle = 0f, sweepAngle = 360f, useCenter = false,
                 style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
             )
-            drawArc(
-                color = FrutAppColors.Brand400,
-                startAngle = -90f, sweepAngle = 360f * progreso, useCenter = false,
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round)
-            )
+            if (total == 0) return@Canvas
+            // Arcos por tipo de resolucion, consecutivos desde el top (-90°). Asi el donut
+            // se llena de izquierda a derecha mostrando la composicion real del progreso.
+            val perItem = 360f / total
+            var start = -90f
+            fun arc(count: Int, color: Color) {
+                if (count <= 0) return
+                val sweep = perItem * count
+                drawArc(
+                    color = color,
+                    startAngle = start, sweepAngle = sweep, useCenter = false,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke)
+                )
+                start += sweep
+            }
+            arc(completos, FrutAppColors.Brand400)
+            arc(sustituidos, Color(0xFF3B82F6))
+            arc(reducidos, Color(0xFFD97706))
+            arc(faltantes, Color(0xFFB91C1C))
         }
-        Text("$completados/$total", color = FrutAppColors.Brand800, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        Text("$resueltos/$total", color = FrutAppColors.Brand800, fontSize = 9.sp, fontWeight = FontWeight.Bold)
     }
 }
 
