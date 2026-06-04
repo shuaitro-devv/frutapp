@@ -173,15 +173,17 @@ private fun ResumenCard(data: PicklistData, estados: Map<Int, EstadoItem>) {
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
             ResumenChip(label = "Completos", valor = completos, color = FrutAppColors.Brand600, modifier = Modifier.weight(1f))
-            if (sustituidos > 0) ResumenChip(label = "Sustituidos", valor = sustituidos, color = Color(0xFF3B82F6), modifier = Modifier.weight(1f))
-            if (reducidos > 0) ResumenChip(label = "Reducidos", valor = reducidos, color = Color(0xFFD97706), modifier = Modifier.weight(1f))
-            if (faltantes > 0) ResumenChip(label = "Faltantes", valor = faltantes, color = Color(0xFFB91C1C), modifier = Modifier.weight(1f))
+            if (sustituidos > 0) ResumenChip(label = "Sustituidos", valor = sustituidos, color = EstadoPaleta.sustituido, modifier = Modifier.weight(1f))
+            if (reducidos > 0) ResumenChip(label = "Reducidos", valor = reducidos, color = EstadoPaleta.reducido, modifier = Modifier.weight(1f))
+            if (faltantes > 0) ResumenChip(label = "Faltantes", valor = faltantes, color = EstadoPaleta.faltante, modifier = Modifier.weight(1f))
         }
     }
 }
 
 @Composable
 private fun ResumenChip(label: String, valor: Int, color: Color, modifier: Modifier = Modifier) {
+    // Visual sigue siendo un box vertical con valor grande + label pequeño; el color es
+    // el del estado. Centralizado: color/alpha vienen de la convencion de EstadoVisual.
     Column(
         modifier = modifier.background(color.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
             .border(1.dp, color.copy(alpha = 0.4f), RoundedCornerShape(10.dp)).padding(8.dp),
@@ -194,34 +196,36 @@ private fun ResumenChip(label: String, valor: Int, color: Color, modifier: Modif
 
 @Composable
 private fun ItemResumenRow(item: ItemPicklist, estado: EstadoItem) {
-    val (color, icon, label) = when (estado) {
-        EstadoItem.COMPLETADO -> Triple(FrutAppColors.Brand600, Icons.Filled.Check as ImageVector, "Completado")
-        EstadoItem.SUSTITUIDO -> Triple(Color(0xFF3B82F6), Icons.Filled.SwapHoriz as ImageVector, "Sustituido")
-        EstadoItem.REDUCIDO -> Triple(Color(0xFFD97706), Icons.Filled.Remove as ImageVector, "Reducido")
-        EstadoItem.FALTANTE -> Triple(Color(0xFFB91C1C), Icons.Filled.Close as ImageVector, "Faltante")
-        EstadoItem.PENDIENTE -> Triple(FrutAppColors.InkSoft, Icons.Filled.Remove as ImageVector, "Pendiente")
+    // Para PENDIENTE forzamos icono Remove + label corto; el resto sale de visual().
+    val v = estado.visual()
+    val labelCorto = when (estado) {
+        EstadoItem.SUSTITUIDO -> "Sustituido"
+        EstadoItem.REDUCIDO -> "Reducido"
+        EstadoItem.FALTANTE -> "Faltante"
+        else -> v.label
     }
+    val iconCorto = v.icon ?: Icons.Filled.Remove
     Row(
         modifier = Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(12.dp))
             .border(1.dp, FrutAppColors.Brand100, RoundedCornerShape(12.dp)).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.size(36.dp).background(FrutAppColors.Brand50, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
-            Text(item.emoji, fontSize = 20.sp)
-        }
+        // Emoji directo (no IconBubble.initial porque corta el emoji — son 2+ codepoints).
+        Box(
+            modifier = Modifier.size(36.dp).background(FrutAppColors.Brand50, RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center
+        ) { Text(item.emoji, fontSize = 20.sp) }
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text("${item.numero}. ${item.nombre}", color = FrutAppColors.Brand800, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             Text("${formatoCant(item.cantidad)} ${item.unidad}", color = FrutAppColors.InkMuted, fontSize = 11.sp)
         }
-        Row(
-            modifier = Modifier.background(color.copy(alpha = 0.12f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(icon, null, tint = color, modifier = Modifier.size(11.dp))
-            Spacer(Modifier.width(4.dp))
-            Text(label, color = color, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-        }
+        cl.frutapp.app.ui.components.StatusChip(
+            label = labelCorto,
+            color = v.color,
+            icon = iconCorto,
+            fontSize = 10.sp
+        )
     }
 }
 

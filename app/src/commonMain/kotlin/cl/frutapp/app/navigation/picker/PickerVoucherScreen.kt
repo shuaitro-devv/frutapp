@@ -170,7 +170,7 @@ private fun VoucherCard(
         Linea(label = "Items", valor = "$items productos")
         Linea(label = "Completos", valor = "$completos de $items")
         if (incidencias > 0) {
-            Linea(label = "Incidencias", valor = "$incidencias", color = Color(0xFFB91C1C))
+            Linea(label = "Incidencias", valor = "$incidencias", color = EstadoPaleta.faltante)
         }
         Spacer(Modifier.height(14.dp))
         DashedDivider()

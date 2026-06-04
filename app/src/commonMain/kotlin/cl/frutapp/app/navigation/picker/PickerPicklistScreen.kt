@@ -203,7 +203,7 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
         if (dialogoCancelar) {
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { dialogoCancelar = false },
-                icon = { Icon(Icons.Filled.WarningAmber, null, tint = Color(0xFFB91C1C)) },
+                icon = { Icon(Icons.Filled.WarningAmber, null, tint = EstadoPaleta.faltante) },
                 title = { Text("¿Cancelar pedido?", fontWeight = FontWeight.Bold) },
                 text = { Text("Esta acción no se puede deshacer. El pedido saldrá de la cola y deberá registrarse un motivo a soporte.") },
                 confirmButton = {
@@ -211,7 +211,7 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
                         dialogoCancelar = false
                         showToast("Cancelado (mock)")
                         navigator.popUntilRoot()
-                    }) { Text("Sí, cancelar", color = Color(0xFFB91C1C), fontWeight = FontWeight.Bold) }
+                    }) { Text("Sí, cancelar", color = EstadoPaleta.faltante, fontWeight = FontWeight.Bold) }
                 },
                 dismissButton = {
                     androidx.compose.material3.TextButton(onClick = { dialogoCancelar = false }) { Text("Volver") }
@@ -366,9 +366,9 @@ private fun DonutSegmentado(
                 start += sweep
             }
             arc(completos, FrutAppColors.Brand400)
-            arc(sustituidos, Color(0xFF3B82F6))
-            arc(reducidos, Color(0xFFD97706))
-            arc(faltantes, Color(0xFFB91C1C))
+            arc(sustituidos, EstadoPaleta.sustituido)
+            arc(reducidos, EstadoPaleta.reducido)
+            arc(faltantes, EstadoPaleta.faltante)
         }
         Text("$resueltos/$total", color = FrutAppColors.Brand800, fontSize = 9.sp, fontWeight = FontWeight.Bold)
     }
@@ -435,62 +435,45 @@ private fun ItemCard(item: ItemPicklist, estado: EstadoItem, onToggle: () -> Uni
     }
 }
 
-/** Color de borde fuerte segun el tipo de resolucion. */
-private fun bordeColorPorEstado(estado: EstadoItem): Color = when (estado) {
-    EstadoItem.COMPLETADO -> FrutAppColors.Brand400
-    EstadoItem.SUSTITUIDO -> Color(0xFF3B82F6) // azul
-    EstadoItem.REDUCIDO -> Color(0xFFD97706)   // ambar
-    EstadoItem.FALTANTE -> Color(0xFFB91C1C)   // rojo
-    EstadoItem.PENDIENTE -> FrutAppColors.Brand100
-}
+/** Color de borde fuerte segun el tipo de resolucion. Para PENDIENTE devuelve Brand100
+ *  (visualmente 'sin destacar'); para los demas delega en EstadoVisual. */
+private fun bordeColorPorEstado(estado: EstadoItem): Color =
+    if (estado == EstadoItem.PENDIENTE) FrutAppColors.Brand100 else estado.visual().color
 
 @Composable
 private fun ChipResolucion(estado: EstadoItem) {
     if (estado == EstadoItem.PENDIENTE || estado == EstadoItem.COMPLETADO) return
-    val (bg, fg, label) = when (estado) {
-        EstadoItem.SUSTITUIDO -> Triple(Color(0xFFDBEAFE), Color(0xFF1E40AF), "Sustituido")
-        EstadoItem.REDUCIDO -> Triple(Color(0xFFFEF3C7), Color(0xFF92400E), "Cantidad reducida")
-        EstadoItem.FALTANTE -> Triple(Color(0xFFFEE2E2), Color(0xFFB91C1C), "Faltante reportado")
-        else -> return
-    }
+    val v = estado.visual()
     Spacer(Modifier.height(4.dp))
-    Row(
-        modifier = Modifier.background(bg, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, color = fg, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-    }
+    cl.frutapp.app.ui.components.StatusChip(
+        label = v.label,
+        color = v.color,
+        fontSize = 10.sp,
+        padH = 6.dp,
+        padV = 2.dp,
+        shape = RoundedCornerShape(6.dp)
+    )
 }
 
 @Composable
 private fun EstadoBoxGrande(estado: EstadoItem, onClick: () -> Unit) {
-    val (bg, fg, icon, desc) = when (estado) {
-        EstadoItem.PENDIENTE -> EstadoBoxStyle(Color.White, FrutAppColors.Brand100, null, "Marcar")
-        EstadoItem.COMPLETADO -> EstadoBoxStyle(FrutAppColors.Brand400, FrutAppColors.Brand400, Icons.Filled.Check, "Completado")
-        EstadoItem.SUSTITUIDO -> EstadoBoxStyle(Color(0xFF3B82F6), Color(0xFF3B82F6), Icons.Filled.SwapHoriz, "Sustituido")
-        EstadoItem.REDUCIDO -> EstadoBoxStyle(Color(0xFFD97706), Color(0xFFD97706), Icons.Filled.Remove, "Reducido")
-        EstadoItem.FALTANTE -> EstadoBoxStyle(Color(0xFFB91C1C), Color(0xFFB91C1C), Icons.Filled.Close, "Faltante")
-    }
+    // PENDIENTE es caso especial: fondo blanco con borde gris (un 'check vacio' clasico).
+    // El resto delega en EstadoVisual: fondo y borde del mismo color, icono blanco.
+    val esPendiente = estado == EstadoItem.PENDIENTE
+    val v = estado.visual()
+    val bg = if (esPendiente) Color.White else v.color
+    val borde = if (esPendiente) FrutAppColors.Brand100 else v.color
     Box(
         modifier = Modifier
             .size(40.dp)
             .background(color = bg, shape = RoundedCornerShape(10.dp))
-            .border(width = 2.dp, color = fg, shape = RoundedCornerShape(10.dp))
+            .border(width = 2.dp, color = borde, shape = RoundedCornerShape(10.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        if (icon != null) {
-            Icon(icon, desc, tint = Color.White, modifier = Modifier.size(24.dp))
-        }
+        v.icon?.let { Icon(it, v.label, tint = Color.White, modifier = Modifier.size(24.dp)) }
     }
 }
-
-private data class EstadoBoxStyle(
-    val bg: Color,
-    val fg: Color,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector?,
-    val desc: String
-)
 
 @Composable
 private fun BotonesInferior(onIncidencia: () -> Unit, onListo: () -> Unit) {

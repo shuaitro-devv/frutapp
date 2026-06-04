@@ -158,9 +158,9 @@ class PickerListoScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        if (sustituidos > 0) ResolucionBox(label = "Sustituidos", valor = sustituidos, color = androidx.compose.ui.graphics.Color(0xFF3B82F6), modifier = Modifier.weight(1f))
-                        if (reducidos > 0) ResolucionBox(label = "Reducidos", valor = reducidos, color = androidx.compose.ui.graphics.Color(0xFFD97706), modifier = Modifier.weight(1f))
-                        if (faltantes > 0) ResolucionBox(label = "Faltantes", valor = faltantes, color = androidx.compose.ui.graphics.Color(0xFFB91C1C), modifier = Modifier.weight(1f))
+                        if (sustituidos > 0) ResolucionBox(label = "Sustituidos", valor = sustituidos, color = EstadoPaleta.sustituido, modifier = Modifier.weight(1f))
+                        if (reducidos > 0) ResolucionBox(label = "Reducidos", valor = reducidos, color = EstadoPaleta.reducido, modifier = Modifier.weight(1f))
+                        if (faltantes > 0) ResolucionBox(label = "Faltantes", valor = faltantes, color = EstadoPaleta.faltante, modifier = Modifier.weight(1f))
                     }
                 }
                 Spacer(Modifier.height(12.dp))
@@ -255,7 +255,7 @@ class PickerListoScreen(
         if (dialogoCancelar) {
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { dialogoCancelar = false },
-                icon = { Icon(Icons.Filled.WarningAmber, null, tint = Color(0xFFB91C1C)) },
+                icon = { Icon(Icons.Filled.WarningAmber, null, tint = EstadoPaleta.faltante) },
                 title = { Text("¿Cancelar pedido?", fontWeight = FontWeight.Bold) },
                 text = { Text("Esta acción no se puede deshacer. El pedido saldrá de la cola y deberá registrarse un motivo a soporte.") },
                 confirmButton = {
@@ -263,7 +263,7 @@ class PickerListoScreen(
                         dialogoCancelar = false
                         showToast("Cancelado (mock)")
                         navigator.popUntilRoot()
-                    }) { Text("Sí, cancelar", color = Color(0xFFB91C1C), fontWeight = FontWeight.Bold) }
+                    }) { Text("Sí, cancelar", color = EstadoPaleta.faltante, fontWeight = FontWeight.Bold) }
                 },
                 dismissButton = {
                     androidx.compose.material3.TextButton(onClick = { dialogoCancelar = false }) { Text("Volver") }
