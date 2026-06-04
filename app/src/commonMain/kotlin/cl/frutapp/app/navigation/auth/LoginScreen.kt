@@ -29,7 +29,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.data.remote.AuthApi
-import cl.frutapp.app.navigation.home.HomeScreen
+import cl.frutapp.app.navigation.homeForUser
 import cl.frutapp.app.ui.components.AuthHeaderText
 import cl.frutapp.shared.dto.LoginRequest
 import kotlinx.coroutines.launch
@@ -88,7 +88,7 @@ class LoginScreen : Screen {
                             runCatching { AuthApi().login(LoginRequest(email = email.trim(), password = password)) }
                                 .onSuccess { resp ->
                                     TokenStore.save(resp.accessToken, resp.refreshToken, resp.user)
-                                    navigator.replace(HomeScreen())
+                                    navigator.replace(homeForUser(resp.user))
                                 }
                                 .onFailure { e ->
                                     cl.frutapp.app.ui.ErrorReporter.report(screen = "Login", action = "login", error = e)

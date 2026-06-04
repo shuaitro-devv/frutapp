@@ -65,14 +65,19 @@ data class MessageResponse(
     val message: String
 )
 
-/** Vista pública de un usuario (nunca expone el hash). */
+/** Vista pública de un usuario (nunca expone el hash).
+ *  [role] sigue siendo el rol "principal" de la columna app_user.role (CUSTOMER / etc.) por
+ *  compatibilidad. [roles] es la lista completa de roles RBAC asignados (cliente, picker,
+ *  repartidor, admin...) — esta es la fuente de verdad para decidir routing por perfil en
+ *  el cliente. Default vacio para que clientes viejos sigan deserializando. */
 @Serializable
 data class UserDto(
     val id: String,
     val name: String,
     val email: String,
     val phone: String? = null,
-    val role: String
+    val role: String,
+    val roles: List<String> = emptyList()
 )
 
 /** Respuesta de auth: usuario + par de tokens. */

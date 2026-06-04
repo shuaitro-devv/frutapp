@@ -33,7 +33,6 @@ import cl.frutapp.app.data.BiometricAuth
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.navigation.auth.LoginScreen
 import cl.frutapp.app.navigation.auth.VerifyCodeScreen
-import cl.frutapp.app.navigation.home.HomeScreen
 import cl.frutapp.app.ui.components.FrutLoader
 import cl.frutapp.app.ui.theme.FrutAppColors
 import frutapp.app.generated.resources.Res
@@ -77,11 +76,11 @@ class SplashScreen : Screen {
                     goOnce { navigator.replace(VerifyCodeScreen(email = pending)) }
                 // Sin sesión y sin limbo → onboarding (intro), que al terminar lleva a Login.
                 !TokenStore.isLoggedIn -> goOnce { navigator.replace(OnboardingScreen()) }
-                // Con sesión pero sin huella disponible → Home directo (no bloquear).
-                !BiometricAuth.isAvailable() -> goOnce { navigator.replace(HomeScreen()) }
+                // Con sesión pero sin huella disponible → Home segun rol (cliente, picker, repartidor).
+                !BiometricAuth.isAvailable() -> goOnce { navigator.replace(homeForUser(TokenStore.user)) }
                 // Con sesión + huella → pedir huella; al cancelar/fallar, fallback a Login.
                 else -> BiometricAuth.authenticate(
-                    onSuccess = { goOnce { navigator.replace(HomeScreen()) } },
+                    onSuccess = { goOnce { navigator.replace(homeForUser(TokenStore.user)) } },
                     onError = { goOnce { navigator.replace(LoginScreen()) } }
                 )
             }

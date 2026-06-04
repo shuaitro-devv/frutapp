@@ -33,7 +33,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.data.remote.AuthApi
-import cl.frutapp.app.navigation.home.HomeScreen
+import cl.frutapp.app.navigation.homeForUser
 import cl.frutapp.app.ui.components.AuthHeaderText
 import cl.frutapp.shared.dto.ResendVerificationRequest
 import cl.frutapp.shared.dto.VerifyEmailRequest
@@ -79,7 +79,7 @@ class VerifyCodeScreen(private val email: String) : Screen {
                     runCatching { AuthApi().verifyEmail(VerifyEmailRequest(email = email, code = code)) }
                         .onSuccess { resp ->
                             TokenStore.save(resp.accessToken, resp.refreshToken, resp.user)
-                            navigator.replaceAll(HomeScreen())
+                            navigator.replaceAll(homeForUser(resp.user))
                         }
                         .onFailure { e ->
                             cl.frutapp.app.ui.ErrorReporter.report(screen = "VerifyCode", action = "verify_email", error = e)

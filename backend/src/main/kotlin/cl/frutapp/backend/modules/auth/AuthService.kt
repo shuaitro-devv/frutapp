@@ -165,7 +165,9 @@ class AuthService(
     /** Datos del usuario autenticado (a partir del `sub` del JWT). */
     suspend fun me(userId: String): UserDto {
         val uuid = runCatching { UUID.fromString(userId) }.getOrNull() ?: throw UnauthorizedException()
-        return (users.findById(uuid) ?: throw UnauthorizedException()).toDto()
+        val row = users.findById(uuid) ?: throw UnauthorizedException()
+        val roles = rbac.rolesOf(row.id).ifEmpty { listOf("cliente") }
+        return row.toDto().copy(roles = roles)
     }
 
     /** Genera y "envía" un código de recuperación. No revela si el correo existe. */
@@ -201,7 +203,7 @@ class AuthService(
         val refresh = tokens.generateRefreshToken()
         refreshTokens.create(user.id, tokens.hashRefreshToken(refresh), tokens.refreshExpiry())
         return AuthResponse(
-            user = user.toDto(),
+            user = user.toDto().copy(roles = roles),
             accessToken = access,
             refreshToken = refresh,
             accessExpiresInSeconds = tokens.accessTtlSeconds
