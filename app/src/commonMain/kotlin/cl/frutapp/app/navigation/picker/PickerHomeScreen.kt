@@ -116,9 +116,8 @@ class PickerHomeScreen : Screen {
                     "cola" -> PickerColaContent()
                     "en_curso" -> PickerEnCursoContent()
                     "listos" -> PickerListosContent()
-                    "perfil" -> ProximamentePlaceholder(
+                    "perfil" -> PickerPerfilContent(
                         modifier = Modifier.fillMaxSize(),
-                        titulo = tituloTab,
                         onLogout = {
                             TokenStore.clear()
                             navigator.replaceAll(LoginScreen())

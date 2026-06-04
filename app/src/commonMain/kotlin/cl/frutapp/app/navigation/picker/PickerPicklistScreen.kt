@@ -12,8 +12,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -69,7 +71,7 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
         var modalAbierto by remember { mutableStateOf<ModalPicklist?>(null) }
         var itemModal by remember { mutableStateOf<ItemPicklist?>(null) }
 
-        Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background)) {
+        Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
             TopBar(
                 pedidoId = data.pedidoId,
                 onBack = { navigator.pop() },
@@ -329,6 +331,7 @@ private fun BotonesInferior(onIncidencia: () -> Unit, onListo: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.White)
+            .navigationBarsPadding()
             .padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
