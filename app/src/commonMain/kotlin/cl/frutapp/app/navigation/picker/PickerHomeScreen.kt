@@ -114,11 +114,11 @@ class PickerHomeScreen : Screen {
             Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
                 when (selectedTab) {
                     "cola" -> PickerColaContent()
+                    "en_curso" -> PickerEnCursoContent()
+                    "listos" -> PickerListosContent()
                     "perfil" -> ProximamentePlaceholder(
                         modifier = Modifier.fillMaxSize(),
                         titulo = tituloTab,
-                        // Logout ad-hoc en Perfil mientras no se construye la pantalla real —
-                        // permite cambiar de usuario para testear los otros perfiles.
                         onLogout = {
                             TokenStore.clear()
                             navigator.replaceAll(LoginScreen())

@@ -108,6 +108,8 @@ class RepartidorHomeScreen : Screen {
             Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
                 when (selectedTab) {
                     "despachos" -> RepartidorColaContent()
+                    "en_ruta" -> RepartidorEnRutaContent()
+                    "entregados" -> RepartidorEntregadosContent()
                     "perfil" -> Column(modifier = Modifier.fillMaxSize()) {
                         // Hasta tener una pantalla 'Perfil' propia, mostramos el saldo del
                         // repartidor en esta tab y agregamos el boton de logout al final.

@@ -1,0 +1,46 @@
+package cl.frutapp.app.navigation.repartidor
+
+/**
+ * Mock data para los tabs 'En ruta' y 'Entregados' del repartidor. Hasta que existan los
+ * endpoints del backend, son fixtures separadas de [despachosMock].
+ */
+
+/** Item del tab 'En ruta': despacho ya retirado, en camino al destino. */
+data class DespachoEnRuta(
+    val id: String,
+    val cliente: String,
+    val direccion: String,
+    val sector: String,
+    val kmRestantes: Double,
+    val etaTexto: String, // ej. "10:25 - 10:40"
+    val transito: String  // ej. "Normal", "Pesado"
+)
+
+/** Item del tab 'Entregados': despacho ya completado, historial del turno. */
+data class DespachoEntregado(
+    val id: String,
+    val cliente: String,
+    val sector: String,
+    val direccion: String,
+    val entregadoHaceMin: Int,
+    val gananciaCLP: Int,
+    val incidencias: Int
+)
+
+internal fun despachosEnRutaMock(): List<DespachoEnRuta> = listOf(
+    DespachoEnRuta(
+        "#FRU-2026-672100", cliente = "Camila Torres", direccion = "Av. Italia 1234",
+        sector = "Ñuñoa", kmRestantes = 1.8, etaTexto = "10:25 - 10:40", transito = "Normal"
+    ),
+    DespachoEnRuta(
+        "#FRU-2026-672099", cliente = "Mateo Reyes", direccion = "Pedro Lira 220",
+        sector = "Providencia", kmRestantes = 4.2, etaTexto = "10:55 - 11:15", transito = "Pesado"
+    )
+)
+
+internal fun despachosEntregadosMock(): List<DespachoEntregado> = listOf(
+    DespachoEntregado("#FRU-2026-672080", "María Fernanda Silva", "Sector Centro", "Av. Providencia 1234", entregadoHaceMin = 12, gananciaCLP = 5980, incidencias = 0),
+    DespachoEntregado("#FRU-2026-672077", "Juan Pablo Martínez", "Sector Norte", "Las Lomas 2100", entregadoHaceMin = 45, gananciaCLP = 4750, incidencias = 0),
+    DespachoEntregado("#FRU-2026-672070", "Carla Rodríguez", "Sector Sur", "Pedro de Valdivia 3456", entregadoHaceMin = 92, gananciaCLP = 3200, incidencias = 1),
+    DespachoEntregado("#FRU-2026-672065", "Roberto González", "Sector Centro", "San Antonio 567", entregadoHaceMin = 138, gananciaCLP = 2850, incidencias = 0)
+)
