@@ -62,6 +62,13 @@ class PickerDetalleHandoffScreen(
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val data = remember(pedidoId) { picklistMock(pedidoId) }
+        // Fix #1: si llegamos con estados vacios (camino del historial via PickerListoScreen
+        // sin estados explicitos), sintetizamos 'todos COMPLETADO' para que el detalle sea
+        // coherente con el header 'Completado' y no muestre 12 items 'Pendiente'.
+        val estadosEfectivos = remember(estados, pedidoId) {
+            if (estados.isEmpty()) data.items.associate { it.numero to EstadoItem.COMPLETADO }
+            else estados
+        }
 
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
             Row(
@@ -93,12 +100,15 @@ class PickerDetalleHandoffScreen(
                 item {
                     Text("Resumen del pedido", color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
-                item { ResumenCard(data = data, estados = estados) }
+                item { ResumenCard(data = data, estados = estadosEfectivos) }
                 item {
                     Text("Items (${data.totalItems})", color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
                 items(data.items, key = { it.numero }) { item ->
-                    val estado = estados[item.numero] ?: EstadoItem.PENDIENTE
+                    // Fix #13: fallback a COMPLETADO (no PENDIENTE) en una pantalla cuyo
+                    // header dice 'Completado'. Asi un caso bug-detect (item sin estado en
+                    // un pedido cerrado) ya no se renderiza silenciosamente como 'Pendiente'.
+                    val estado = estadosEfectivos[item.numero] ?: EstadoItem.COMPLETADO
                     ItemResumenRow(item = item, estado = estado)
                 }
                 item {
@@ -114,7 +124,7 @@ class PickerDetalleHandoffScreen(
                 FrutButtonOutline(text = "Volver", onClick = { navigator.pop() }, modifier = Modifier.weight(1f))
                 FrutButtonPrimary(
                     text = "Ver voucher",
-                    onClick = { navigator.push(PickerVoucherScreen(pedidoId, estados)) },
+                    onClick = { navigator.push(PickerVoucherScreen(pedidoId, estadosEfectivos)) },
                     modifier = Modifier.weight(1.4f)
                 )
             }

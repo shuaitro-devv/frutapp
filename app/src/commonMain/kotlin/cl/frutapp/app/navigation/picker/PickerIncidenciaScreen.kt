@@ -75,7 +75,10 @@ class PickerIncidenciaScreen(private val pedidoId: String) : Screen {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val data = remember(pedidoId) { picklistMock(pedidoId) }
-        var motivo by remember { mutableStateOf(MotivoIncidenciaPicker.CANCELACION) }
+        // Default no-destructivo (fix #3 del code-review): si el usuario tap Enviar sin
+        // cambiar la seleccion, el motivo es OTRO (que pide detalle libre), NO una
+        // cancelacion accidental que destruya el pedido.
+        var motivo by remember { mutableStateOf(MotivoIncidenciaPicker.OTRO) }
         var detalle by remember { mutableStateOf("") }
 
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
@@ -111,7 +114,9 @@ class PickerIncidenciaScreen(private val pedidoId: String) : Screen {
                 Spacer(Modifier.height(6.dp))
                 FrutTextField(
                     value = detalle,
-                    onValueChange = { if (it.length <= 200) detalle = it },
+                    // Clip duro a 200 chars en vez de rechazar el cambio entero (fix #7):
+                    // antes un paste de 300 chars dejaba el campo VACIO sin warning.
+                    onValueChange = { detalle = it.take(200) },
                     label = "Cuéntanos qué pasó…"
                 )
                 Text("${detalle.length}/200", color = FrutAppColors.InkSoft, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))

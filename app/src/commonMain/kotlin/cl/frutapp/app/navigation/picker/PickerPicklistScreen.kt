@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -73,9 +74,11 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
         var modalAbierto by remember { mutableStateOf<ModalPicklist?>(null) }
         var itemModal by remember { mutableStateOf<ItemPicklist?>(null) }
         var opcionesAbierto by remember { mutableStateOf(false) }
-
-        val resueltos = estados.values.count { it.resuelto() }
-        val totalResueltos = data.totalItems
+        var dialogoCancelar by remember { mutableStateOf(false) }
+        // Item cuyo estado el usuario quiere DESRESOLVER (tap en card ya resuelta).
+        // Pedimos confirmacion antes de regresar a PENDIENTE porque pierde info de
+        // sustitucion/peso variable que el picker armo manualmente.
+        var pedirReverso by remember { mutableStateOf<Int?>(null) }
 
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
             TopBar(
@@ -113,8 +116,9 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
                         estado = estado,
                         onToggle = {
                             // Si esta PENDIENTE: peso variable → modal; sino → COMPLETADO.
-                            // Si ya esta resuelto en cualquier estado: tap lo regresa a PENDIENTE
-                            // (el picker puede 'deshacer' su decision antes de cerrar el pedido).
+                            // Si ya esta resuelto: pedir confirmacion antes de revertir a
+                            // PENDIENTE (fix #4 del code-review). Tap accidental en una card
+                            // grande no debe descartar silenciosamente una decision del picker.
                             if (estado == EstadoItem.PENDIENTE) {
                                 if (item.pesoVariable) {
                                     itemModal = item
@@ -123,12 +127,18 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
                                     estados = estados + (item.numero to EstadoItem.COMPLETADO)
                                 }
                             } else {
-                                estados = estados + (item.numero to EstadoItem.PENDIENTE)
+                                pedirReverso = item.numero
                             }
                         },
                         onSwap = {
-                            itemModal = item
-                            modalAbierto = ModalPicklist.SUSTITUCION
+                            // SwapHoriz sobre un item COMPLETADO con peso variable pisa la
+                            // confirmacion previa — pedimos confirmacion explicita (fix #5).
+                            if (estado == EstadoItem.COMPLETADO && item.pesoVariable) {
+                                pedirReverso = item.numero
+                            } else {
+                                itemModal = item
+                                modalAbierto = ModalPicklist.SUSTITUCION
+                            }
                         }
                     )
                 }
@@ -174,18 +184,61 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
                 onElegir = { opcion ->
                     when (opcion) {
                         PickerOpcion.PAUSAR -> {
+                            // popUntilRoot uniforme con PickerListoScreen (fix #11).
                             showToast("Pedido pausado - vuelto a la cola")
-                            navigator.pop()
+                            navigator.popUntilRoot()
                         }
                         PickerOpcion.REPORTAR -> {
                             navigator.push(PickerIncidenciaScreen(data.pedidoId))
                         }
                         PickerOpcion.CANCELAR -> {
-                            showToast("Cancelado (mock)")
-                            navigator.pop()
+                            // Diálogo de confirmacion (fix #2).
+                            dialogoCancelar = true
                         }
                         else -> showToast("${opcion.titulo} - Próximamente")
                     }
+                }
+            )
+        }
+        if (dialogoCancelar) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { dialogoCancelar = false },
+                icon = { Icon(Icons.Filled.WarningAmber, null, tint = Color(0xFFB91C1C)) },
+                title = { Text("¿Cancelar pedido?", fontWeight = FontWeight.Bold) },
+                text = { Text("Esta acción no se puede deshacer. El pedido saldrá de la cola y deberá registrarse un motivo a soporte.") },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        dialogoCancelar = false
+                        showToast("Cancelado (mock)")
+                        navigator.popUntilRoot()
+                    }) { Text("Sí, cancelar", color = Color(0xFFB91C1C), fontWeight = FontWeight.Bold) }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { dialogoCancelar = false }) { Text("Volver") }
+                }
+            )
+        }
+        pedirReverso?.let { numero ->
+            val item = data.items.first { it.numero == numero }
+            val estadoActual = estados[numero] ?: EstadoItem.PENDIENTE
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { pedirReverso = null },
+                icon = { Icon(Icons.Filled.WarningAmber, null, tint = FrutAppColors.Brand600) },
+                title = { Text("¿Deshacer resolución?", fontWeight = FontWeight.Bold) },
+                text = {
+                    Text(
+                        text = "El item '${item.nombre}' está marcado como ${estadoActual.name.lowercase()}. " +
+                               "Si lo deshaces, perderás la información que registraste para este item."
+                    )
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        estados = estados + (numero to EstadoItem.PENDIENTE)
+                        pedirReverso = null
+                    }) { Text("Deshacer", fontWeight = FontWeight.Bold) }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { pedirReverso = null }) { Text("Mantener") }
                 }
             )
         }

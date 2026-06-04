@@ -61,10 +61,16 @@ class PickerVoucherScreen(
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val data = remember(pedidoId) { picklistMock(pedidoId) }
-        val completos = estados.values.count { it == EstadoItem.COMPLETADO }
-        val sustituidos = estados.values.count { it == EstadoItem.SUSTITUIDO }
-        val reducidos = estados.values.count { it == EstadoItem.REDUCIDO }
-        val faltantes = estados.values.count { it == EstadoItem.FALTANTE }
+        // Fix #1: estados vacios viniendo del historial → sintetizamos COMPLETADO para
+        // todos los items, asi el voucher no se imprime con '0 de 12 Completos'.
+        val estadosEfectivos = remember(estados, pedidoId) {
+            if (estados.isEmpty()) data.items.associate { it.numero to EstadoItem.COMPLETADO }
+            else estados
+        }
+        val completos = estadosEfectivos.values.count { it == EstadoItem.COMPLETADO }
+        val sustituidos = estadosEfectivos.values.count { it == EstadoItem.SUSTITUIDO }
+        val reducidos = estadosEfectivos.values.count { it == EstadoItem.REDUCIDO }
+        val faltantes = estadosEfectivos.values.count { it == EstadoItem.FALTANTE }
         val incidencias = sustituidos + reducidos + faltantes
 
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {

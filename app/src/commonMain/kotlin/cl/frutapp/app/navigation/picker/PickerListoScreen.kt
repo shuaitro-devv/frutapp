@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -63,21 +64,29 @@ class PickerListoScreen(
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         var opcionesAbierto by remember { mutableStateOf(false) }
-        // Desglose del pedido: completos / sustituidos / reducidos / faltantes. Si llegamos
-        // sin estados (caso: vista de detalle del tab 'Listos' del historial), mostramos un
-        // desglose default tipico para no quedar con todo en cero.
-        val completos = if (estados.isEmpty()) 12 else estados.values.count { it == EstadoItem.COMPLETADO }
-        val sustituidos = estados.values.count { it == EstadoItem.SUSTITUIDO }
-        val reducidos = estados.values.count { it == EstadoItem.REDUCIDO }
-        val faltantes = estados.values.count { it == EstadoItem.FALTANTE }
+        var dialogoCancelar by remember { mutableStateOf(false) }
+        // Si llegamos sin estados (vista de detalle del tab 'Listos' del historial),
+        // sintetizamos un set 'todos COMPLETADO' a partir del picklistMock para que
+        // Detalle y Voucher reciban un map consistente. Antes, el fallback hardcoded
+        // a 12 vivia solo en esta pantalla y propagar emptyMap a Detalle/Voucher rompia
+        // la coherencia (header 'Completado' con items renderizados 'Pendiente').
+        val data = remember(pedidoId) { picklistMock(pedidoId) }
+        val estadosEfectivos = remember(estados, pedidoId) {
+            if (estados.isEmpty()) data.items.associate { it.numero to EstadoItem.COMPLETADO }
+            else estados
+        }
+        val completos = estadosEfectivos.values.count { it == EstadoItem.COMPLETADO }
+        val sustituidos = estadosEfectivos.values.count { it == EstadoItem.SUSTITUIDO }
+        val reducidos = estadosEfectivos.values.count { it == EstadoItem.REDUCIDO }
+        val faltantes = estadosEfectivos.values.count { it == EstadoItem.FALTANTE }
         val incidencias = sustituidos + reducidos + faltantes
-        val total = if (estados.isEmpty()) 12 else estados.size
+        val total = estadosEfectivos.size
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
             Row(
                 modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 6.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { navigator.popUntilRoot() }) {
+                IconButton(onClick = { navigator.pop() }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = FrutAppColors.Brand800)
                 }
                 Text(
@@ -215,7 +224,9 @@ class PickerListoScreen(
                 FrutButtonPrimary(text = "Listo para despacho", onClick = { navigator.popUntilRoot() })
                 FrutButtonOutline(
                     text = "Ver detalle",
-                    onClick = { navigator.push(PickerDetalleHandoffScreen(pedidoId, estados)) }
+                    // Propagamos estadosEfectivos (no el `estados` original) para que
+                    // Detalle/Voucher reciban el set sintetizado cuando venimos del historial.
+                    onClick = { navigator.push(PickerDetalleHandoffScreen(pedidoId, estadosEfectivos)) }
                 )
             }
         }
@@ -232,11 +243,30 @@ class PickerListoScreen(
                             navigator.push(PickerIncidenciaScreen(pedidoId))
                         }
                         PickerOpcion.CANCELAR -> {
-                            showToast("Cancelado (mock)")
-                            navigator.popUntilRoot()
+                            // Accion destructiva: NO ejecutar en un tap. Abrimos un dialogo
+                            // que pide confirmacion explicita (fix #2 del code-review).
+                            dialogoCancelar = true
                         }
                         else -> showToast("${opcion.titulo} - Próximamente")
                     }
+                }
+            )
+        }
+        if (dialogoCancelar) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { dialogoCancelar = false },
+                icon = { Icon(Icons.Filled.WarningAmber, null, tint = Color(0xFFB91C1C)) },
+                title = { Text("¿Cancelar pedido?", fontWeight = FontWeight.Bold) },
+                text = { Text("Esta acción no se puede deshacer. El pedido saldrá de la cola y deberá registrarse un motivo a soporte.") },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        dialogoCancelar = false
+                        showToast("Cancelado (mock)")
+                        navigator.popUntilRoot()
+                    }) { Text("Sí, cancelar", color = Color(0xFFB91C1C), fontWeight = FontWeight.Bold) }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { dialogoCancelar = false }) { Text("Volver") }
                 }
             )
         }

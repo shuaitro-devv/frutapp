@@ -154,9 +154,24 @@ fun SustitucionModal(item: ItemPicklist, onCerrar: () -> Unit, onConfirmar: (Est
                 subtitulo = "No hay reemplazo disponible."
             )
             Spacer(Modifier.height(20.dp))
+            // Confirmar habilitado solo cuando el tipo elegido tiene la info que requiere:
+            // SUSTITUIR necesita una alternativa seleccionada (radio); REDUCIR necesita una
+            // cantidad nueva (en mock siempre cumple porque la lista tiene 3 alternativas y
+            // alternativaSel arranca en 0); FALTANTE NO requiere input. Fix #6: antes el
+            // boton estaba SIEMPRE habilitado y emitia SUSTITUIDO/REDUCIDO sin info real.
+            val puedeConfirmar = when (tipo) {
+                TipoSustitucion.SUSTITUIR -> alternativas.isNotEmpty() && alternativaSel in alternativas.indices
+                TipoSustitucion.REDUCIR -> true  // mock; en real validar cantidad > 0
+                TipoSustitucion.FALTANTE -> true // reportar faltante no requiere input adicional
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 FrutButtonOutline(text = "Cancelar", onClick = onCerrar, modifier = Modifier.weight(1f))
-                FrutButtonPrimary(text = "Confirmar acción", onClick = { onConfirmar(tipo.aEstado()) }, modifier = Modifier.weight(1.4f))
+                FrutButtonPrimary(
+                    text = "Confirmar acción",
+                    onClick = { onConfirmar(tipo.aEstado()) },
+                    enabled = puedeConfirmar,
+                    modifier = Modifier.weight(1.4f)
+                )
             }
         }
     }

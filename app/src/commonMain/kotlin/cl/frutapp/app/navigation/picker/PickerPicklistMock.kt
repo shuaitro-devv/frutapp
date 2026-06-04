@@ -48,11 +48,31 @@ data class PicklistData(
     val progreso: Float get() = if (totalItems == 0) 0f else completados.toFloat() / totalItems
 }
 
-/** Picklist fixture estable para mostrar el mockup en vivo. */
-internal fun picklistMock(pedidoId: String): PicklistData = PicklistData(
+/**
+ * Catálogo de destinos mock — picklistMock elige uno deterministicamente a partir del
+ * pedidoId para que distintos pedidos vistos durante la demo no muestren TODOS el mismo
+ * 'Sector Norte / Restaurante Verde'. Cuando se conecte al backend, este lookup
+ * desaparece y los datos vienen del orden real.
+ */
+private val DESTINOS_MOCK = listOf(
+    "Sector Norte" to "Restaurante Verde",
+    "Sector Centro" to "Hotel Sol",
+    "Sector Sur" to "Café del Parque",
+    "Sector Oeste" to "Tienda Natural",
+    "Sector Centro" to "Oficina Central",
+    "Sector Norte" to "Bistró La Esquina",
+    "Sector Sur" to "Almacén San Pedro"
+)
+
+/** Picklist fixture variable por pedidoId (destino/sector cambian) para evitar la
+ *  contradicción visual 'todos los pedidos van al mismo restaurante' durante la demo. */
+internal fun picklistMock(pedidoId: String): PicklistData {
+    val idx = (kotlin.math.abs(pedidoId.hashCode()) % DESTINOS_MOCK.size)
+    val (sectorElegido, destinoElegido) = DESTINOS_MOCK[idx]
+    return PicklistData(
     pedidoId = pedidoId,
-    sector = "Sector Norte",
-    destino = "Restaurante Verde",
+    sector = sectorElegido,
+    destino = destinoElegido,
     tiempoEstimadoMin = 18,
     items = listOf(
         ItemPicklist(1, "Palta Hass", 3.0, "kg", "B", "04", true, "🥑", EstadoItem.COMPLETADO),
@@ -68,4 +88,5 @@ internal fun picklistMock(pedidoId: String): PicklistData = PicklistData(
         ItemPicklist(11, "Espinaca", 2.0, "kg", "C", "04", false, "🥗", EstadoItem.PENDIENTE),
         ItemPicklist(12, "Brócoli", 3.0, "unidades", "C", "05", false, "🥦", EstadoItem.PENDIENTE)
     )
-)
+    )
+}

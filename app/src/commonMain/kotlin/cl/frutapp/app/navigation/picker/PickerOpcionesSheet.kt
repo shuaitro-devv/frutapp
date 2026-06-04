@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cl.frutapp.app.ui.theme.FrutAppColors
+import kotlinx.coroutines.launch
 
 /**
  * Acciones contextuales del menu de 3 puntos del picklist y handoff. Se elige una y se
@@ -61,6 +62,18 @@ fun PickerOpcionesSheet(
     onElegir: (PickerOpcion) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    // Fix #8: cerrar el sheet con animacion ANTES de invocar la accion. Antes el orden
+    // era onElegir(); onCerrar() → cuando la accion navegaba, la sheet quedaba stranded
+    // sin animacion de cierre. Ahora primero hide() del sheet (con coroutine), y al
+    // completar la animacion ejecutamos onElegir.
+    val seleccionarYCerrar: (PickerOpcion) -> Unit = { opcion ->
+        scope.launch {
+            sheetState.hide()
+            onCerrar()
+            onElegir(opcion)
+        }
+    }
     ModalBottomSheet(
         onDismissRequest = onCerrar,
         sheetState = sheetState,
@@ -83,10 +96,7 @@ fun PickerOpcionesSheet(
             Spacer(Modifier.height(12.dp))
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PickerOpcion.entries.forEach { opcion ->
-                    OpcionRow(opcion = opcion, onClick = {
-                        onElegir(opcion)
-                        onCerrar()
-                    })
+                    OpcionRow(opcion = opcion, onClick = { seleccionarYCerrar(opcion) })
                 }
             }
         }
