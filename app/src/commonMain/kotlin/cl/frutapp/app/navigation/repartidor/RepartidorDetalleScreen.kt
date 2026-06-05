@@ -72,6 +72,7 @@ class RepartidorDetalleScreen(private val pedidoId: String) : Screen {
         val despacho = remember(pedidoId) { despachoPorId(pedidoId) }
         var menuAbierto by remember { mutableStateOf(false) }
         var dialogoCancelar by remember { mutableStateOf(false) }
+        var verItemsAbierto by remember { mutableStateOf(false) }
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
             TopBar(estado = "Listo para retiro", onBack = { navigator.pop() }, onMenu = { menuAbierto = true })
             Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp)) {
@@ -99,7 +100,7 @@ class RepartidorDetalleScreen(private val pedidoId: String) : Screen {
                 modifier = Modifier.fillMaxWidth().background(Color.White).navigationBarsPadding().padding(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                FrutButtonOutline(text = "Ver items", onClick = {}, modifier = Modifier.weight(1f))
+                FrutButtonOutline(text = "Ver items", onClick = { verItemsAbierto = true }, modifier = Modifier.weight(1f))
                 FrutButtonPrimary(text = "Iniciar retiro", onClick = { navigator.replace(RepartidorEnCaminoScreen(pedidoId)) }, modifier = Modifier.weight(1.4f))
             }
         }
@@ -117,6 +118,9 @@ class RepartidorDetalleScreen(private val pedidoId: String) : Screen {
                 ),
                 onCerrar = { menuAbierto = false }
             )
+        }
+        if (verItemsAbierto) {
+            RepartidorItemsSheet(pedidoId = pedidoId, onCerrar = { verItemsAbierto = false })
         }
         if (dialogoCancelar) {
             AlertDialog(

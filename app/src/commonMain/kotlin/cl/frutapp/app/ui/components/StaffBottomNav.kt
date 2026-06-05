@@ -156,13 +156,20 @@ private fun StaffNavItem(tab: StaffTab, selected: Boolean, onClick: () -> Unit) 
 }
 
 /**
- * Botón central destacado: círculo verde 72dp con sombra y borde blanco. Tap → [onClick];
- * long-press → menú de quick actions flotando arriba. Misma mecanica que CartButton del cliente.
+ * Botón central destacado: círculo verde 72dp con sombra y borde blanco. Tap normal Y
+ * long-press abren el menu de quickActions cuando existen — antes el tap normal llamaba
+ * [config.onClick] que en picker/repartidor era solo un toast 'Próximamente', mientras
+ * el long-press abria un menú real. Resultado: usuario tapeaba y veia placeholder, no
+ * descubria que la accion real estaba a un long-press.
+ *
+ * Ahora: si hay quickActions → tap=menu, long-press=menu (toggle si ya abierto).
+ *         si NO hay quickActions → tap = onClick (uso degradado, fallback).
  */
 @Composable
 private fun StaffCenterFab(config: StaffCenterButton, modifier: Modifier = Modifier) {
     var menuOpen by remember { mutableStateOf(false) }
     val gapPx = with(LocalDensity.current) { 14.dp.roundToPx() }
+    val tieneQuickActions = config.quickActions.isNotEmpty()
 
     Box(modifier = modifier.size(72.dp), contentAlignment = Alignment.Center) {
         Box(
@@ -176,8 +183,14 @@ private fun StaffCenterFab(config: StaffCenterButton, modifier: Modifier = Modif
                 )
                 .pointerInput(Unit) {
                     detectTapGestures(
-                        onTap = { if (menuOpen) menuOpen = false else config.onClick() },
-                        onLongPress = { if (config.quickActions.isNotEmpty()) menuOpen = true }
+                        onTap = {
+                            when {
+                                menuOpen -> menuOpen = false
+                                tieneQuickActions -> menuOpen = true
+                                else -> config.onClick()
+                            }
+                        },
+                        onLongPress = { if (tieneQuickActions) menuOpen = true }
                     )
                 },
             contentAlignment = Alignment.Center

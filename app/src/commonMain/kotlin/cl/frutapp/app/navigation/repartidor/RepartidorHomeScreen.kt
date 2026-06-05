@@ -34,6 +34,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -43,6 +44,8 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.navigation.auth.LoginScreen
+import cl.frutapp.app.navigation.staff.PerfilStaff
+import cl.frutapp.app.navigation.staff.StaffAyudaScreen
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.StaffBottomNav
 import cl.frutapp.app.ui.components.StaffCenterButton
@@ -113,9 +116,13 @@ class RepartidorHomeScreen : Screen {
                     "perfil" -> Column(modifier = Modifier.fillMaxSize()) {
                         // Hasta tener una pantalla 'Perfil' propia, mostramos el saldo del
                         // repartidor en esta tab y agregamos el boton de logout al final.
-                        Box(modifier = Modifier.weight(1f)) { RepartidorSaldoContent() }
-                        Box(modifier = Modifier.fillMaxWidth().background(androidx.compose.ui.graphics.Color.White).padding(16.dp)) {
-                            cl.frutapp.app.ui.components.FrutButtonOutline(
+                        Box(modifier = Modifier.weight(1f)) {
+                            RepartidorSaldoContent(
+                                onAyuda = { navigator.push(StaffAyudaScreen(PerfilStaff.REPARTIDOR)) }
+                            )
+                        }
+                        Box(modifier = Modifier.fillMaxWidth().background(Color.White).padding(16.dp)) {
+                            FrutButtonOutline(
                                 text = "Cerrar sesión",
                                 onClick = {
                                     TokenStore.clear()

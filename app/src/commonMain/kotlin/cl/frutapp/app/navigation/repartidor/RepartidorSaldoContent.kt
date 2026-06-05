@@ -2,6 +2,7 @@ package cl.frutapp.app.navigation.repartidor
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -51,7 +53,7 @@ import cl.frutapp.app.ui.theme.FrutAppColors
  * es 'ganancias'. (Aun no agregamos ese tab; ver siguiente edit en RepartidorHomeScreen.)
  */
 @Composable
-fun RepartidorSaldoContent(modifier: Modifier = Modifier) {
+fun RepartidorSaldoContent(modifier: Modifier = Modifier, onAyuda: () -> Unit = {}) {
     val resumen = remember { saldoResumenMock() }
     Column(modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
         Spacer(Modifier.height(12.dp))
@@ -61,7 +63,11 @@ fun RepartidorSaldoContent(modifier: Modifier = Modifier) {
                 Text("Repartidor", color = FrutAppColors.InkMuted, fontSize = 13.sp)
             }
             Row(
-                modifier = Modifier.padding(4.dp),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable(onClick = onAyuda)
+                    .background(FrutAppColors.Brand50, RoundedCornerShape(20.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(Icons.AutoMirrored.Filled.HelpOutline, null, tint = FrutAppColors.Brand600, modifier = Modifier.size(16.dp))

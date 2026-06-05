@@ -43,6 +43,8 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.navigation.auth.LoginScreen
+import cl.frutapp.app.navigation.staff.PerfilStaff
+import cl.frutapp.app.navigation.staff.StaffAyudaScreen
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.StaffBottomNav
 import cl.frutapp.app.ui.components.StaffCenterButton
@@ -121,7 +123,8 @@ class PickerHomeScreen : Screen {
                         onLogout = {
                             TokenStore.clear()
                             navigator.replaceAll(LoginScreen())
-                        }
+                        },
+                        onAyuda = { navigator.push(StaffAyudaScreen(PerfilStaff.PICKER)) }
                     )
                     else -> ProximamentePlaceholder(
                         modifier = Modifier.fillMaxSize(),

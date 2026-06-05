@@ -2,6 +2,7 @@ package cl.frutapp.app.navigation.picker
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -55,7 +57,8 @@ import cl.frutapp.app.ui.theme.FrutAppColors
 @Composable
 fun PickerPerfilContent(
     modifier: Modifier = Modifier,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onAyuda: () -> Unit = {}
 ) {
     val pedidosTurno = remember { pedidosListosMock() }
     val nombrePicker = remember { TokenStore.user?.name?.substringBefore(' ') ?: "Picker" }
@@ -66,7 +69,14 @@ fun PickerPerfilContent(
                 Text("Mi turno", color = FrutAppColors.Brand800, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                 Text("Picker", color = FrutAppColors.InkMuted, fontSize = 13.sp)
             }
-            Row(modifier = Modifier.padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .clickable(onClick = onAyuda)
+                    .background(FrutAppColors.Brand50, RoundedCornerShape(20.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(Icons.AutoMirrored.Filled.HelpOutline, null, tint = FrutAppColors.Brand600, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("Ayuda", color = FrutAppColors.Brand600, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
