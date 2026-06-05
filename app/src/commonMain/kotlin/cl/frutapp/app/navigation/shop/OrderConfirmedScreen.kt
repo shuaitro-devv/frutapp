@@ -94,7 +94,7 @@ class OrderConfirmedScreen(
                     }
                     Text("¡Pedido confirmado!", color = FrutAppColors.Brand800, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 18.dp))
                     Text(
-                        "Tu pedido está en camino. Te avisaremos cuando salga a reparto.",
+                        "Tu Seleccionador de Frescura está eligiendo lo mejor para ti.",
                         color = FrutAppColors.InkMuted,
                         fontSize = 14.sp,
                         textAlign = TextAlign.Center,

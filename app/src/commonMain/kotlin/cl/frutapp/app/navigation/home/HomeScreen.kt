@@ -286,7 +286,7 @@ private fun HomeHeader(modifier: Modifier = Modifier, onFavoritos: () -> Unit = 
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = TokenStore.user?.name?.substringBefore(' ')?.let { "¡Hola, $it! 👋" } ?: "¡Hola! 👋",
+                        text = TokenStore.user?.name?.substringBefore(' ')?.let { "Hola, Caserito $it 🌿" } ?: "Hola, casero 🌿",
                         style = MaterialTheme.typography.headlineSmall,
                         color = Color.White
                     )

@@ -280,9 +280,9 @@ private fun pasosFor(status: String): List<Paso> {
     }
     val labels = listOf(
         "Pedido confirmado" to "Recibimos tu pedido",
-        "Preparando tu pedido" to "Seleccionando productos frescos",
-        "En camino" to "Tu pedido va hacia tu dirección",
-        "Entregado" to "Disfruta tus productos"
+        "Tu Seleccionador de Frescura" to "Está eligiendo lo mejor para ti",
+        "Tu Repartidor en camino" to "Lleva tu pedido a tu mesa",
+        "¡Entregado!" to "Tus productos llegaron a tu mesa 🌿"
     )
     return labels.mapIndexed { i, (titulo, detalle) ->
         val estado = when {
