@@ -57,8 +57,10 @@ import cl.frutapp.app.data.RewardsStore
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.data.remote.CatalogApi
 import cl.frutapp.app.data.remote.OrderApi
+import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.FrutLoader
+import cl.frutapp.app.ui.mensajeAmigable
 import cl.frutapp.app.ui.theme.FrutAppColors
 import cl.frutapp.shared.dto.ClientContextDto
 import cl.frutapp.shared.dto.CreateOrderRequest
@@ -225,14 +227,13 @@ class CheckoutScreen : Screen {
                                             )
                                         )
                                     }.onFailure { e ->
-                                        cl.frutapp.app.ui.ErrorReporter.report(screen = "Checkout", action = "create_order", error = e)
-                                        if (cl.frutapp.app.ui.esSesionExpirada(e)) {
-                                            cl.frutapp.app.ui.showToast("Tu sesión expiró. Vuelve a iniciar sesión.")
-                                            cl.frutapp.app.data.TokenStore.clear()
-                                            navigator.replaceAll(cl.frutapp.app.navigation.auth.LoginScreen())
-                                        } else {
-                                            error = cl.frutapp.app.ui.mensajeAmigable(e, "crear el pedido")
-                                        }
+                                        // Sesion expirada la maneja el LaunchedEffect global en App.kt
+                                        // (replaceAll a Login + toast). Aqui solo nos preocupamos del
+                                        // error visible al cliente: mensaje amigable in-screen sin
+                                        // tocar TokenStore (cualquier doble clear/navigate generaba
+                                        // race con el handler global).
+                                        ErrorReporter.report(screen = "Checkout", action = "create_order", error = e)
+                                        error = mensajeAmigable(e, "crear el pedido")
                                         loading = false
                                     }
                                 }

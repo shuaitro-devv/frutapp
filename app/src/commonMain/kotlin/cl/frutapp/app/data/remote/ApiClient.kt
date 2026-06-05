@@ -1,6 +1,7 @@
 package cl.frutapp.app.data.remote
 
 import cl.frutapp.app.data.TokenStore
+import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.shared.dto.AuthResponse
 import cl.frutapp.shared.dto.RefreshRequest
 import io.ktor.client.HttpClient
@@ -60,12 +61,25 @@ object ApiClient {
                 TokenStore.updateTokens(auth.accessToken, auth.refreshToken)
                 auth.accessToken
             } else {
+                // Loggear el motivo del refresh fallido — antes solo cleareabamos el
+                // TokenStore en silencio y el LaunchedEffect global pateaba al login,
+                // dejando al usuario sin contexto y a nosotros sin pistas de POR QUE
+                // (refresh token vencido, invalidado server-side, backend caido, etc.).
+                val body = runCatching { resp.body<String>() }.getOrNull().orEmpty().take(200)
+                ErrorReporter.report(
+                    screen = "ApiClient",
+                    action = "refresh_token_http_${resp.status.value}",
+                    error = RuntimeException("Refresh respondio ${resp.status.value} ${resp.status.description}: $body")
+                )
                 TokenStore.clear()
                 null
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e // estructura de coroutines: re-tirar siempre.
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            // Excepcion no controlada durante el refresh (timeout, IO, etc.). NO limpiamos
+            // tokens: si fue red caida momentanea, el proximo intento puede funcionar.
+            ErrorReporter.report(screen = "ApiClient", action = "refresh_token_exception", error = e)
             null
         }
     }
