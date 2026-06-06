@@ -147,7 +147,7 @@ jobs:
               -e JWT_SECRET='${{ secrets.JWT_SECRET }}' \
               -e RESEND_API_KEY='${{ secrets.RESEND_API_KEY }}' \
               -e MAIL_FROM='FrutApp <no-reply@frutapp.grandline.cl>' \
-              -e DEMO_AUTO_ADVANCE='true' \
+              -e DEMO_AUTO_ADVANCE='false' \
               -e DEMO_AUTO_ADVANCE_SECONDS='15' \
               -v frutapp-logs:/app/logs \
               --label "traefik.enable=true" \
