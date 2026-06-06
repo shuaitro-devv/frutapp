@@ -113,15 +113,17 @@ class OrderService(
 
     suspend fun frutCoinsOf(userId: UUID): FrutCoinsBalanceDto = frutCoins.balanceAndHistory(userId)
 
-    /** Avance de estado del back office, validando la máquina de estados. */
-    suspend fun transition(idStr: String, req: TransitionRequest): OrderDto {
+    /** Avance de estado del back office, validando la máquina de estados.
+     *  [actorUserId] es el UUID del usuario que dispara la transicion (admin/operador
+     *  desde el back office), null cuando viene de un job sin user (sistema). */
+    suspend fun transition(idStr: String, req: TransitionRequest, actorUserId: UUID? = null): OrderDto {
         val id = parseUuid(idStr, "Id inválido.")
         val from = orders.currentStatus(id) ?: throw NotFoundException("Pedido no encontrado.")
         val to = OrderStatus.parse(req.toStatus) ?: throw ValidationException("Estado inválido: ${req.toStatus}")
         if (!OrderStatus.canTransition(from, to)) {
             throw ValidationException("Transición no permitida: $from → $to")
         }
-        applyStep(id, from, to, OrderActor.OPERADOR, req.nota)
+        applyStep(id, from, to, OrderActor.OPERADOR, actorUserId, req.nota)
         return orders.findById(id) ?: throw NotFoundException("Pedido no encontrado.")
     }
 
@@ -134,13 +136,14 @@ class OrderService(
         orders.listActive().forEach { (id, from) ->
             val to = OrderStatus.nextHappy(from) ?: return@forEach
             if (OrderStatus.canTransition(from, to)) {
-                applyStep(id, from, to, OrderActor.SISTEMA, "Avance automático (demo)")
+                // Avance del cron de demo: actor SISTEMA, sin actorUserId humano.
+                applyStep(id, from, to, OrderActor.SISTEMA, null, "Avance automático (demo)")
             }
         }
     }
 
     /** Aplica una transición ya validada, con los efectos de negocio (captura/reembolso). */
-    private suspend fun applyStep(id: UUID, from: OrderStatus, to: OrderStatus, actor: OrderActor, nota: String?) {
+    private suspend fun applyStep(id: UUID, from: OrderStatus, to: OrderStatus, actor: OrderActor, actorUserId: UUID?, nota: String?) {
         // MVP: al confirmar stock se fija el total final (= estimado) y se captura el pago.
         val totalFinal = if (to == OrderStatus.STOCK_CONFIRMADO) orders.findById(id)?.totalEstimado else null
         val payment = when (to) {
@@ -148,7 +151,7 @@ class OrderService(
             OrderStatus.CANCELADO -> PaymentStatus.REEMBOLSADO
             else -> null
         }
-        orders.applyTransition(id, from, to, actor, nota, totalFinal, payment)
+        orders.applyTransition(id, from, to, actor, actorUserId, nota, totalFinal, payment)
     }
 
     private fun parseUuid(value: String, msg: String): UUID =

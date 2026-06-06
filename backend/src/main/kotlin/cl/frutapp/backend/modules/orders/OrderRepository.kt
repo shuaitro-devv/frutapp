@@ -72,6 +72,17 @@ class OrderRepository {
         val coinsGastados = frutcoinsClp / BusinessConfig.FRUTCOIN_VALOR_CLP
         val cashClp = (o.total - frutcoinsClp).coerceAtLeast(0)
 
+        // V12: location default donde se arma el pedido. Por ahora hay una sola
+        // ("Lo Valledor Centro"). Cuando exista admin web podra elegirse en el
+        // checkout (cliente mas cerca de su comuna). Nullable defensivo: si la
+        // location no existe (datos inconsistentes), igual se crea el pedido —
+        // simplemente no aparece en la cola del picker hasta que se le asigne.
+        val defaultLocationId = PickupLocationTable
+            .selectAll()
+            .where { PickupLocationTable.code eq DEFAULT_PICKUP_LOCATION_CODE }
+            .firstOrNull()
+            ?.get(PickupLocationTable.id)
+
         OrdersTable.insert {
             it[id] = orderId
             it[numero] = o.numero
@@ -92,6 +103,7 @@ class OrderRepository {
             it[deviceModel] = o.deviceModel
             it[osVersion] = o.osVersion
             it[locale] = o.locale
+            it[pickupLocationId] = defaultLocationId
             it[createdAt] = now
             it[updatedAt] = now
         }
@@ -113,8 +125,8 @@ class OrderRepository {
         if (frutcoinsClp > 0) insertPayment(orderId, PaymentMethod.FRUTCOINS.name, frutcoinsClp, now)
         if (cashClp > 0) insertPayment(orderId, o.cashMethod, cashClp, now)
 
-        insertHistory(orderId, null, OrderStatus.CREADO, OrderActor.CLIENTE, "Pedido creado")
-        insertHistory(orderId, OrderStatus.CREADO, OrderStatus.PAGADO, OrderActor.SISTEMA, "Pago pre-autorizado (simulado)")
+        insertHistory(orderId, null, OrderStatus.CREADO, OrderActor.CLIENTE, o.userId, "Pedido creado")
+        insertHistory(orderId, OrderStatus.CREADO, OrderStatus.PAGADO, OrderActor.SISTEMA, null, "Pago pre-autorizado (simulado)")
 
         var balance = saldoActual
         if (coinsGastados > 0) {
@@ -203,6 +215,7 @@ class OrderRepository {
         from: OrderStatus,
         to: OrderStatus,
         actor: OrderActor,
+        actorUserId: UUID?,
         nota: String?,
         totalFinal: Int?,
         paymentStatus: PaymentStatus?
@@ -213,17 +226,32 @@ class OrderRepository {
             if (totalFinal != null) it[OrdersTable.totalFinal] = totalFinal
             if (paymentStatus != null) it[OrdersTable.paymentStatus] = paymentStatus.name
         }
-        insertHistory(id, from, to, actor, nota)
+        insertHistory(id, from, to, actor, actorUserId, nota)
         Unit
     }
 
-    private fun insertHistory(orderId: UUID, from: OrderStatus?, to: OrderStatus, actor: OrderActor, nota: String?) {
+    /**
+     * Inserta una fila en order_status_history. [actorUserId] es el UUID del usuario
+     * que ejecuto la transicion (V11): null para actores SISTEMA o cuando no se
+     * propaga (legacy). Cuando se conoce el user (cliente que crea, picker que
+     * toma, admin que avanza), SIEMPRE pasarlo para que la auditoria responda
+     * "quien hizo que" al nivel de individuo.
+     */
+    internal fun insertHistory(
+        orderId: UUID,
+        from: OrderStatus?,
+        to: OrderStatus,
+        actor: OrderActor,
+        actorUserId: UUID?,
+        nota: String?
+    ) {
         OrderStatusHistoryTable.insert {
             it[id] = UUID.randomUUID()
             it[OrderStatusHistoryTable.orderId] = orderId
             it[fromStatus] = from?.name
             it[toStatus] = to.name
             it[OrderStatusHistoryTable.actor] = actor.name
+            it[OrderStatusHistoryTable.actorUserId] = actorUserId
             it[OrderStatusHistoryTable.nota] = nota
             it[createdAt] = Clock.System.now()
         }
@@ -267,4 +295,10 @@ class OrderRepository {
         sucursal = r[OrdersTable.sucursal],
         payments = payments
     )
+
+    companion object {
+        // Codigo de la pickup_location por defecto (seedeada en V12). Cuando exista
+        // admin web podra elegirse en checkout segun la comuna del cliente.
+        const val DEFAULT_PICKUP_LOCATION_CODE = "lo-valledor-centro"
+    }
 }

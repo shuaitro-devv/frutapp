@@ -121,3 +121,28 @@ data class TransitionRequest(
     val toStatus: String,
     val nota: String? = null
 )
+
+/** Resumen de pedido que ve el picker/repartidor en su cola. Incluye solo nombre + sector
+ *  del cliente (no direccion ni telefono), siguiendo el principio de minimizacion
+ *  de la Ley 21.719. La direccion la ve solo el repartidor en el detalle de despacho. */
+@Serializable
+data class StaffOrderSummaryDto(
+    val id: String,
+    val numero: String,
+    val status: String,
+    val total: Int,
+    val itemsCount: Int,
+    val createdAt: String,
+    val clienteNombre: String,     // solo nombre (no apellido si solo hay uno)
+    val sector: String,            // ej. "Las Condes", "Providencia"
+    val assignedAt: String? = null, // cuando lo tome el picker (null = en cola libre)
+    val assignedToMe: Boolean = false // true si soy yo quien lo tomo
+)
+
+/** Respuesta de "tomar pedido": OK o conflicto. */
+@Serializable
+data class StaffTakeResult(
+    val ok: Boolean,
+    val orderId: String? = null,
+    val motivo: String? = null    // "ya_tomado", "no_encontrado", etc.
+)

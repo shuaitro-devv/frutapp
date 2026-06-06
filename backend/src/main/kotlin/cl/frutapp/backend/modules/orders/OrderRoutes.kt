@@ -1,6 +1,6 @@
 package cl.frutapp.backend.modules.orders
 
-import cl.frutapp.backend.error.UnauthorizedException
+import cl.frutapp.backend.modules.audit.userId
 import cl.frutapp.backend.modules.rbac.PermissionCache
 import cl.frutapp.backend.modules.rbac.hasPermission
 import cl.frutapp.backend.modules.rbac.roles
@@ -8,18 +8,14 @@ import cl.frutapp.backend.plugins.JWT_AUTH
 import cl.frutapp.shared.dto.CreateOrderRequest
 import cl.frutapp.shared.dto.TransitionRequest
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.auth.authenticate
-import io.ktor.server.auth.jwt.JWTPrincipal
-import io.ktor.server.auth.principal
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
-import java.util.UUID
 
 fun Route.orderRoutes(orderService: OrderService) {
     authenticate(JWT_AUTH) {
@@ -58,13 +54,9 @@ fun Route.orderRoutes(orderService: OrderService) {
                     return@post
                 }
             }
-            call.respond(orderService.transition(call.parameters["id"].orEmpty(), req))
+            call.respond(orderService.transition(call.parameters["id"].orEmpty(), req, call.userId()))
         }
     }
 }
 
-/** userId del JWT (el `sub` es el id del usuario). */
-private fun ApplicationCall.userId(): UUID {
-    val sub = principal<JWTPrincipal>()?.subject ?: throw UnauthorizedException()
-    return runCatching { UUID.fromString(sub) }.getOrNull() ?: throw UnauthorizedException()
-}
+// userId() se importa desde cl.frutapp.backend.modules.audit.userId (helper compartido).

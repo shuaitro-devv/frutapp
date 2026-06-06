@@ -17,6 +17,8 @@ object UsersTable : Table("app_user") {
     val createdAt = timestamp("created_at")
     val updatedAt = timestamp("updated_at")
     val deletedAt = timestamp("deleted_at").nullable()
+    // V12: location donde opera por defecto (solo aplica a roles staff).
+    val homeLocationId = uuid("home_location_id").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

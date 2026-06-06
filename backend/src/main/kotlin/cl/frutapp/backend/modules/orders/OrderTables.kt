@@ -27,6 +27,11 @@ object OrdersTable : Table("customer_order") {
     val createdAt = timestamp("created_at")
     val updatedAt = timestamp("updated_at")
     val deletedAt = timestamp("deleted_at").nullable()
+    // V12: cola del staff
+    val pickupLocationId = uuid("pickup_location_id").nullable()
+    val assignedPickerId = uuid("assigned_picker_id").nullable()
+    val assignedRepartidorId = uuid("assigned_repartidor_id").nullable()
+    val assignedAt = timestamp("assigned_at").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -62,7 +67,20 @@ object OrderStatusHistoryTable : Table("order_status_history") {
     val fromStatus = text("from_status").nullable()
     val toStatus = text("to_status")
     val actor = text("actor")
+    // V11: quien EXACTAMENTE hizo la transicion (nullable cuando actor=SISTEMA).
+    val actorUserId = uuid("actor_user_id").nullable()
     val nota = text("nota").nullable()
+    val createdAt = timestamp("created_at")
+    override val primaryKey = PrimaryKey(id)
+}
+
+// V12: ubicaciones donde se arman pedidos (bodega central o puesto feriante).
+object PickupLocationTable : Table("pickup_location") {
+    val id = uuid("id")
+    val code = text("code")
+    val name = text("name")
+    val address = text("address").nullable()
+    val isActive = bool("is_active")
     val createdAt = timestamp("created_at")
     override val primaryKey = PrimaryKey(id)
 }

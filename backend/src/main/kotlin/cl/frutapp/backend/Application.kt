@@ -23,6 +23,8 @@ import cl.frutapp.backend.modules.rbac.PermissionCache
 import cl.frutapp.backend.modules.rbac.RbacRepository
 import cl.frutapp.backend.plugins.configureCors
 import cl.frutapp.backend.plugins.configureDatabases
+import cl.frutapp.backend.modules.audit.UserEventService
+import cl.frutapp.backend.modules.staff.StaffOrderService
 import cl.frutapp.backend.plugins.configureMonitoring
 import cl.frutapp.backend.plugins.configureRouting
 import cl.frutapp.backend.plugins.configureSecurity
@@ -87,9 +89,11 @@ fun Application.module() {
     val adminUserService = AdminUserService(
         UserRepository(), rbacRepository, PasswordResetTokenRepository(), tokenService, emailSender
     )
+    val userEventService = UserEventService()
+    val staffOrderService = StaffOrderService(userEventService)
 
     configureSecurity(jwtConfig, tokenService)
-    configureRouting(authService, catalogService, orderService, adminUserService)
+    configureRouting(authService, catalogService, orderService, adminUserService, staffOrderService, userEventService)
 
     // Refresca la config de negocio cada 60s (cambios en app_config sin redeploy).
     launch {

@@ -10,6 +10,9 @@ import cl.frutapp.backend.error.ConflictException
 import cl.frutapp.backend.error.UnauthorizedException
 import cl.frutapp.backend.error.ValidationException
 import cl.frutapp.backend.modules.admin.AdminUserService
+import cl.frutapp.backend.modules.audit.EventContext
+import cl.frutapp.backend.modules.audit.UserEventService
+import cl.frutapp.backend.modules.audit.UserEventTable
 import cl.frutapp.backend.modules.auth.AuthService
 import cl.frutapp.backend.modules.auth.Email
 import cl.frutapp.backend.modules.auth.EmailSender
@@ -19,11 +22,16 @@ import cl.frutapp.backend.modules.auth.RefreshTokenRepository
 import cl.frutapp.backend.modules.auth.TokenService
 import cl.frutapp.backend.modules.auth.UserRepository
 import cl.frutapp.backend.modules.auth.UserRow
+import cl.frutapp.backend.modules.auth.UsersTable
+import cl.frutapp.backend.db.dbQuery
 import cl.frutapp.backend.modules.catalog.CatalogRepository
 import cl.frutapp.backend.modules.orders.FrutCoinsRepository
 import cl.frutapp.backend.modules.orders.OrderRepository
 import cl.frutapp.backend.modules.orders.OrderService
 import cl.frutapp.backend.modules.orders.OrderStatus
+import cl.frutapp.backend.modules.orders.OrdersTable
+import cl.frutapp.backend.modules.orders.PickupLocationTable
+import cl.frutapp.backend.modules.staff.StaffOrderService
 import cl.frutapp.backend.modules.rbac.PermissionCache
 import cl.frutapp.backend.modules.rbac.RbacRepository
 import cl.frutapp.shared.dto.AdminCreateUserRequest
@@ -36,7 +44,12 @@ import cl.frutapp.shared.dto.OrderItemRequest
 import cl.frutapp.shared.dto.PaymentInput
 import cl.frutapp.shared.dto.RegisterRequest
 import cl.frutapp.shared.dto.TransitionRequest
+import java.util.UUID
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.update
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -78,6 +91,8 @@ class BackendIntegrationTest {
     private val frutCoins = FrutCoinsRepository()
     private val orders = OrderService(OrderRepository(), catalog, frutCoins)
     private val adminUsers = AdminUserService(users, rbac, PasswordResetTokenRepository(), tokenService, emailSender)
+    private val events = UserEventService()
+    private val staff = StaffOrderService(events)
 
     @BeforeAll
     fun setup() {
@@ -335,5 +350,120 @@ class BackendIntegrationTest {
         // admin y picker: sí pueden avanzar estados
         assertTrue(PermissionCache.has(listOf("admin"), "order:transition"))
         assertTrue(PermissionCache.has(listOf("picker"), "order:transition"))
+    }
+
+    // --- Tests del flujo staff (V11 user_event + V12 cola del picker) ---
+
+    private suspend fun createPickerWithDefaultLocation(): UUID {
+        val email = "picker${System.nanoTime()}@frutapp.local"
+        adminUsers.createUser(AdminCreateUserRequest("Picker T", email, null, listOf("picker")))
+        val u = users.findByEmail(email)!!
+        // Asigna la location default (Lo Valledor Centro) al picker — equivalente a lo que
+        // hara el admin web cuando exista. Sin esto el StaffOrderService rebota con
+        // "Tu cuenta no tiene una location asignada".
+        dbQuery {
+            val locationId = PickupLocationTable.selectAll()
+                .where { PickupLocationTable.code eq OrderRepository.DEFAULT_PICKUP_LOCATION_CODE }
+                .first()[PickupLocationTable.id]
+            UsersTable.update({ UsersTable.id eq u.id }) {
+                it[homeLocationId] = locationId
+            }
+        }
+        return u.id
+    }
+
+    private suspend fun createOrderForCliente(): UUID {
+        val cliente = registerVerified()
+        val p = kgProductPriced()
+        val dto = orders.create(cliente.id, CreateOrderRequest(items = listOf(OrderItemRequest(p.id, 1, 1000))))
+        return UUID.fromString(dto.id)
+    }
+
+    @Test
+    fun `picker ve pedidos en su cola y los toma atomicamente`() = runBlocking {
+        val pickerId = createPickerWithDefaultLocation()
+        val orderId = createOrderForCliente()
+
+        // En la cola libre antes de tomar.
+        val colaInicial = staff.colaPicker(pickerId)
+        assertTrue(colaInicial.any { it.id == orderId.toString() }, "pedido no aparece en cola")
+
+        // Take exitoso.
+        val result = staff.take(pickerId, orderId, EventContext.EMPTY)
+        assertTrue(result.ok, "primer take deberia exitoso, motivo=${result.motivo}")
+
+        // Ya no aparece en cola libre.
+        val colaPost = staff.colaPicker(pickerId)
+        assertFalse(colaPost.any { it.id == orderId.toString() }, "pedido sigue en cola tras take")
+
+        // Aparece en mis en_curso.
+        val enCurso = staff.enCursoPicker(pickerId)
+        assertTrue(enCurso.any { it.id == orderId.toString() }, "pedido no aparece en en_curso del picker")
+        assertTrue(enCurso.first { it.id == orderId.toString() }.assignedToMe)
+    }
+
+    @Test
+    fun `race condition - segundo picker recibe ok=false`() = runBlocking {
+        val pickerA = createPickerWithDefaultLocation()
+        val pickerB = createPickerWithDefaultLocation()
+        val orderId = createOrderForCliente()
+
+        val resA = staff.take(pickerA, orderId, EventContext.EMPTY)
+        val resB = staff.take(pickerB, orderId, EventContext.EMPTY)
+
+        assertTrue(resA.ok, "picker A deberia haber tomado")
+        assertFalse(resB.ok, "picker B no deberia haber tomado el mismo pedido")
+        assertEquals("ya_tomado_o_no_disponible", resB.motivo)
+    }
+
+    @Test
+    fun `release devuelve el pedido a la cola libre`() = runBlocking {
+        val pickerId = createPickerWithDefaultLocation()
+        val orderId = createOrderForCliente()
+
+        staff.take(pickerId, orderId, EventContext.EMPTY)
+        staff.release(pickerId, orderId, EventContext.EMPTY)
+
+        // Otro picker (o el mismo) lo puede tomar de nuevo.
+        val pickerOtro = createPickerWithDefaultLocation()
+        val retoma = staff.take(pickerOtro, orderId, EventContext.EMPTY)
+        assertTrue(retoma.ok, "el pedido deberia estar libre tras release")
+    }
+
+    @Test
+    fun `complete marca STOCK_CONFIRMADO y registra history con actor`() = runBlocking {
+        val pickerId = createPickerWithDefaultLocation()
+        val orderId = createOrderForCliente()
+
+        staff.take(pickerId, orderId, EventContext.EMPTY)
+        staff.complete(pickerId, orderId, EventContext.EMPTY)
+
+        // El order quedo en STOCK_CONFIRMADO.
+        val status = dbQuery {
+            OrdersTable.selectAll().where { OrdersTable.id eq orderId }
+                .first()[OrdersTable.status]
+        }
+        assertEquals("STOCK_CONFIRMADO", status)
+    }
+
+    @Test
+    fun `auditoria - take emite evento staff order_taken en user_event`() = runBlocking {
+        val pickerId = createPickerWithDefaultLocation()
+        val orderId = createOrderForCliente()
+
+        staff.take(pickerId, orderId, EventContext(ipAddress = "10.0.0.7", userAgent = "Test/1.0"))
+
+        val evento = dbQuery {
+            UserEventTable.selectAll()
+                .where {
+                    (UserEventTable.userId eq pickerId) and
+                    (UserEventTable.eventType eq "staff.order_taken") and
+                    (UserEventTable.entityId eq orderId)
+                }
+                .firstOrNull()
+        }
+        assertTrue(evento != null, "evento staff.order_taken no se registro")
+        assertEquals("10.0.0.7", evento!![UserEventTable.ipAddress])
+        assertEquals("Test/1.0", evento[UserEventTable.userAgent])
     }
 }
