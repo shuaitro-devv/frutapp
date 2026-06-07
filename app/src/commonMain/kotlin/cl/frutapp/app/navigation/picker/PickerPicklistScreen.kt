@@ -240,7 +240,7 @@ class PickerPicklistScreen(
                     }
                     if (!esBackendReal) {
                         // Modo mockup: avanza a la pantalla de "pedido listo" sin tocar red.
-                        navigator.replace(PickerListoScreen(data.pedidoId, estados, numero = numero, sector = sector, cliente = cliente))
+                        navigator.replace(PickerListoScreen(data.pedidoId, estados, numero = numero, sector = sector, cliente = cliente, tomadoEnIso = data.tomadoEnIso, backendId = if (esBackendReal) pedidoId else null))
                         return@BotonesInferior
                     }
                     if (completando) return@BotonesInferior
@@ -249,7 +249,7 @@ class PickerPicklistScreen(
                         runCatching { staffApi.complete(pedidoId) }
                             .onSuccess {
                                 showToast("Pedido listo para retiro 🌿")
-                                navigator.replace(PickerListoScreen(data.pedidoId, estados, numero = numero, sector = sector, cliente = cliente))
+                                navigator.replace(PickerListoScreen(data.pedidoId, estados, numero = numero, sector = sector, cliente = cliente, tomadoEnIso = data.tomadoEnIso, backendId = if (esBackendReal) pedidoId else null))
                             }
                             .onFailure { e ->
                                 if (e is kotlinx.coroutines.CancellationException) throw e

@@ -34,7 +34,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -56,12 +60,38 @@ import cl.frutapp.app.ui.theme.FrutAppColors
  */
 class PickerDetalleHandoffScreen(
     private val pedidoId: String,
-    private val estados: Map<Int, EstadoItem>
+    private val estados: Map<Int, EstadoItem>,
+    /** UUID del pedido en backend. Si está, cargamos los items REALES via
+     *  staffApi.detalle(); si null, fallback al picklistMock. */
+    private val backendId: String? = null,
+    /** Sector y nombre del cliente para la ClienteCard. Cuando vienen del flow
+     *  real, override los hardcoded "Restaurante Verde · Sector Norte". */
+    private val sector: String? = null,
+    private val cliente: String? = null
 ) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val data = remember(pedidoId) { picklistMock(pedidoId) }
+        val staffApi = remember { cl.frutapp.app.data.remote.StaffOrderApi() }
+        var picklist by remember(pedidoId, backendId) {
+            mutableStateOf<PicklistData?>(if (backendId != null) null else picklistMock(pedidoId))
+        }
+        LaunchedEffect(backendId) {
+            val id = backendId ?: return@LaunchedEffect
+            runCatching { staffApi.detalle(id) }
+                .onSuccess { picklist = it.toPicklistData() }
+                .onFailure { e ->
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    cl.frutapp.app.ui.ErrorReporter.report(screen = "PickerDetalleHandoff", action = "detalle", error = e)
+                    picklist = picklistMock(pedidoId)
+                }
+        }
+        val data = picklist ?: run {
+            Box(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background), contentAlignment = Alignment.Center) {
+                androidx.compose.material3.CircularProgressIndicator(color = FrutAppColors.Brand400)
+            }
+            return
+        }
         // Fix #1: si llegamos con estados vacios (camino del historial via PickerListoScreen
         // sin estados explicitos), sintetizamos 'todos COMPLETADO' para que el detalle sea
         // coherente con el header 'Completado' y no muestre 12 items 'Pendiente'.
@@ -96,7 +126,7 @@ class PickerDetalleHandoffScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item { ClienteCard() }
+                item { ClienteCard(cliente = cliente, sector = sector) }
                 item {
                     Text("Resumen del pedido", color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
@@ -133,23 +163,27 @@ class PickerDetalleHandoffScreen(
 }
 
 @Composable
-private fun ClienteCard() {
+private fun ClienteCard(cliente: String?, sector: String?) {
+    // Privacidad: el picker ve nombre + sector, NO direccion completa.
+    val nombre = cliente ?: "Cliente"
+    val inicial = nombre.firstOrNull()?.uppercase() ?: "C"
+    val sectorTxt = sector ?: "—"
     Row(
         modifier = Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp))
             .border(1.dp, FrutAppColors.Brand100, RoundedCornerShape(14.dp)).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(modifier = Modifier.size(44.dp).background(FrutAppColors.Brand50, CircleShape), contentAlignment = Alignment.Center) {
-            Text("R", color = FrutAppColors.Brand600, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(inicial, color = FrutAppColors.Brand600, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text("Cliente", color = FrutAppColors.InkMuted, fontSize = 11.sp)
-            Text("Restaurante Verde", color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(nombre, color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.LocationOn, null, tint = FrutAppColors.InkSoft, modifier = Modifier.size(12.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Sector Norte · Av. Las Flores 1280", color = FrutAppColors.InkMuted, fontSize = 12.sp)
+                Text(sectorTxt, color = FrutAppColors.InkMuted, fontSize = 12.sp)
             }
         }
     }
@@ -231,6 +265,7 @@ private fun ItemResumenRow(item: ItemPicklist, estado: EstadoItem) {
 
 @Composable
 private fun EquipoCard() {
+    val pickerNombre = cl.frutapp.app.data.TokenStore.user?.name?.substringBefore(' ') ?: "Casero"
     Row(
         modifier = Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp))
             .border(1.dp, FrutAppColors.Brand100, RoundedCornerShape(14.dp)).padding(14.dp),
@@ -242,8 +277,8 @@ private fun EquipoCard() {
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text("Picker", color = FrutAppColors.InkMuted, fontSize = 11.sp)
-            Text("Camila R.", color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text("Bodega Norte · Turno 10:00 - 18:00", color = FrutAppColors.InkSoft, fontSize = 11.sp)
+            Text(pickerNombre, color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("Lo Valledor Centro", color = FrutAppColors.InkSoft, fontSize = 11.sp)
         }
         Icon(Icons.Filled.QrCode2, null, tint = FrutAppColors.Brand600, modifier = Modifier.size(28.dp))
     }

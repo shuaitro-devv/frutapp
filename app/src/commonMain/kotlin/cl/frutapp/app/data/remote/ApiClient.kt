@@ -9,6 +9,7 @@ import io.ktor.client.call.body
 import io.ktor.client.network.sockets.ConnectTimeoutException
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.HttpRequestRetry
+import io.ktor.client.plugins.HttpResponseValidator
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.HttpSend
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -93,6 +94,35 @@ object ApiClient {
         // mensajeAmigable. Con expectSuccess, status no-2xx lanza ClientRequestException
         // cuyo .message contiene "401 Unauthorized" / "422 Unprocessable Entity" / etc.
         expectSuccess = true
+
+        // Limpieza de sesion cuando llega un 401 a un endpoint protegido. Esto se
+        // ejecuta DENTRO del response pipeline, antes de que la excepcion del
+        // ResponseValidator (con expectSuccess=true) llegue al caller — el lugar
+        // correcto en Ktor 2.x para manejar 401, porque HttpSend.intercept NO
+        // captura excepciones lanzadas por el ResponseValidator.
+        //
+        // Si el access token vencio y NO podemos refrescarlo (refresh tambien 401
+        // o refreshToken null), limpiamos TokenStore para que el LaunchedEffect de
+        // App.kt detecte accessToken=null y patee al Login. El refresh + reintento
+        // automatico del mismo request es complejo (requiere Auth plugin); por
+        // ahora solo manejamos la limpieza de sesion zombie. Cuando hagamos el
+        // refactor a Auth plugin, agregamos el auto-retry transparente.
+        HttpResponseValidator {
+            handleResponseExceptionWithRequest { exception, request ->
+                if (exception !is ClientRequestException) return@handleResponseExceptionWithRequest
+                if (exception.response.status != HttpStatusCode.Unauthorized) return@handleResponseExceptionWithRequest
+                val protectedEndpoint = !request.url.toString().contains("/auth/")
+                if (!protectedEndpoint) return@handleResponseExceptionWithRequest
+
+                // Intentamos refresh una vez. Si funciono, el polling siguiente va
+                // con el token nuevo. Si no funciono, limpiamos TokenStore para
+                // disparar el guard global.
+                val newAccess = if (TokenStore.refreshToken != null) tryRefresh() else null
+                if (newAccess == null && TokenStore.accessToken != null) {
+                    TokenStore.clear()
+                }
+            }
+        }
         // Retry para errores transient — backend con pool de Postgres dormido o Traefik
         // con cold start a veces falla el primer request y el segundo anda. Reintentamos
         // solo errores de red, timeouts y 5xx; NUNCA 4xx (un 401 de login NO se reintenta,
@@ -117,40 +147,6 @@ object ApiClient {
         // Adjunta el access token (JWT) en cada request si hay sesión (se lee en tiempo de request).
         defaultRequest {
             TokenStore.accessToken?.let { header(HttpHeaders.Authorization, "Bearer $it") }
-        }
-    }.also { c ->
-        // Auto-refresh: si un endpoint protegido responde 401, refresca el token y reintenta una vez.
-        // Con expectSuccess=true, el 401 llega como ClientRequestException (no como response):
-        // catcheamos, refrescamos y reintentamos; si no es 401 o falla refresh, re-lanzamos.
-        //
-        // Si el refresh no es posible (refreshToken null) o el refresh falla devolviendo null,
-        // significa que la sesión es ZOMBIE — la app tiene un accessToken vencido pero no puede
-        // renovarlo. En ese caso limpiamos TokenStore para que el LaunchedEffect global de App.kt
-        // detecte accessToken=null y patee al usuario al Login. Sin esto, el polling se queda en
-        // un loop infinito de 401s mostrando "Tu sesion expiro" sin que la app navegue (era el
-        // bug que reportó Mauricio: el toast aparecía pero la app se quedaba colgada).
-        c.plugin(HttpSend).intercept { request ->
-            try {
-                execute(request)
-            } catch (e: ClientRequestException) {
-                val protectedEndpoint = !request.url.buildString().contains("/auth/")
-                val esAuthFallida = e.response.status == HttpStatusCode.Unauthorized && protectedEndpoint
-                if (!esAuthFallida) throw e
-
-                val newAccess = if (TokenStore.refreshToken != null) tryRefresh() else null
-                if (newAccess != null) {
-                    request.headers.remove(HttpHeaders.Authorization)
-                    request.headers.append(HttpHeaders.Authorization, "Bearer $newAccess")
-                    execute(request)
-                } else {
-                    // Refresh imposible o fallido → forzar logout via LaunchedEffect global.
-                    // TokenStore.clear() puede haberse llamado ya desde tryRefresh (branch
-                    // 'else' con status no-2xx). Si refreshToken era null directamente,
-                    // tryRefresh no se ejecutó y accessToken sigue vivo — limpiamos aca.
-                    if (TokenStore.accessToken != null) TokenStore.clear()
-                    throw e
-                }
-            }
         }
     }
 }

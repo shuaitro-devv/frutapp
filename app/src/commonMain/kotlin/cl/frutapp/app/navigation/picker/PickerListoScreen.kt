@@ -47,6 +47,8 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.TokenStore
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.showToast
@@ -65,7 +67,12 @@ class PickerListoScreen(
     /** Sector/comuna del cliente (ej. "Las Condes"). Si null, se omite la linea. */
     private val sector: String? = null,
     /** Nombre corto del cliente para el destino. Si null, se omite. */
-    private val cliente: String? = null
+    private val cliente: String? = null,
+    /** Timestamp ISO de cuando el picker tomó el pedido. Si null, mostramos "—". */
+    private val tomadoEnIso: String? = null,
+    /** UUID del pedido en backend. Permite que pantallas hijas (Detalle handoff,
+     *  Voucher) carguen los items reales en vez de fixture mock. */
+    private val backendId: String? = null
 ) : Screen {
     @Composable
     override fun Content() {
@@ -156,7 +163,18 @@ class PickerListoScreen(
                 ) {
                     StatItem(icon = Icons.Filled.Inventory2, valor = "$total", label = "Total")
                     StatItem(icon = Icons.Filled.CheckCircle, valor = "$completos de $total", label = "Completos")
-                    StatItem(icon = Icons.Filled.AccessTime, valor = "18 min", label = "Duración")
+                    // Duración real: minutos transcurridos entre take y ahora (que el picker
+                    // toca "Marcar como listo"). Si no nos pasaron tomadoEnIso, mostramos "—"
+                    // antes que un valor inventado.
+                    val duracionTxt = remember(tomadoEnIso) {
+                        if (tomadoEnIso == null) "—"
+                        else runCatching {
+                            val tomado = Instant.parse(tomadoEnIso)
+                            val mins = ((Clock.System.now() - tomado).inWholeMinutes).coerceAtLeast(0L)
+                            "$mins min"
+                        }.getOrDefault("—")
+                    }
+                    StatItem(icon = Icons.Filled.AccessTime, valor = duracionTxt, label = "Duración")
                 }
                 // Desglose por tipo de resolucion solo aparece si hubo alguna distinta a COMPLETADO.
                 if (incidencias > 0) {
@@ -241,7 +259,7 @@ class PickerListoScreen(
                     text = "Ver detalle",
                     // Propagamos estadosEfectivos (no el `estados` original) para que
                     // Detalle/Voucher reciban el set sintetizado cuando venimos del historial.
-                    onClick = { navigator.push(PickerDetalleHandoffScreen(pedidoId, estadosEfectivos)) }
+                    onClick = { navigator.push(PickerDetalleHandoffScreen(pedidoId, estadosEfectivos, backendId = backendId, sector = sector, cliente = cliente)) }
                 )
             }
         }

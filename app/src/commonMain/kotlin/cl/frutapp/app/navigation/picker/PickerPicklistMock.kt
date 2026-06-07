@@ -41,7 +41,11 @@ data class PicklistData(
     val sector: String,
     val destino: String,
     val tiempoEstimadoMin: Int,
-    val items: List<ItemPicklist>
+    val items: List<ItemPicklist>,
+    /** ISO timestamp de cuando el picker tomo el pedido (assignedAt del backend).
+     *  Null en modo mock o si todavia no se tomo. Se usa para calcular la duracion
+     *  del armado en la pantalla "Pedido listo". */
+    val tomadoEnIso: String? = null
 ) {
     val totalItems: Int get() = items.size
     val completados: Int get() = items.count { it.estado != EstadoItem.PENDIENTE }

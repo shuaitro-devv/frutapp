@@ -78,5 +78,6 @@ internal fun StaffOrderDetailDto.toPicklistData(): PicklistData = PicklistData(
             emoji = item.emoji,
             estado = EstadoItem.PENDIENTE
         )
-    }
+    },
+    tomadoEnIso = assignedAt
 )

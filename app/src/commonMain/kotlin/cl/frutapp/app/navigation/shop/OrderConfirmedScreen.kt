@@ -74,6 +74,23 @@ class OrderConfirmedScreen(
         // Cada compra suma a la huella verde del usuario (dummy en sesión).
         LaunchedEffect(orderId) { HuellaVerdeStore.sumarCompra(coins = coins, ahorroClp = 0) }
 
+        // Polling cada 5s: cuando el picker avanza el pedido a EN_PICKING/STOCK_CONFIRMADO/
+        // etc, redirigimos automaticamente al OrderTrackingScreen para que el cliente vea
+        // el avance en vivo sin tener que tocar nada. Esto es clave para demos a
+        // sponsors: el cliente paga, queda en confirmacion unos segundos, y cuando el
+        // picker toma el pedido en el otro celular, la pantalla del cliente cambia sola.
+        LaunchedEffect(orderId) {
+            val estadosPostPago = setOf("EN_PICKING", "STOCK_CONFIRMADO", "FACTURADO", "EN_DESPACHO", "ENTREGADO")
+            while (true) {
+                kotlinx.coroutines.delay(5000)
+                val st = runCatching { cl.frutapp.app.data.remote.OrderApi().get(orderId).status }.getOrNull()
+                if (st in estadosPostPago) {
+                    navigator.replace(OrderTrackingScreen(orderId = orderId))
+                    break
+                }
+            }
+        }
+
         Box(modifier = Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.White)) {
             Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                 Column(
