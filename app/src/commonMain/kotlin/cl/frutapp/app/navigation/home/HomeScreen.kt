@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -91,15 +92,12 @@ import cl.frutapp.app.ui.theme.LocalBrand
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.banner_frescos
 import frutapp.app.generated.resources.banner_fruit
+import frutapp.app.generated.resources.manzana_roja
 import frutapp.app.generated.resources.banner_frutcoins
 import frutapp.app.generated.resources.canasta_frutas
 import frutapp.app.generated.resources.cilantro
 import frutapp.app.generated.resources.hoja_decorativa
 import frutapp.app.generated.resources.lechuga
-import frutapp.app.generated.resources.manzana_roja
-import frutapp.app.generated.resources.naranja
-import frutapp.app.generated.resources.palta_hass
-import frutapp.app.generated.resources.platano
 import frutapp.app.generated.resources.zanahoria
 import org.jetbrains.compose.resources.DrawableResource
 import kotlinx.coroutines.delay
@@ -199,7 +197,6 @@ class HomeScreen : Screen {
                     }
                 }
             }
-            HomeBottomFruits()
             }
         }
 
@@ -241,24 +238,6 @@ private val HOME_TOUR_STEPS = listOf(
 )
 
 @Composable
-private fun BoxScope.HomeBottomFruits() {
-    Row(
-        modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .fillMaxWidth()
-            .offset(y = 34.dp)
-            .alpha(0.9f),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.Bottom
-    ) {
-        Image(painterResource(Res.drawable.platano), null, Modifier.size(72.dp), contentScale = ContentScale.Fit)
-        Image(painterResource(Res.drawable.manzana_roja), null, Modifier.size(64.dp), contentScale = ContentScale.Fit)
-        Image(painterResource(Res.drawable.naranja), null, Modifier.size(60.dp), contentScale = ContentScale.Fit)
-        Image(painterResource(Res.drawable.palta_hass), null, Modifier.size(64.dp), contentScale = ContentScale.Fit)
-    }
-}
-
-@Composable
 private fun BoxScope.HomeLeaves() {
     Image(
         painter = painterResource(Res.drawable.hoja_decorativa),
@@ -287,14 +266,18 @@ private fun HomeHeader(modifier: Modifier = Modifier, onFavoritos: () -> Unit = 
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = TokenStore.user?.name?.substringBefore(' ')?.let { "Hola, Caserito $it 🌿" } ?: "Hola, casero 🌿",
+                        text = TokenStore.user?.name?.substringBefore(' ')?.let { "Hola, Caserito $it" } ?: "Hola, casero",
                         style = MaterialTheme.typography.headlineSmall,
-                        color = Color.White
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "¿Qué productos frescos buscas hoy?",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.9f)
+                        color = Color.White.copy(alpha = 0.9f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 HeaderIcon(Icons.Default.FavoriteBorder, onClick = onFavoritos)
