@@ -35,8 +35,8 @@ import cl.frutapp.app.navigation.auth.LoginScreen
 import cl.frutapp.app.navigation.auth.VerifyCodeScreen
 import cl.frutapp.app.ui.components.FrutLoader
 import cl.frutapp.app.ui.theme.FrutAppColors
-import frutapp.app.generated.resources.Res
-import frutapp.app.generated.resources.logo_white
+import cl.frutapp.app.ui.theme.LocalBrand
+import cl.frutapp.app.ui.theme.brandLogoWhite
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
@@ -98,8 +98,8 @@ class SplashScreen : Screen {
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Image(
-                    painter = painterResource(Res.drawable.logo_white),
-                    contentDescription = "FrutApp",
+                    painter = painterResource(brandLogoWhite()),
+                    contentDescription = LocalBrand.current.displayName,
                     contentScale = ContentScale.FillWidth,
                     modifier = Modifier
                         .width(240.dp)

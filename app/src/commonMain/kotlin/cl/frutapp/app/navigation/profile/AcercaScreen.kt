@@ -38,8 +38,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.ui.theme.FrutAppColors
-import frutapp.app.generated.resources.Res
-import frutapp.app.generated.resources.logo_white
+import cl.frutapp.app.ui.theme.brandLogoWhite
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
 
@@ -132,8 +131,8 @@ private fun HeroBrand() {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Image(
-            painter = painterResource(Res.drawable.logo_white),
-            contentDescription = "FrutApp",
+            painter = painterResource(brandLogoWhite()),
+            contentDescription = null,
             contentScale = ContentScale.FillHeight,
             modifier = Modifier.height(34.dp)
         )

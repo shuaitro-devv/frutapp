@@ -9,14 +9,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import frutapp.app.generated.resources.Res
-import frutapp.app.generated.resources.logo_main
+import cl.frutapp.app.ui.theme.LocalBrand
+import cl.frutapp.app.ui.theme.brandLogoMain
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
 
 /**
- * Logo oficial FrutApp (logo-main.png): isotipo + wordmark + slogan.
- * Se usa en las pantallas de auth y donde se requiera la marca completa.
+ * Logo principal del brand activo (FrutApp por default, Sofruco si el flavor o el
+ * toggle de Modo de tienda lo cambiaron). Se usa en pantallas de auth y donde se
+ * requiera la marca completa.
  */
 @Composable
 fun FrutLogo(
@@ -24,8 +25,8 @@ fun FrutLogo(
     width: Dp = 210.dp
 ) {
     Image(
-        painter = painterResource(Res.drawable.logo_main),
-        contentDescription = "FrutApp",
+        painter = painterResource(brandLogoMain()),
+        contentDescription = LocalBrand.current.displayName,
         modifier = modifier.width(width),
         contentScale = ContentScale.FillWidth
     )
