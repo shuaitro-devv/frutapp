@@ -31,7 +31,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -42,10 +46,15 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.isUuidLike
+import cl.frutapp.app.data.remote.StaffDispatchApi
+import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
+import cl.frutapp.app.ui.mensajeAmigable
 import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
+import kotlinx.coroutines.launch
 
 /**
  * repartidor-04 — Confirmar entrega. Cliente, instrucciones, codigo de verificacion 4
@@ -56,8 +65,12 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val scope = rememberCoroutineScope()
         val despacho = remember(pedidoId) { despachoPorId(pedidoId) }
         val codigoDemo = "4821" // En real, el cliente lo dice y el repartidor lo tipea.
+        val esBackendReal = remember(pedidoId) { pedidoId.isUuidLike() }
+        val dispatchApi = remember { StaffDispatchApi() }
+        var entregando by remember { mutableStateOf(false) }
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
             Row(
                 modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 6.dp, vertical = 8.dp),
@@ -103,7 +116,31 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 FrutButtonOutline(text = "Problema", onClick = { navigator.push(RepartidorIncidenciaScreen(pedidoId)) }, modifier = Modifier.weight(1f))
-                FrutButtonPrimary(text = "Confirmar entrega", onClick = { navigator.popUntilRoot() }, modifier = Modifier.weight(1.4f))
+                FrutButtonPrimary(
+                    text = if (entregando) "Confirmando..." else "Confirmar entrega",
+                    onClick = {
+                        if (entregando) return@FrutButtonPrimary
+                        if (!esBackendReal) {
+                            navigator.popUntilRoot()
+                            return@FrutButtonPrimary
+                        }
+                        entregando = true
+                        scope.launch {
+                            runCatching { dispatchApi.delivered(pedidoId) }
+                                .onSuccess {
+                                    showToast("¡Entrega confirmada! 🌿")
+                                    navigator.popUntilRoot()
+                                }
+                                .onFailure { e ->
+                                    if (e is kotlinx.coroutines.CancellationException) throw e
+                                    ErrorReporter.report(screen = "RepartidorEntrega", action = "delivered", error = e)
+                                    showToast(mensajeAmigable(e, "confirmar la entrega"))
+                                    entregando = false
+                                }
+                        }
+                    },
+                    modifier = Modifier.weight(1.4f)
+                )
             }
         }
     }

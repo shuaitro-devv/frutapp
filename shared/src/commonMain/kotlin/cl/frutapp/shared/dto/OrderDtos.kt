@@ -170,6 +170,43 @@ data class StaffOrderItemDto(
     val emoji: String                // placeholder visual mientras no haya fotos
 )
 
+/** Resumen de despacho que ve el repartidor en su cola. A DIFERENCIA del picker, aca el
+ *  repartidor SI necesita ver la direccion completa y el telefono porque tiene que ir
+ *  fisicamente a entregar. Sigue siendo principio de minimizacion: nombre + datos de
+ *  contacto, NO email ni otra info sensible. */
+@Serializable
+data class StaffDispatchSummaryDto(
+    val id: String,
+    val numero: String,
+    val status: String,
+    val total: Int,
+    val itemsCount: Int,
+    val createdAt: String,
+    val clienteNombre: String,
+    val sector: String,
+    val direccion: String,        // direccion completa (acá si la necesita el repartidor)
+    val telefono: String? = null, // contacto para coordinar entrega
+    val assignedAt: String? = null,
+    val assignedToMe: Boolean = false
+)
+
+/** Detalle de un despacho (cuando el repartidor tap "Ver items" o entra al detalle). */
+@Serializable
+data class StaffDispatchDetailDto(
+    val id: String,
+    val numero: String,
+    val status: String,
+    val total: Int,
+    val createdAt: String,
+    val clienteNombre: String,
+    val sector: String,
+    val direccion: String,
+    val telefono: String? = null,
+    val assignedAt: String? = null,
+    val assignedToMe: Boolean = false,
+    val items: List<StaffOrderItemDto>
+)
+
 /** Respuesta de "tomar pedido": OK o conflicto. */
 @Serializable
 data class StaffTakeResult(

@@ -32,7 +32,13 @@ import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text as M3Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -42,17 +48,46 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.remote.StaffDispatchApi
+import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.theme.FrutAppColors
+import kotlinx.coroutines.delay
 
 /**
- * repartidor-01 — Cola de despachos pendientes. Mismo lenguaje visual que picker-01 (cola
- * de pedidos): header con badge total, banner de alerta si hay urgentes, buscador, chips
- * de filtro y cards tappeables que llevan al detalle del despacho.
+ * repartidor-01 — Cola de despachos pendientes.
+ *
+ * Cableada al backend real (StaffDispatchApi.cola) con polling cada 5s
+ * mientras la pantalla esta activa. Mismo patron que PickerColaContent.
+ * Primer fetch muestra spinner; los siguientes refrescan en silencio.
+ *
+ * El backend filtra por la pickup_location del repartidor (mismo modelo
+ * que el picker), asi cada repartidor ve solo los despachos de su zona.
  */
+private const val DISPATCH_POLLING_MS = 5_000L
+
 @Composable
 fun RepartidorColaContent(modifier: Modifier = Modifier) {
     val navigator = LocalNavigator.currentOrThrow
-    val despachos = remember { despachosMock() }
+    val dispatchApi = remember { StaffDispatchApi() }
+    var despachos by remember { mutableStateOf<List<DespachoItem>>(emptyList()) }
+    var cargandoInicial by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            runCatching { dispatchApi.cola().map { it.toDespachoItem() } }
+                .onSuccess {
+                    despachos = it
+                    cargandoInicial = false
+                }
+                .onFailure { e ->
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    ErrorReporter.report(screen = "RepartidorCola", action = "fetch_cola", error = e)
+                    if (cargandoInicial) cargandoInicial = false
+                }
+            delay(DISPATCH_POLLING_MS)
+        }
+    }
+
     val urgentes = remember(despachos) { despachos.count { it.urgente } }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -69,16 +104,36 @@ fun RepartidorColaContent(modifier: Modifier = Modifier) {
             FiltroChip("Zona", Icons.Filled.LocationOn)
             FiltroChip("Distancia", Icons.Filled.Tune)
         }
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(despachos, key = { it.id }) { d ->
-                DespachoCard(
-                    item = d,
-                    onClick = { navigator.push(RepartidorDetalleScreen(d.id)) }
-                )
+        when {
+            cargandoInicial -> Box(modifier = Modifier.fillMaxSize().padding(top = 40.dp), contentAlignment = Alignment.TopCenter) {
+                CircularProgressIndicator(color = FrutAppColors.Brand400)
+            }
+            despachos.isEmpty() -> Column(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 48.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier.size(64.dp).background(FrutAppColors.Brand50, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.NearMe, contentDescription = null, tint = FrutAppColors.Brand400, modifier = Modifier.size(28.dp))
+                }
+                Spacer(Modifier.height(16.dp))
+                M3Text("No hay despachos por retirar", color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
+                M3Text("Cuando un pedido este listo aparecera aca.", color = FrutAppColors.InkMuted, fontSize = 13.sp)
+            }
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(despachos, key = { it.backendId ?: it.id }) { d ->
+                    DespachoCard(
+                        item = d,
+                        onClick = { navigator.push(RepartidorDetalleScreen(d.backendId ?: d.id)) }
+                    )
+                }
             }
         }
     }

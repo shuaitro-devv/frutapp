@@ -28,7 +28,11 @@ import androidx.compose.material.icons.filled.Traffic
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,31 +41,61 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.remote.StaffDispatchApi
+import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.theme.FrutAppColors
+import kotlinx.coroutines.delay
 
 /**
- * Tab 'En ruta' del repartidor. Despachos ya retirados que el repartidor esta llevando ahora.
- * Tap → vuelve a la pantalla 'en camino' del despacho. Mock con [despachosEnRutaMock].
+ * Tab 'En ruta' del repartidor. Despachos EN_DESPACHO asignados a este repartidor.
+ * Polling cada 5s al backend (StaffDispatchApi.enRuta). Tap → RepartidorEnCaminoScreen.
  */
+private const val EN_RUTA_POLLING_MS = 5_000L
+
 @Composable
 fun RepartidorEnRutaContent(modifier: Modifier = Modifier) {
     val navigator = LocalNavigator.currentOrThrow
-    val despachos = remember { despachosEnRutaMock() }
+    val dispatchApi = remember { StaffDispatchApi() }
+    var despachos by remember { mutableStateOf<List<DespachoEnRuta>>(emptyList()) }
+    var cargandoInicial by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            runCatching { dispatchApi.enRuta().map { it.toDespachoEnRuta() } }
+                .onSuccess {
+                    despachos = it
+                    cargandoInicial = false
+                }
+                .onFailure { e ->
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    ErrorReporter.report(screen = "RepartidorEnRuta", action = "fetch_en_ruta", error = e)
+                    if (cargandoInicial) cargandoInicial = false
+                }
+            delay(EN_RUTA_POLLING_MS)
+        }
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
         Header(total = despachos.size)
-        if (despachos.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No tienes entregas en curso", color = FrutAppColors.InkMuted, fontSize = 14.sp)
+        when {
+            cargandoInicial -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Cargando...", color = FrutAppColors.InkMuted, fontSize = 14.sp)
             }
-            return@Column
-        }
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(despachos, key = { it.id }) { d ->
-                Card(item = d, onClick = { navigator.push(RepartidorEnCaminoScreen(d.id)) })
+            despachos.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("No tienes entregas en curso", color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(4.dp))
+                    Text("Toma uno desde la cola para empezar", color = FrutAppColors.InkMuted, fontSize = 13.sp)
+                }
+            }
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(despachos, key = { it.backendId ?: it.id }) { d ->
+                    Card(item = d, onClick = { navigator.push(RepartidorEnCaminoScreen(d.backendId ?: d.id)) })
+                }
             }
         }
     }

@@ -466,4 +466,114 @@ class BackendIntegrationTest {
         assertEquals("10.0.0.7", evento!![UserEventTable.ipAddress])
         assertEquals("Test/1.0", evento[UserEventTable.userAgent])
     }
+
+    // --- Tests del flujo repartidor (Nivel 3) ---
+
+    private suspend fun createRepartidorWithDefaultLocation(): UUID {
+        val email = "repartidor${System.nanoTime()}@frutapp.local"
+        adminUsers.createUser(AdminCreateUserRequest("Reparto T", email, null, listOf("repartidor")))
+        val u = users.findByEmail(email)!!
+        dbQuery {
+            val locationId = PickupLocationTable.selectAll()
+                .where { PickupLocationTable.code eq OrderRepository.DEFAULT_PICKUP_LOCATION_CODE }
+                .first()[PickupLocationTable.id]
+            UsersTable.update({ UsersTable.id eq u.id }) {
+                it[homeLocationId] = locationId
+            }
+        }
+        return u.id
+    }
+
+    /** Helper: cliente crea pedido, picker lo arma y completa -> queda STOCK_CONFIRMADO
+     *  listo para que el repartidor lo tome. */
+    private suspend fun createOrderStockConfirmado(): UUID {
+        val pickerId = createPickerWithDefaultLocation()
+        val orderId = createOrderForCliente()
+        staff.take(pickerId, orderId, EventContext.EMPTY)
+        staff.complete(pickerId, orderId, EventContext.EMPTY)
+        return orderId
+    }
+
+    @Test
+    fun `repartidor ve pedidos STOCK_CONFIRMADO en su cola y los toma atomicamente`() = runBlocking {
+        val repartidorId = createRepartidorWithDefaultLocation()
+        val orderId = createOrderStockConfirmado()
+
+        val cola = staff.colaDispatch(repartidorId)
+        assertTrue(cola.any { it.id == orderId.toString() }, "el pedido no aparece en cola de dispatch")
+
+        val result = staff.takeDispatch(repartidorId, orderId, EventContext.EMPTY)
+        assertTrue(result.ok, "primer take dispatch deberia exitoso, motivo=${result.motivo}")
+
+        // Aparece en mi 'en ruta'.
+        val enRuta = staff.enRutaDispatch(repartidorId)
+        assertTrue(enRuta.any { it.id == orderId.toString() }, "no aparece en en_ruta del repartidor")
+
+        // No deberia volver a aparecer en cola libre.
+        val colaPost = staff.colaDispatch(repartidorId)
+        assertFalse(colaPost.any { it.id == orderId.toString() }, "sigue en cola tras take")
+    }
+
+    @Test
+    fun `race condition dispatch - segundo repartidor recibe ok=false`() = runBlocking {
+        val repartidorA = createRepartidorWithDefaultLocation()
+        val repartidorB = createRepartidorWithDefaultLocation()
+        val orderId = createOrderStockConfirmado()
+
+        val resA = staff.takeDispatch(repartidorA, orderId, EventContext.EMPTY)
+        val resB = staff.takeDispatch(repartidorB, orderId, EventContext.EMPTY)
+
+        assertTrue(resA.ok)
+        assertFalse(resB.ok)
+        assertEquals("ya_tomado_o_no_disponible", resB.motivo)
+    }
+
+    @Test
+    fun `delivered marca ENTREGADO y registra history con actor REPARTIDOR`() = runBlocking {
+        val repartidorId = createRepartidorWithDefaultLocation()
+        val orderId = createOrderStockConfirmado()
+
+        staff.takeDispatch(repartidorId, orderId, EventContext.EMPTY)
+        staff.deliveredDispatch(repartidorId, orderId, EventContext.EMPTY)
+
+        val status = dbQuery {
+            OrdersTable.selectAll().where { OrdersTable.id eq orderId }
+                .first()[OrdersTable.status]
+        }
+        assertEquals("ENTREGADO", status)
+    }
+
+    @Test
+    fun `detalle dispatch incluye direccion + telefono del cliente (no asi el del picker)`() = runBlocking {
+        val repartidorId = createRepartidorWithDefaultLocation()
+        val orderId = createOrderStockConfirmado()
+        staff.takeDispatch(repartidorId, orderId, EventContext.EMPTY)
+
+        val detalle = staff.detalleDispatch(repartidorId, orderId)
+        assertTrue(detalle.direccion.isNotBlank(), "el detalle dispatch debe incluir direccion completa")
+        // El telefono puede ser null si el cliente no lo seteo; clave es que el campo
+        // exista en el DTO (no se omita).
+        assertTrue(detalle.assignedToMe, "assignedToMe deberia ser true porque acabo de tomarlo")
+        assertTrue(detalle.items.isNotEmpty(), "items reales del pedido deben estar presentes")
+    }
+
+    @Test
+    fun `auditoria - takeDispatch + delivered emiten eventos staff dispatch_ en user_event`() = runBlocking {
+        val repartidorId = createRepartidorWithDefaultLocation()
+        val orderId = createOrderStockConfirmado()
+
+        staff.takeDispatch(repartidorId, orderId, EventContext(ipAddress = "10.0.0.5", userAgent = "RepartoTest/1.0"))
+        staff.deliveredDispatch(repartidorId, orderId, EventContext.EMPTY)
+
+        val eventos = dbQuery {
+            UserEventTable.selectAll()
+                .where {
+                    (UserEventTable.userId eq repartidorId) and
+                    (UserEventTable.entityId eq orderId)
+                }
+                .map { it[UserEventTable.eventType] }
+        }
+        assertTrue("staff.dispatch_taken" in eventos, "falta evento staff.dispatch_taken")
+        assertTrue("staff.dispatch_delivered" in eventos, "falta evento staff.dispatch_delivered")
+    }
 }

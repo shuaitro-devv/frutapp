@@ -22,7 +22,11 @@ data class DespachoItem(
     val minutosEntrega: Int,
     val prioridad: PrioridadDespacho,
     val items: Int,
-    val unidades: Int
+    val unidades: Int,
+    /** UUID del pedido en backend; null cuando viene del fixture mock. */
+    val backendId: String? = null,
+    /** Telefono del cliente; null si no esta cargado o el cliente no lo tiene. */
+    val telefono: String? = null
 ) {
     val urgente: Boolean get() = minutosEntrega < 20
     fun tiempoEntregaHumano(): String {

@@ -13,7 +13,9 @@ data class DespachoEnRuta(
     val sector: String,
     val kmRestantes: Double,
     val etaTexto: String, // ej. "10:25 - 10:40"
-    val transito: String  // ej. "Normal", "Pesado"
+    val transito: String, // ej. "Normal", "Pesado"
+    /** UUID del pedido en backend; null cuando viene del fixture mock. */
+    val backendId: String? = null
 )
 
 /** Item del tab 'Entregados': despacho ya completado, historial del turno. */

@@ -92,6 +92,60 @@ fun Route.staffOrderRoutes(staffOrders: StaffOrderService) {
                 staffOrders.complete(pickerId, orderId, call.eventContext())
                 call.respond(HttpStatusCode.NoContent)
             }
+
+            // ========== Flujo REPARTIDOR (Nivel 3) ==========
+            // GET /v1/staff/orders/dispatch?status=cola      -> pedidos STOCK_CONFIRMADO
+            // GET /v1/staff/orders/dispatch?status=en_ruta   -> mis EN_DESPACHO
+            get("/dispatch") {
+                if (!call.hasPermission("order:dispatch")) {
+                    call.respond(HttpStatusCode.Forbidden)
+                    return@get
+                }
+                val repartidorId = call.userId()
+                val statusFilter = call.request.queryParameters["status"].orEmpty()
+                val result = when (statusFilter) {
+                    "cola" -> staffOrders.colaDispatch(repartidorId)
+                    "en_ruta" -> staffOrders.enRutaDispatch(repartidorId)
+                    else -> staffOrders.colaDispatch(repartidorId)
+                }
+                call.respond(result)
+            }
+
+            // GET /v1/staff/orders/dispatch/{id} -> detalle con direccion + telefono
+            get("/dispatch/{id}") {
+                if (!call.hasPermission("order:dispatch")) {
+                    call.respond(HttpStatusCode.Forbidden)
+                    return@get
+                }
+                val repartidorId = call.userId()
+                val orderId = call.orderIdParam()
+                call.respond(staffOrders.detalleDispatch(repartidorId, orderId))
+            }
+
+            // POST /v1/staff/orders/dispatch/{id}/take     -> tomar despacho (status EN_DESPACHO)
+            post("/dispatch/{id}/take") {
+                if (!call.hasPermission("order:dispatch")) {
+                    call.respond(HttpStatusCode.Forbidden)
+                    return@post
+                }
+                val repartidorId = call.userId()
+                val orderId = call.orderIdParam()
+                val result = staffOrders.takeDispatch(repartidorId, orderId, call.eventContext())
+                if (result.ok) call.respond(HttpStatusCode.OK, result)
+                else call.respond(HttpStatusCode.Conflict, result)
+            }
+
+            // POST /v1/staff/orders/dispatch/{id}/delivered -> ENTREGADO
+            post("/dispatch/{id}/delivered") {
+                if (!call.hasPermission("order:deliver")) {
+                    call.respond(HttpStatusCode.Forbidden)
+                    return@post
+                }
+                val repartidorId = call.userId()
+                val orderId = call.orderIdParam()
+                staffOrders.deliveredDispatch(repartidorId, orderId, call.eventContext())
+                call.respond(HttpStatusCode.NoContent)
+            }
         }
     }
 }

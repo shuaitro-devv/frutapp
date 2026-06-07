@@ -37,10 +37,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,11 +57,16 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import androidx.compose.material.icons.filled.Cancel
+import cl.frutapp.app.data.isUuidLike
+import cl.frutapp.app.data.remote.StaffDispatchApi
+import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.StaffActionsSheet
+import cl.frutapp.app.ui.mensajeAmigable
 import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
+import kotlinx.coroutines.launch
 
 /**
  * repartidor-02 — Detalle del despacho asignado. Mapa placeholder con origen+destino, stats
@@ -69,7 +77,44 @@ class RepartidorDetalleScreen(private val pedidoId: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val despacho = remember(pedidoId) { despachoPorId(pedidoId) }
+        val scope = rememberCoroutineScope()
+        val esBackendReal = remember(pedidoId) { pedidoId.isUuidLike() }
+        val dispatchApi = remember { StaffDispatchApi() }
+        var despachoState by remember(pedidoId) {
+            mutableStateOf(if (esBackendReal) null else despachoPorId(pedidoId))
+        }
+        var tomando by remember(pedidoId) { mutableStateOf(false) }
+        LaunchedEffect(pedidoId) {
+            if (!esBackendReal) return@LaunchedEffect
+            runCatching { dispatchApi.detalle(pedidoId) }
+                .onSuccess { dto ->
+                    despachoState = DespachoItem(
+                        id = dto.numero,
+                        cliente = dto.clienteNombre,
+                        sector = dto.sector,
+                        direccion = dto.direccion,
+                        kmDistancia = 3.0,
+                        minutosEntrega = 30,
+                        prioridad = PrioridadDespacho.MEDIA,
+                        items = dto.items.size,
+                        unidades = dto.items.size,
+                        backendId = dto.id,
+                        telefono = dto.telefono
+                    )
+                }
+                .onFailure { e ->
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    ErrorReporter.report(screen = "RepartidorDetalle", action = "fetch_detalle", error = e)
+                    despachoState = despachoPorId(pedidoId)
+                    showToast("No pudimos cargar el detalle, mostrando vista parcial.")
+                }
+        }
+        val despacho = despachoState ?: run {
+            Box(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = FrutAppColors.Brand400)
+            }
+            return
+        }
         var menuAbierto by remember { mutableStateOf(false) }
         var dialogoCancelar by remember { mutableStateOf(false) }
         var verItemsAbierto by remember { mutableStateOf(false) }
@@ -101,7 +146,36 @@ class RepartidorDetalleScreen(private val pedidoId: String) : Screen {
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 FrutButtonOutline(text = "Ver items", onClick = { verItemsAbierto = true }, modifier = Modifier.weight(1f))
-                FrutButtonPrimary(text = "Iniciar retiro", onClick = { navigator.replace(RepartidorEnCaminoScreen(pedidoId)) }, modifier = Modifier.weight(1.4f))
+                FrutButtonPrimary(
+                    text = if (tomando) "Tomando..." else "Iniciar retiro",
+                    onClick = {
+                        if (tomando) return@FrutButtonPrimary
+                        if (!esBackendReal) {
+                            navigator.replace(RepartidorEnCaminoScreen(pedidoId))
+                            return@FrutButtonPrimary
+                        }
+                        tomando = true
+                        scope.launch {
+                            runCatching { dispatchApi.take(pedidoId) }
+                                .onSuccess { res ->
+                                    if (res.ok) {
+                                        showToast("Retiro iniciado 🚚")
+                                        navigator.replace(RepartidorEnCaminoScreen(pedidoId))
+                                    } else {
+                                        showToast("Otro repartidor ya tomó este pedido.")
+                                        navigator.pop()
+                                    }
+                                }
+                                .onFailure { e ->
+                                    if (e is kotlinx.coroutines.CancellationException) throw e
+                                    ErrorReporter.report(screen = "RepartidorDetalle", action = "take", error = e)
+                                    showToast(mensajeAmigable(e, "tomar el despacho"))
+                                    tomando = false
+                                }
+                        }
+                    },
+                    modifier = Modifier.weight(1.4f)
+                )
             }
         }
         if (menuAbierto) {

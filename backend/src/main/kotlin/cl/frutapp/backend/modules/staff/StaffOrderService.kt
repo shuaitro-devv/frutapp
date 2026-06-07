@@ -9,6 +9,8 @@ import cl.frutapp.backend.modules.auth.UsersTable
 import cl.frutapp.backend.modules.orders.OrderItemsTable
 import cl.frutapp.backend.modules.orders.OrderStatusHistoryTable
 import cl.frutapp.backend.modules.orders.OrdersTable
+import cl.frutapp.shared.dto.StaffDispatchDetailDto
+import cl.frutapp.shared.dto.StaffDispatchSummaryDto
 import cl.frutapp.shared.dto.StaffOrderDetailDto
 import cl.frutapp.shared.dto.StaffOrderItemDto
 import cl.frutapp.shared.dto.StaffOrderSummaryDto
@@ -266,6 +268,207 @@ class StaffOrderService(
         events.logSafely(eventType = "staff.order_completed", userId = pickerId, entityType = "order", entityId = orderId, context = context)
     }
 
+    // ============================================================
+    // FLUJO REPARTIDOR — Nivel 3
+    // ============================================================
+
+    /** Cola de despacho: pedidos STOCK_CONFIRMADO listos para retiro.
+     *  Free-for-all por location: el repartidor ve pedidos de SU home_location
+     *  (mismo modelo que el picker). Auto-rescate de pedidos atascados en
+     *  EN_DESPACHO si el repartidor se desconecto y no completo en 60 min
+     *  (mas tiempo que el picker porque entregar lleva mas). */
+    suspend fun colaDispatch(repartidorId: UUID): List<StaffDispatchSummaryDto> = dbQuery {
+        val location = pickerHomeLocation(repartidorId)
+        val rescateThreshold = Clock.System.now().minus(STUCK_DISPATCH_THRESHOLD)
+        val rows = OrdersTable
+            .selectAll()
+            .where {
+                (OrdersTable.pickupLocationId eq location) and (
+                    (
+                        (OrdersTable.status eq STATUS_STOCK_CONFIRMADO) and
+                        OrdersTable.assignedRepartidorId.isNull()
+                    ) or (
+                        (OrdersTable.status eq STATUS_EN_DESPACHO) and
+                        OrdersTable.assignedAt.less(rescateThreshold)
+                    )
+                )
+            }
+            .orderBy(OrdersTable.createdAt)
+            .limit(50)
+            .toList()
+        materializeDispatchSummaries(rows, repartidorId)
+    }
+
+    /** Mis despachos en ruta (status EN_DESPACHO, asignados a mi). */
+    suspend fun enRutaDispatch(repartidorId: UUID): List<StaffDispatchSummaryDto> = dbQuery {
+        val rows = OrdersTable
+            .selectAll()
+            .where {
+                (OrdersTable.assignedRepartidorId eq repartidorId) and
+                (OrdersTable.status eq STATUS_EN_DESPACHO)
+            }
+            .orderBy(OrdersTable.assignedAt)
+            .toList()
+        materializeDispatchSummaries(rows, repartidorId)
+    }
+
+    /** Detalle del despacho: cabecera + items + datos de contacto del cliente.
+     *  A diferencia del detalle del picker, aqui SI incluimos direccion y
+     *  telefono porque el repartidor los necesita para entregar. */
+    suspend fun detalleDispatch(repartidorId: UUID, orderId: UUID): StaffDispatchDetailDto = dbQuery {
+        val location = pickerHomeLocation(repartidorId)
+        val orderRow = OrdersTable
+            .selectAll()
+            .where { OrdersTable.id eq orderId }
+            .singleOrNull()
+            ?: throw NotFoundException("Pedido no encontrado.")
+        if (orderRow[OrdersTable.pickupLocationId] != location) {
+            throw ValidationException("Este pedido no es de tu location.")
+        }
+        val clienteRow = UsersTable
+            .selectAll()
+            .where { UsersTable.id eq orderRow[OrdersTable.userId] }
+            .singleOrNull()
+        val clienteNombre = (clienteRow?.get(UsersTable.name) ?: "Cliente").substringBefore(' ')
+        val telefono = clienteRow?.get(UsersTable.phone)
+
+        val itemsRows = OrderItemsTable
+            .selectAll()
+            .where { OrderItemsTable.orderId eq orderId }
+            .toList()
+
+        val items = itemsRows.mapIndexed { index, row ->
+            val unidad = row[OrderItemsTable.unidad]
+            val gramos = row[OrderItemsTable.gramos]
+            val esKg = unidad == "kg"
+            val cantidadDouble = if (esKg && gramos != null) row[OrderItemsTable.cantidad] * gramos / 1000.0
+                else row[OrderItemsTable.cantidad].toDouble()
+            StaffOrderItemDto(
+                numero = index + 1,
+                productId = row[OrderItemsTable.productId].toString(),
+                nombre = row[OrderItemsTable.nombre],
+                unidad = unidad,
+                cantidad = cantidadDouble,
+                gramos = gramos,
+                precioUnitario = row[OrderItemsTable.precioUnitario],
+                montoEstimado = row[OrderItemsTable.montoEstimado],
+                pesoVariable = esKg && gramos != null,
+                emoji = emojiForProduct(row[OrderItemsTable.nombre])
+            )
+        }
+
+        StaffDispatchDetailDto(
+            id = orderId.toString(),
+            numero = orderRow[OrdersTable.numero],
+            status = orderRow[OrdersTable.status],
+            total = orderRow[OrdersTable.totalFinal] ?: orderRow[OrdersTable.totalEstimado],
+            createdAt = orderRow[OrdersTable.createdAt].toString(),
+            clienteNombre = clienteNombre,
+            sector = sectorFromAddress(orderRow[OrdersTable.direccion]),
+            direccion = orderRow[OrdersTable.direccion],
+            telefono = telefono,
+            assignedAt = orderRow[OrdersTable.assignedAt]?.toString(),
+            assignedToMe = orderRow[OrdersTable.assignedRepartidorId] == repartidorId,
+            items = items
+        )
+    }
+
+    /** Tomar despacho atomicamente. Status pasa de STOCK_CONFIRMADO a EN_DESPACHO. */
+    suspend fun takeDispatch(repartidorId: UUID, orderId: UUID, context: EventContext): StaffTakeResult {
+        val now = Clock.System.now()
+        val rescateThreshold = now.minus(STUCK_DISPATCH_THRESHOLD)
+        val ok = dbQuery {
+            val location = pickerHomeLocation(repartidorId)
+            val updated = OrdersTable.update({
+                (OrdersTable.id eq orderId) and
+                (OrdersTable.pickupLocationId eq location) and (
+                    (
+                        (OrdersTable.status eq STATUS_STOCK_CONFIRMADO) and
+                        OrdersTable.assignedRepartidorId.isNull()
+                    ) or (
+                        (OrdersTable.status eq STATUS_EN_DESPACHO) and
+                        OrdersTable.assignedAt.less(rescateThreshold)
+                    )
+                )
+            }) {
+                it[assignedRepartidorId] = repartidorId
+                it[status] = STATUS_EN_DESPACHO
+                it[assignedAt] = now
+                it[updatedAt] = now
+            }
+            if (updated > 0) {
+                recordHistory(orderId, fromStatus = STATUS_STOCK_CONFIRMADO, toStatus = STATUS_EN_DESPACHO,
+                    actorUserId = repartidorId, nota = "dispatch_take", actorRole = "REPARTIDOR")
+                true
+            } else false
+        }
+        if (!ok) return StaffTakeResult(ok = false, motivo = "ya_tomado_o_no_disponible")
+
+        events.logSafely(eventType = "staff.dispatch_taken", userId = repartidorId,
+            entityType = "order", entityId = orderId, context = context)
+        return StaffTakeResult(ok = true, orderId = orderId.toString())
+    }
+
+    /** Marcar despacho como ENTREGADO. Status pasa de EN_DESPACHO a ENTREGADO. */
+    suspend fun deliveredDispatch(repartidorId: UUID, orderId: UUID, context: EventContext) {
+        val now = Clock.System.now()
+        val ok = dbQuery {
+            val updated = OrdersTable.update({
+                (OrdersTable.id eq orderId) and
+                (OrdersTable.assignedRepartidorId eq repartidorId) and
+                (OrdersTable.status eq STATUS_EN_DESPACHO)
+            }) {
+                it[status] = STATUS_ENTREGADO
+                it[updatedAt] = now
+            }
+            if (updated > 0) {
+                recordHistory(orderId, fromStatus = STATUS_EN_DESPACHO, toStatus = STATUS_ENTREGADO,
+                    actorUserId = repartidorId, nota = "dispatch_delivered", actorRole = "REPARTIDOR")
+                true
+            } else false
+        }
+        if (!ok) throw ValidationException("Este despacho no está en ruta o no es tuyo.")
+
+        events.logSafely(eventType = "staff.dispatch_delivered", userId = repartidorId,
+            entityType = "order", entityId = orderId, context = context)
+    }
+
+    private fun materializeDispatchSummaries(rows: List<ResultRow>, currentRepartidorId: UUID): List<StaffDispatchSummaryDto> {
+        if (rows.isEmpty()) return emptyList()
+        val userIds = rows.map { it[OrdersTable.userId] }.toSet()
+        val userInfo: Map<UUID, Pair<String, String?>> = UsersTable
+            .selectAll()
+            .where { UsersTable.id inList userIds }
+            .associate { it[UsersTable.id] to (it[UsersTable.name] to it[UsersTable.phone]) }
+
+        val orderIds = rows.map { it[OrdersTable.id] }
+        val itemsCountPorOrder: Map<UUID, Int> = OrderItemsTable
+            .selectAll()
+            .where { OrderItemsTable.orderId inList orderIds }
+            .groupBy { it[OrderItemsTable.orderId] }
+            .mapValues { it.value.size }
+
+        return rows.map { row ->
+            val orderId = row[OrdersTable.id]
+            val (nombreFull, telefono) = userInfo[row[OrdersTable.userId]] ?: ("Cliente" to null)
+            val nombreCorto = nombreFull.substringBefore(' ')
+            StaffDispatchSummaryDto(
+                id = orderId.toString(),
+                numero = row[OrdersTable.numero],
+                status = row[OrdersTable.status],
+                total = row[OrdersTable.totalFinal] ?: row[OrdersTable.totalEstimado],
+                itemsCount = itemsCountPorOrder[orderId] ?: 0,
+                createdAt = row[OrdersTable.createdAt].toString(),
+                clienteNombre = nombreCorto,
+                sector = sectorFromAddress(row[OrdersTable.direccion]),
+                direccion = row[OrdersTable.direccion],
+                telefono = telefono,
+                assignedAt = row[OrdersTable.assignedAt]?.toString(),
+                assignedToMe = row[OrdersTable.assignedRepartidorId] == currentRepartidorId
+            )
+        }
+    }
+
     // ---- helpers internos (corren dentro de dbQuery) ----
 
     private fun pickerHomeLocation(pickerId: UUID): UUID {
@@ -283,14 +486,15 @@ class StaffOrderService(
         fromStatus: String?,
         toStatus: String,
         actorUserId: UUID?,
-        nota: String?
+        nota: String?,
+        actorRole: String = "PICKER"
     ) {
         OrderStatusHistoryTable.insert {
             it[id] = UUID.randomUUID()
             it[OrderStatusHistoryTable.orderId] = orderId
             it[OrderStatusHistoryTable.fromStatus] = fromStatus
             it[OrderStatusHistoryTable.toStatus] = toStatus
-            it[actor] = "PICKER"
+            it[actor] = actorRole
             it[OrderStatusHistoryTable.actorUserId] = actorUserId
             it[OrderStatusHistoryTable.nota] = nota
             it[createdAt] = Clock.System.now()
@@ -332,7 +536,12 @@ class StaffOrderService(
         const val STATUS_PAGADO = "PAGADO"
         const val STATUS_EN_PICKING = "EN_PICKING"
         const val STATUS_STOCK_CONFIRMADO = "STOCK_CONFIRMADO"
+        const val STATUS_EN_DESPACHO = "EN_DESPACHO"
+        const val STATUS_ENTREGADO = "ENTREGADO"
         val COLA_LIBRE_STATUSES = listOf(STATUS_CREADO, STATUS_PAGADO)
         val STUCK_THRESHOLD = 30.minutes
+        // Mas tiempo que el picker porque una entrega lleva mas (calle, trafico, esperar
+        // que el cliente baje). Si el repartidor se desconecta, otro puede tomar despues de 60min.
+        val STUCK_DISPATCH_THRESHOLD = 60.minutes
     }
 }
