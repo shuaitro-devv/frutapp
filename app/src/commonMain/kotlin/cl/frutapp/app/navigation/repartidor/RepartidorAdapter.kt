@@ -1,5 +1,6 @@
 package cl.frutapp.app.navigation.repartidor
 
+import cl.frutapp.shared.dto.StaffDispatchDetailDto
 import cl.frutapp.shared.dto.StaffDispatchSummaryDto
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -28,11 +29,38 @@ internal fun StaffDispatchSummaryDto.toDespachoItem(): DespachoItem {
         cliente = clienteNombre,
         sector = sector,
         direccion = direccion,
-        kmDistancia = 3.0,            // placeholder hasta integrar Maps
-        minutosEntrega = 30,           // placeholder hasta integrar ruteo
+        kmDistancia = 0.0,             // sin Maps integrado, lo ocultamos en la UI (no inventar 3.0 uniforme)
+        minutosEntrega = minutosDesdeCreado, // semantica: minutos transcurridos desde creado (mostrado como "Hace X min")
         prioridad = prio,
         items = itemsCount,
         unidades = itemsCount,         // approx — el detalle real lo vemos al tap
+        backendId = id,
+        telefono = telefono
+    )
+}
+
+/** Adapter del detalle completo (cabecera + items reales) al modelo UI.
+ *  Misma semantica que el summary pero con items reales para que las pantallas
+ *  hijas (EnCamino, Entrega, ItemsSheet, Incidencia) no caigan al despachoPorId
+ *  fixture mock. */
+internal fun StaffDispatchDetailDto.toDespachoItem(): DespachoItem {
+    val creado = runCatching { Instant.parse(createdAt) }.getOrNull() ?: Clock.System.now()
+    val minutosDesdeCreado = ((Clock.System.now() - creado).inWholeMinutes).toInt().coerceAtLeast(0)
+    val prio = when {
+        minutosDesdeCreado > 60 -> PrioridadDespacho.ALTA
+        minutosDesdeCreado > 20 -> PrioridadDespacho.MEDIA
+        else -> PrioridadDespacho.BAJA
+    }
+    return DespachoItem(
+        id = numero,
+        cliente = clienteNombre,
+        sector = sector,
+        direccion = direccion,
+        kmDistancia = 0.0,
+        minutosEntrega = minutosDesdeCreado,
+        prioridad = prio,
+        items = items.size,
+        unidades = items.size,
         backendId = id,
         telefono = telefono
     )

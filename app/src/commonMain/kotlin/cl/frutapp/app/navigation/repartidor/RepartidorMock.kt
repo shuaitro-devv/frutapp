@@ -28,14 +28,31 @@ data class DespachoItem(
     /** Telefono del cliente; null si no esta cargado o el cliente no lo tiene. */
     val telefono: String? = null
 ) {
-    val urgente: Boolean get() = minutosEntrega < 20
+    /** Urgente cuando lleva > 30 min en cola sin tomarse (semantica nueva: minutosEntrega
+     *  ahora representa "minutos desde creado"). Para fixture mock con valores tipo 18,
+     *  sigue siendo "menor que 20" = urgente. Si backend, > 30 min sin tomarse = urgente. */
+    val urgente: Boolean get() = minutosEntrega < 20 || minutosEntrega > 30
+    /** Texto humano del campo minutosEntrega. Para datos del backend representa
+     *  antiguedad ("Hace X min"); para fixture mock con SLA inventado representa
+     *  "Entrega en X" (legacy). Cuando NO hay backendId asumimos legacy. */
     fun tiempoEntregaHumano(): String {
         val h = minutosEntrega / 60
         val m = minutosEntrega % 60
-        return when {
-            h > 0 && m > 0 -> "Entrega en ${h} h ${m} min"
-            h > 0 -> "Entrega en ${h} h"
-            else -> "Entrega en ${m} min"
+        return if (backendId != null) {
+            // Antiguedad real
+            when {
+                h > 0 && m > 0 -> "Hace ${h} h ${m} min"
+                h > 0 -> "Hace ${h} h"
+                m == 0 -> "Recien creado"
+                else -> "Hace ${m} min"
+            }
+        } else {
+            // Legacy fixture
+            when {
+                h > 0 && m > 0 -> "Entrega en ${h} h ${m} min"
+                h > 0 -> "Entrega en ${h} h"
+                else -> "Entrega en ${m} min"
+            }
         }
     }
 }

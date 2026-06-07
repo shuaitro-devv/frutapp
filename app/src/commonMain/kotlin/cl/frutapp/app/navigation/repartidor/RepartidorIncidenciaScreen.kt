@@ -2,9 +2,11 @@ package cl.frutapp.app.navigation.repartidor
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -16,9 +18,14 @@ import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PersonOff
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -28,6 +35,9 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.isUuidLike
+import cl.frutapp.app.data.remote.StaffDispatchApi
+import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.components.IconBubble
 import cl.frutapp.app.ui.components.IncidenciaScaffold
 import cl.frutapp.app.ui.components.MotivoSpec
@@ -46,7 +56,28 @@ class RepartidorIncidenciaScreen(private val pedidoId: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val despacho = remember(pedidoId) { despachoPorId(pedidoId) }
+        val esBackendReal = remember(pedidoId) { pedidoId.isUuidLike() }
+        val dispatchApi = remember { StaffDispatchApi() }
+        var despachoState by remember(pedidoId) {
+            mutableStateOf(if (esBackendReal) null else despachoPorId(pedidoId))
+        }
+        LaunchedEffect(pedidoId) {
+            if (!esBackendReal) return@LaunchedEffect
+            runCatching { dispatchApi.detalle(pedidoId) }
+                .onSuccess { despachoState = it.toDespachoItem() }
+                .onFailure { e ->
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    ErrorReporter.report(screen = "RepartidorIncidencia", action = "fetch_detalle", error = e)
+                    showToast("No pudimos cargar el pedido. Volvé a intentarlo.")
+                    navigator.pop()
+                }
+        }
+        val despacho = despachoState ?: run {
+            Box(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = FrutAppColors.Brand400)
+            }
+            return
+        }
 
         IncidenciaScaffold(
             subtitulo = pedidoId,

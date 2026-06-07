@@ -34,11 +34,13 @@ import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Traffic
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +56,9 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.isUuidLike
+import cl.frutapp.app.data.remote.StaffDispatchApi
+import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.StaffActionsSheet
@@ -69,7 +74,30 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val despacho = remember(pedidoId) { despachoPorId(pedidoId) }
+        val esBackendReal = remember(pedidoId) { pedidoId.isUuidLike() }
+        val dispatchApi = remember { StaffDispatchApi() }
+        var despachoState by remember(pedidoId) {
+            mutableStateOf(if (esBackendReal) null else despachoPorId(pedidoId))
+        }
+        LaunchedEffect(pedidoId) {
+            if (!esBackendReal) return@LaunchedEffect
+            runCatching { dispatchApi.detalle(pedidoId) }
+                .onSuccess { despachoState = it.toDespachoItem() }
+                .onFailure { e ->
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    ErrorReporter.report(screen = "RepartidorEnCamino", action = "fetch_detalle", error = e)
+                    // No caer al mock: el detalle es crítico (cliente, dirección).
+                    // Mejor avisar y pop a En ruta para reintentar.
+                    showToast("No pudimos cargar el despacho. Volvé a intentarlo.")
+                    navigator.pop()
+                }
+        }
+        val despacho = despachoState ?: run {
+            Box(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = FrutAppColors.Brand400)
+            }
+            return
+        }
         var menuAbierto by remember { mutableStateOf(false) }
         var dialogoCancelar by remember { mutableStateOf(false) }
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {

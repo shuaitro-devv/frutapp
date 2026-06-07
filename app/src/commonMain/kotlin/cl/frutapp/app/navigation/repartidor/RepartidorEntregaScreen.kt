@@ -27,10 +27,12 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,10 +68,29 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val scope = rememberCoroutineScope()
-        val despacho = remember(pedidoId) { despachoPorId(pedidoId) }
-        val codigoDemo = "4821" // En real, el cliente lo dice y el repartidor lo tipea.
         val esBackendReal = remember(pedidoId) { pedidoId.isUuidLike() }
         val dispatchApi = remember { StaffDispatchApi() }
+        var despachoState by remember(pedidoId) {
+            mutableStateOf(if (esBackendReal) null else despachoPorId(pedidoId))
+        }
+        LaunchedEffect(pedidoId) {
+            if (!esBackendReal) return@LaunchedEffect
+            runCatching { dispatchApi.detalle(pedidoId) }
+                .onSuccess { despachoState = it.toDespachoItem() }
+                .onFailure { e ->
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    ErrorReporter.report(screen = "RepartidorEntrega", action = "fetch_detalle", error = e)
+                    showToast("No pudimos cargar los datos de entrega. Volvé a intentarlo.")
+                    navigator.pop()
+                }
+        }
+        val despacho = despachoState ?: run {
+            Box(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = FrutAppColors.Brand400)
+            }
+            return
+        }
+        val codigoDemo = "4821" // En real, el cliente lo dice y el repartidor lo tipea.
         var entregando by remember { mutableStateOf(false) }
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
             Row(

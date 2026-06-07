@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,18 +27,28 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cl.frutapp.app.data.isUuidLike
+import cl.frutapp.app.data.remote.StaffDispatchApi
+import cl.frutapp.app.navigation.picker.EstadoItem
 import cl.frutapp.app.navigation.picker.ItemPicklist
 import cl.frutapp.app.navigation.picker.picklistMock
+import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.components.IconBubble
 import cl.frutapp.app.ui.components.StatusChip
+import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
+import cl.frutapp.shared.dto.StaffOrderItemDto
 
 /**
  * Modal bottom sheet con la lista detallada de items del despacho. Lo abre el botón
@@ -55,8 +66,26 @@ fun RepartidorItemsSheet(
     onCerrar: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val items = remember(pedidoId) { picklistMock(pedidoId).items }
-    val totalUnidades = remember(items) { items.sumOf { it.cantidad }.toInt() }
+    val esBackendReal = remember(pedidoId) { pedidoId.isUuidLike() }
+    val dispatchApi = remember { StaffDispatchApi() }
+    var items by remember(pedidoId) {
+        mutableStateOf(if (esBackendReal) null else picklistMock(pedidoId).items)
+    }
+    LaunchedEffect(pedidoId) {
+        if (!esBackendReal) return@LaunchedEffect
+        runCatching { dispatchApi.detalle(pedidoId) }
+            .onSuccess { detalle ->
+                items = detalle.items.map { it.toItemPicklist() }
+            }
+            .onFailure { e ->
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                ErrorReporter.report(screen = "RepartidorItemsSheet", action = "fetch_detalle", error = e)
+                showToast("No pudimos cargar los items. Volvé a intentarlo.")
+                onCerrar()
+            }
+    }
+    val itemsFinal = items
+    val totalUnidades = remember(itemsFinal) { itemsFinal?.sumOf { it.cantidad }?.toInt() ?: 0 }
 
     ModalBottomSheet(
         onDismissRequest = onCerrar,
@@ -80,7 +109,8 @@ fun RepartidorItemsSheet(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Items del pedido", color = FrutAppColors.Brand800, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                     Text(
-                        text = "${items.size} productos · $totalUnidades unidades aprox.",
+                        text = if (itemsFinal == null) "Cargando..."
+                               else "${itemsFinal.size} productos · $totalUnidades unidades aprox.",
                         color = FrutAppColors.InkMuted,
                         fontSize = 12.sp
                     )
@@ -90,18 +120,40 @@ fun RepartidorItemsSheet(
                 }
             }
             Spacer(Modifier.height(12.dp))
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth().height(420.dp),
-                contentPadding = PaddingValues(bottom = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(items, key = { it.numero }) { item ->
-                    ItemRow(item = item)
+            if (itemsFinal == null) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(420.dp),
+                    contentAlignment = Alignment.Center
+                ) { CircularProgressIndicator(color = FrutAppColors.Brand400) }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().height(420.dp),
+                    contentPadding = PaddingValues(bottom = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(itemsFinal, key = { it.numero }) { item ->
+                        ItemRow(item = item)
+                    }
                 }
             }
         }
     }
 }
+
+/** El DTO del backend trae numero/nombre/cantidad/unidad/pesoVariable/emoji.
+ *  Para el sheet del repartidor pasillo/estante no aplican (los usa el picker), por
+ *  eso van como "-" y el ItemRow oculta la linea cuando ve "-". */
+private fun StaffOrderItemDto.toItemPicklist(): ItemPicklist = ItemPicklist(
+    numero = numero,
+    nombre = nombre,
+    cantidad = cantidad,
+    unidad = unidad,
+    pasillo = "-",
+    estante = "-",
+    pesoVariable = pesoVariable,
+    emoji = emoji,
+    estado = EstadoItem.PENDIENTE
+)
 
 @Composable
 private fun ItemRow(item: ItemPicklist) {
@@ -120,7 +172,9 @@ private fun ItemRow(item: ItemPicklist) {
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text("${item.numero}. ${item.nombre}", color = FrutAppColors.Brand800, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            Text("Pasillo ${item.pasillo} · Estante ${item.estante}", color = FrutAppColors.InkMuted, fontSize = 11.sp)
+            if (item.pasillo != "-" && item.estante != "-") {
+                Text("Pasillo ${item.pasillo} · Estante ${item.estante}", color = FrutAppColors.InkMuted, fontSize = 11.sp)
+            }
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(
