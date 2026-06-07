@@ -13,16 +13,20 @@ import androidx.compose.ui.graphics.Color
 val LocalBrand = staticCompositionLocalOf<Brand> { FrutAppBrand }
 
 /**
- * Tema raiz de la app. Acepta el Brand activo (default [ActiveBrand.current]) y
- * construye el `lightColorScheme` desde su paleta. Asi cambiar de FrutApp a Sofruco
- * solo requiere setear [ActiveBrand.current] antes de setContent.
+ * Tema raiz de la app. Lee el Brand activo desde [ActiveBrand] (que es un
+ * mutableStateOf) y construye el `lightColorScheme` desde su paleta. Cuando el
+ * usuario cambia el Brand desde el toggle de Perfil, esta lectura se invalida
+ * y toda la app se recompone con la paleta nueva.
+ *
+ * Para overrides puntuales (preview/tests) usar
+ * `CompositionLocalProvider(LocalBrand provides X) { FrutAppTheme(brand = X) { ... } }`.
  */
 @Composable
 fun FrutAppTheme(
     brand: Brand = ActiveBrand.current,
     content: @Composable () -> Unit
 ) {
-    val scheme = remember(brand) {
+    val scheme = remember(brand.id) {
         val p = brand.palette
         lightColorScheme(
             primary = p.brand400,

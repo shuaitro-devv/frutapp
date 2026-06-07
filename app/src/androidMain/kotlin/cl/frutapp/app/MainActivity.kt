@@ -12,12 +12,13 @@ import cl.frutapp.app.ui.theme.ActiveBrand
 
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        // White-label: el flavor inyecta BRAND_ID en BuildConfig. Setear ActiveBrand
-        // ANTES de setContent para que el color scheme construido en FrutAppTheme
-        // tome la paleta correcta desde la primera composicion.
-        ActiveBrand.set(BuildConfig.BRAND_ID)
         // Sesión persistida: inicializar storage y restaurar antes de pintar la UI.
         SessionStorage.init(applicationContext)
+        // White-label: si el usuario eligio un brand desde Perfil, respetar ese
+        // override; sino usar el BRAND_ID que el flavor dejo en BuildConfig.
+        // Setear ANTES de setContent para que la primera composicion ya use la
+        // paleta correcta y no haya flash de colores.
+        ActiveBrand.set(ActiveBrand.persistedOverride() ?: BuildConfig.BRAND_ID)
         TokenStore.restore()
         initToast(applicationContext)
         BiometricAuth.bind(this)

@@ -1,6 +1,10 @@
 package cl.frutapp.app.ui.theme
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import cl.frutapp.app.data.SessionStorage
 
 /**
  * Brand white-label: paleta, nombre, slogan, copy de los coins y catalogo demo.
@@ -107,16 +111,52 @@ object SofrucoBrand : Brand {
     )
 }
 
-/** Brand activo en runtime. Se setea una unica vez en el arranque (MainActivity)
- *  leyendo BuildConfig.BRAND_ID. Default FrutApp para JVM/iOS donde no hay flavor. */
+/** Brand activo en runtime. Es un [mutableStateOf] para que cualquier Composable
+ *  que lo lea (FrutAppTheme, LocalBrand, etc.) se recomponga automaticamente cuando
+ *  se cambia con [setAndPersist].
+ *
+ *  Estrategia de carga al arranque (MainActivity):
+ *  1. Si el usuario eligio un brand desde la app (override persistido), se usa ese.
+ *  2. Si no, se usa el BRAND_ID que el flavor dejo en BuildConfig.
+ *  3. Si nada de eso aplica (JVM/iOS sin flavor), queda FrutApp por default.
+ *
+ *  El override persistido es lo que permite el toggle "Modo FrutApp / Modo Sofruco"
+ *  desde Perfil sin reinstalar el APK — util para demos al sponsor.
+ */
 object ActiveBrand {
-    var current: Brand = FrutAppBrand
-        internal set
+    private const val KEY_OVERRIDE = "active_brand_override"
 
+    private var _current by mutableStateOf<Brand>(FrutAppBrand)
+    val current: Brand get() = _current
+
+    /** Setea el brand SIN persistir. Usado por MainActivity al arrancar para
+     *  reflejar el BRAND_ID del flavor cuando no hay override del usuario. */
     fun set(id: String) {
-        current = when (id.lowercase()) {
-            SofrucoBrand.id -> SofrucoBrand
-            else -> FrutAppBrand
-        }
+        _current = byId(id)
+    }
+
+    /** Setea el brand Y lo persiste como override del usuario. El proximo arranque
+     *  va a respetar esta eleccion por sobre el flavor. Disparado desde el
+     *  selector de la pantalla de Perfil. */
+    fun setAndPersist(id: String) {
+        _current = byId(id)
+        SessionStorage.putString(KEY_OVERRIDE, id)
+    }
+
+    /** Devuelve el override persistido si existe, o null. MainActivity lo consulta
+     *  para decidir si respeta el flavor o la eleccion previa del usuario. */
+    fun persistedOverride(): String? = SessionStorage.getString(KEY_OVERRIDE)
+
+    /** Limpia el override (vuelve a respetar el flavor en el proximo arranque). */
+    fun clearOverride() {
+        SessionStorage.remove(KEY_OVERRIDE)
+    }
+
+    /** Catalogo de brands conocidos. Para agregar uno nuevo, sumalo aca y a [byId]. */
+    val all: List<Brand> = listOf(FrutAppBrand, SofrucoBrand)
+
+    private fun byId(id: String): Brand = when (id.lowercase()) {
+        SofrucoBrand.id -> SofrucoBrand
+        else -> FrutAppBrand
     }
 }

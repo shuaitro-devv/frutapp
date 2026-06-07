@@ -31,11 +31,20 @@ import androidx.compose.material.icons.filled.ShoppingBasket
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Slideshow
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.SupportAgent
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -66,7 +75,10 @@ import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.FrutTab
+import cl.frutapp.app.ui.theme.ActiveBrand
+import cl.frutapp.app.ui.theme.Brand
 import cl.frutapp.app.ui.theme.FrutAppColors
+import cl.frutapp.app.ui.theme.LocalBrand
 
 private data class MenuItem(val icon: ImageVector, val label: String, val proximamente: Boolean = false, val onClick: () -> Unit = {})
 
@@ -79,6 +91,11 @@ class ProfileScreen : Screen {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val user = TokenStore.user
+        // Toggle "Modo de tienda" (Brand activo) — abre dialogo desde el menu de
+        // Preferencias. Solo afecta la edicion visual (paleta + coinsName + catalogo
+        // demo); el motor de pedidos sigue igual entre brands.
+        var modoTiendaAbierto by remember { mutableStateOf(false) }
+        val brandActual = LocalBrand.current
         LaunchedEffect(Unit) {
             runCatching { OrderApi().frutCoins() }
                 .onSuccess { RewardsStore.set(it.balance) }
@@ -121,6 +138,7 @@ class ProfileScreen : Screen {
                         "Preferencias",
                         listOf(
                             MenuItem(Icons.Filled.Notifications, "Notificaciones", onClick = { navigator.push(NotificacionesPrefsScreen()) }),
+                            MenuItem(Icons.Filled.Storefront, "Modo de tienda · ${brandActual.displayName}", onClick = { modoTiendaAbierto = true }),
                             MenuItem(Icons.Filled.Language, "Idioma", proximamente = true, onClick = { showToast("Por ahora la app está disponible en español") })
                         )
                     )
@@ -175,8 +193,69 @@ class ProfileScreen : Screen {
                     onSelect = { tab -> if (tab != FrutTab.PERFIL) navigator.popUntilRoot() }
                 )
             }
+
+            if (modoTiendaAbierto) {
+                ModoTiendaDialog(
+                    actual = brandActual,
+                    onElegir = { nuevo ->
+                        ActiveBrand.setAndPersist(nuevo.id)
+                        modoTiendaAbierto = false
+                        showToast("Modo ${nuevo.displayName} activado")
+                    },
+                    onDismiss = { modoTiendaAbierto = false }
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun ModoTiendaDialog(
+    actual: Brand,
+    onElegir: (Brand) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var seleccion by remember { mutableStateOf(actual) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Modo de tienda", fontWeight = FontWeight.Bold, color = FrutAppColors.Brand800) },
+        text = {
+            Column {
+                Text(
+                    "Cambia la identidad visual y el catalogo demo. El motor de pedidos no cambia.",
+                    fontSize = 12.sp,
+                    color = FrutAppColors.InkMuted
+                )
+                Spacer(Modifier.height(12.dp))
+                ActiveBrand.all.forEach { brand ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { seleccion = brand }.padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = seleccion.id == brand.id,
+                            onClick = { seleccion = brand },
+                            colors = RadioButtonDefaults.colors(selectedColor = FrutAppColors.Brand400)
+                        )
+                        Column(modifier = Modifier.padding(start = 8.dp)) {
+                            Text(brand.displayName, fontWeight = FontWeight.SemiBold, color = FrutAppColors.Brand800, fontSize = 14.sp)
+                            Text(brand.slogan, fontSize = 11.sp, color = FrutAppColors.InkSoft)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onElegir(seleccion) }) {
+                Text("Aplicar", color = FrutAppColors.Brand600, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar", color = FrutAppColors.InkSoft)
+            }
+        }
+    )
 }
 
 @Composable
