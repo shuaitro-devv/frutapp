@@ -139,6 +139,37 @@ data class StaffOrderSummaryDto(
     val assignedToMe: Boolean = false // true si soy yo quien lo tomo
 )
 
+/** Detalle de un pedido cuando el picker entra al picklist: cabecera + items reales.
+ *  Privacidad: solo nombre+sector del cliente, NO direccion ni telefono. */
+@Serializable
+data class StaffOrderDetailDto(
+    val id: String,
+    val numero: String,
+    val status: String,
+    val total: Int,
+    val createdAt: String,
+    val clienteNombre: String,
+    val sector: String,
+    val assignedAt: String? = null,
+    val assignedToMe: Boolean = false,
+    val items: List<StaffOrderItemDto>
+)
+
+/** Item individual del pedido en la vista del picker. */
+@Serializable
+data class StaffOrderItemDto(
+    val numero: Int,                 // orden de aparicion en el picklist (1, 2, 3...)
+    val productId: String,
+    val nombre: String,              // "Palta Hass"
+    val unidad: String,              // "kg" / "unidades"
+    val cantidad: Double,            // cuanto pidio el cliente (kg o unidades)
+    val gramos: Int? = null,         // peso requerido si es kg (para variables)
+    val precioUnitario: Int,
+    val montoEstimado: Int,
+    val pesoVariable: Boolean,       // true si requiere balanza al armar
+    val emoji: String                // placeholder visual mientras no haya fotos
+)
+
 /** Respuesta de "tomar pedido": OK o conflicto. */
 @Serializable
 data class StaffTakeResult(

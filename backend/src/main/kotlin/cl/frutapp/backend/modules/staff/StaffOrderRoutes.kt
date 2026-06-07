@@ -42,6 +42,17 @@ fun Route.staffOrderRoutes(staffOrders: StaffOrderService) {
                 call.respond(result)
             }
 
+            // GET /v1/staff/orders/{id} -> detalle completo (cabecera + items)
+            get("/{id}") {
+                if (!call.hasPermission("order:pick")) {
+                    call.respond(HttpStatusCode.Forbidden)
+                    return@get
+                }
+                val pickerId = call.userId()
+                val orderId = call.orderIdParam()
+                call.respond(staffOrders.detalle(pickerId, orderId))
+            }
+
             // POST /v1/staff/orders/{id}/take
             post("/{id}/take") {
                 if (!call.hasPermission("order:pick")) {

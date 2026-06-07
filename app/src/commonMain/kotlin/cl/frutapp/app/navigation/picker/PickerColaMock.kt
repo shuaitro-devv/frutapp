@@ -24,7 +24,9 @@ data class PedidoColaItem(
     val minutosEspera: Int,
     val sector: String,
     val destino: String,
-    val prioridad: PrioridadCola
+    val prioridad: PrioridadCola,
+    /** UUID del pedido en backend; null cuando viene del fixture mock. */
+    val backendId: String? = null
 ) {
     val urgente: Boolean get() = minutosEspera > 15
 

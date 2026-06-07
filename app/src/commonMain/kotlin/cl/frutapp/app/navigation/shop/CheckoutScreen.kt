@@ -54,6 +54,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.CartStore
 import cl.frutapp.app.data.ClientInfo
 import cl.frutapp.app.data.RewardsStore
+import cl.frutapp.app.data.isUuidLike
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.data.remote.CatalogApi
 import cl.frutapp.app.data.remote.OrderApi
@@ -513,8 +514,4 @@ private fun PayOption(method: PayMethod, selected: Boolean, onClick: () -> Unit)
     }
 }
 
-/** UUID v4 tiene 36 chars con guiones en posiciones 8,13,18,23. Permite distinguir un
- *  uuid del backend de un slug del [DemoCatalog] (ej. "tomate", "palta-hass") sin
- *  depender de java.util.UUID (que no está en commonMain). */
-private fun String.isUuidLike(): Boolean =
-    length == 36 && this[8] == '-' && this[13] == '-' && this[18] == '-' && this[23] == '-'
+// isUuidLike() vive en cl.frutapp.app.data.UuidExt (extension compartida).

@@ -122,22 +122,34 @@ object ApiClient {
         // Auto-refresh: si un endpoint protegido responde 401, refresca el token y reintenta una vez.
         // Con expectSuccess=true, el 401 llega como ClientRequestException (no como response):
         // catcheamos, refrescamos y reintentamos; si no es 401 o falla refresh, re-lanzamos.
+        //
+        // Si el refresh no es posible (refreshToken null) o el refresh falla devolviendo null,
+        // significa que la sesión es ZOMBIE — la app tiene un accessToken vencido pero no puede
+        // renovarlo. En ese caso limpiamos TokenStore para que el LaunchedEffect global de App.kt
+        // detecte accessToken=null y patee al usuario al Login. Sin esto, el polling se queda en
+        // un loop infinito de 401s mostrando "Tu sesion expiro" sin que la app navegue (era el
+        // bug que reportó Mauricio: el toast aparecía pero la app se quedaba colgada).
         c.plugin(HttpSend).intercept { request ->
             try {
                 execute(request)
             } catch (e: ClientRequestException) {
                 val protectedEndpoint = !request.url.buildString().contains("/auth/")
-                if (e.response.status == HttpStatusCode.Unauthorized &&
-                    TokenStore.refreshToken != null &&
-                    protectedEndpoint
-                ) {
-                    val newAccess = tryRefresh()
-                    if (newAccess != null) {
-                        request.headers.remove(HttpHeaders.Authorization)
-                        request.headers.append(HttpHeaders.Authorization, "Bearer $newAccess")
-                        execute(request)
-                    } else throw e
-                } else throw e
+                val esAuthFallida = e.response.status == HttpStatusCode.Unauthorized && protectedEndpoint
+                if (!esAuthFallida) throw e
+
+                val newAccess = if (TokenStore.refreshToken != null) tryRefresh() else null
+                if (newAccess != null) {
+                    request.headers.remove(HttpHeaders.Authorization)
+                    request.headers.append(HttpHeaders.Authorization, "Bearer $newAccess")
+                    execute(request)
+                } else {
+                    // Refresh imposible o fallido → forzar logout via LaunchedEffect global.
+                    // TokenStore.clear() puede haberse llamado ya desde tryRefresh (branch
+                    // 'else' con status no-2xx). Si refreshToken era null directamente,
+                    // tryRefresh no se ejecutó y accessToken sigue vivo — limpiamos aca.
+                    if (TokenStore.accessToken != null) TokenStore.clear()
+                    throw e
+                }
             }
         }
     }

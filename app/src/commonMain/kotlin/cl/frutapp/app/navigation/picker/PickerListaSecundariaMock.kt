@@ -13,7 +13,9 @@ data class PedidoEnCurso(
     val itemsListos: Int,
     val sector: String,
     val destino: String,
-    val tiempoEnPreparacionMin: Int
+    val tiempoEnPreparacionMin: Int,
+    /** UUID del pedido en backend; null cuando viene del fixture mock. */
+    val backendId: String? = null
 ) {
     val progreso: Float get() = if (itemsTotal == 0) 0f else itemsListos.toFloat() / itemsTotal
 }

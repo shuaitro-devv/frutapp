@@ -27,7 +27,11 @@ import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,34 +40,81 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.remote.StaffOrderApi
+import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.theme.FrutAppColors
+import kotlinx.coroutines.delay
 
 /**
- * Tab 'En curso' del picker. Lista los pedidos que el picker tomo pero aun no termino —
- * con su progreso parcial visible (5/12 items listos, etc). Tap → volver al picklist.
+ * Tab 'En curso' del picker: pedidos en EN_PICKING que YO tome y aun no completo.
+ * Polling cada 5s al endpoint `?status=en_curso` (filtra por assigned_picker_id).
+ * Tap → vuelve al picklist (el screen detecta el UUID y opera contra el backend).
  *
- * En la version real, el filtro viene del backend (status=EN_PICKING + assignee=current).
- * Hoy es mock fixed con [pedidosEnCursoMock].
+ * Cuando exista el endpoint de items individuales (Nivel 2), itemsListos reflejara
+ * el progreso real; hoy mostramos 0 / N.
  */
+private const val EN_CURSO_POLLING_MS = 5_000L
+
 @Composable
 fun PickerEnCursoContent(modifier: Modifier = Modifier) {
     val navigator = LocalNavigator.currentOrThrow
-    val pedidos = remember { pedidosEnCursoMock() }
+    val staffApi = remember { StaffOrderApi() }
+    var pedidos by remember { mutableStateOf<List<PedidoEnCurso>>(emptyList()) }
+    var cargandoInicial by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            runCatching { staffApi.enCurso().map { it.toPedidoEnCurso() } }
+                .onSuccess {
+                    pedidos = it
+                    cargandoInicial = false
+                }
+                .onFailure { e ->
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    ErrorReporter.report(screen = "PickerEnCurso", action = "fetch_en_curso", error = e)
+                    if (cargandoInicial) cargandoInicial = false
+                }
+            delay(EN_CURSO_POLLING_MS)
+        }
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
         Header(total = pedidos.size)
-        if (pedidos.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No tienes pedidos en preparación", color = FrutAppColors.InkMuted, fontSize = 14.sp)
+        when {
+            cargandoInicial -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Cargando...", color = FrutAppColors.InkMuted, fontSize = 14.sp)
             }
-            return@Column
-        }
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(pedidos, key = { it.id }) { p ->
-                Card(pedido = p, onClick = { navigator.push(PickerPicklistScreen(p.id)) })
+            pedidos.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("No tienes pedidos en preparación", color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(4.dp))
+                    Text("Toma uno desde la cola para empezar", color = FrutAppColors.InkMuted, fontSize = 13.sp)
+                }
+            }
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(pedidos, key = { it.backendId ?: it.id }) { p ->
+                    Card(
+                        pedido = p,
+                        // yaTomado=true: el pedido ya esta asignado a este picker, NO hay
+                        // que volver a llamar take (rebotaria con 409). Solo entramos al
+                        // picklist a editar items / completar.
+                        onClick = {
+                            navigator.push(
+                                PickerPicklistScreen(
+                                    pedidoId = p.backendId ?: p.id,
+                                    yaTomado = true,
+                                    numero = p.id.takeIf { p.backendId != null },
+                                    sector = p.sector.takeIf { p.backendId != null },
+                                    cliente = p.destino.removePrefix("Pedido de ").takeIf { p.backendId != null }
+                                )
+                            )
+                        }
+                    )
+                }
             }
         }
     }

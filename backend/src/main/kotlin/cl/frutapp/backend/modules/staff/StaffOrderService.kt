@@ -9,6 +9,8 @@ import cl.frutapp.backend.modules.auth.UsersTable
 import cl.frutapp.backend.modules.orders.OrderItemsTable
 import cl.frutapp.backend.modules.orders.OrderStatusHistoryTable
 import cl.frutapp.backend.modules.orders.OrdersTable
+import cl.frutapp.shared.dto.StaffOrderDetailDto
+import cl.frutapp.shared.dto.StaffOrderItemDto
 import cl.frutapp.shared.dto.StaffOrderSummaryDto
 import cl.frutapp.shared.dto.StaffTakeResult
 import kotlinx.datetime.Clock
@@ -62,6 +64,71 @@ class StaffOrderService(
             .toList()
 
         materializeSummaries(rows, pickerId)
+    }
+
+    /** Detalle de un pedido para el picker: cabecera + items reales. Verifica
+     *  permisos de location (no se puede ver un pedido de otra ubicacion). */
+    suspend fun detalle(pickerId: UUID, orderId: UUID): StaffOrderDetailDto = dbQuery {
+        val pickerLocation = pickerHomeLocation(pickerId)
+        val orderRow = OrdersTable
+            .selectAll()
+            .where { OrdersTable.id eq orderId }
+            .singleOrNull()
+            ?: throw NotFoundException("Pedido no encontrado.")
+
+        val pedidoLocation = orderRow[OrdersTable.pickupLocationId]
+        if (pedidoLocation != pickerLocation) {
+            throw ValidationException("Este pedido no es de tu location.")
+        }
+
+        val clienteUserId = orderRow[OrdersTable.userId]
+        val clienteRow = UsersTable
+            .selectAll()
+            .where { UsersTable.id eq clienteUserId }
+            .singleOrNull()
+        val clienteNombre = (clienteRow?.get(UsersTable.name) ?: "Cliente").substringBefore(' ')
+
+        val itemsRows = OrderItemsTable
+            .selectAll()
+            .where { OrderItemsTable.orderId eq orderId }
+            .toList()
+
+        val items = itemsRows.mapIndexed { index, row ->
+            val unidad = row[OrderItemsTable.unidad]
+            val gramos = row[OrderItemsTable.gramos]
+            val esKg = unidad == "kg"
+            val cantidadDouble = if (esKg && gramos != null) {
+                // cantidad * gramos -> mostramos como kg (ej. 2 x 1000g = 2.0 kg)
+                row[OrderItemsTable.cantidad] * gramos / 1000.0
+            } else {
+                row[OrderItemsTable.cantidad].toDouble()
+            }
+            StaffOrderItemDto(
+                numero = index + 1,
+                productId = row[OrderItemsTable.productId].toString(),
+                nombre = row[OrderItemsTable.nombre],
+                unidad = unidad,
+                cantidad = cantidadDouble,
+                gramos = gramos,
+                precioUnitario = row[OrderItemsTable.precioUnitario],
+                montoEstimado = row[OrderItemsTable.montoEstimado],
+                pesoVariable = esKg && gramos != null,
+                emoji = emojiForProduct(row[OrderItemsTable.nombre])
+            )
+        }
+
+        StaffOrderDetailDto(
+            id = orderId.toString(),
+            numero = orderRow[OrdersTable.numero],
+            status = orderRow[OrdersTable.status],
+            total = orderRow[OrdersTable.totalFinal] ?: orderRow[OrdersTable.totalEstimado],
+            createdAt = orderRow[OrdersTable.createdAt].toString(),
+            clienteNombre = clienteNombre,
+            sector = sectorFromAddress(orderRow[OrdersTable.direccion]),
+            assignedAt = orderRow[OrdersTable.assignedAt]?.toString(),
+            assignedToMe = orderRow[OrdersTable.assignedPickerId] == pickerId,
+            items = items
+        )
     }
 
     /** Mis pedidos en curso (los que tome y aun no completo). */
@@ -227,6 +294,30 @@ class StaffOrderService(
             it[OrderStatusHistoryTable.actorUserId] = actorUserId
             it[OrderStatusHistoryTable.nota] = nota
             it[createdAt] = Clock.System.now()
+        }
+    }
+
+    /** Emoji placeholder por categoria del producto. Heuristica simple por nombre —
+     *  cuando exista la columna `image_key` poblada con fotos reales, esto se va. */
+    private fun emojiForProduct(nombre: String): String {
+        val lower = nombre.lowercase()
+        return when {
+            lower.contains("palta") || lower.contains("aguacate") -> "🥑"
+            lower.contains("tomate") -> "🍅"
+            lower.contains("lechuga") || lower.contains("acelga") || lower.contains("espinaca") -> "🥬"
+            lower.contains("limón") || lower.contains("limon") -> "🍋"
+            lower.contains("plátano") || lower.contains("platano") || lower.contains("banana") -> "🍌"
+            lower.contains("manzana") -> "🍎"
+            lower.contains("naranja") -> "🍊"
+            lower.contains("uva") -> "🍇"
+            lower.contains("frutilla") || lower.contains("fresa") -> "🍓"
+            lower.contains("zanahoria") -> "🥕"
+            lower.contains("pepino") -> "🥒"
+            lower.contains("pimiento") || lower.contains("pimentón") || lower.contains("pimenton") -> "🫑"
+            lower.contains("cebolla") -> "🧅"
+            lower.contains("ajo") -> "🧄"
+            lower.contains("papa") -> "🥔"
+            else -> "🥬"
         }
     }
 

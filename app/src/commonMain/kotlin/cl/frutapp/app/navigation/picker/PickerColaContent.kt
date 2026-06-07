@@ -30,10 +30,12 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,21 +46,55 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.remote.StaffOrderApi
+import cl.frutapp.app.ui.ErrorReporter
+import cl.frutapp.app.ui.mensajeAmigable
 import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
+import kotlinx.coroutines.delay
 
 /**
- * Pantalla "Cola de pedidos" del picker (tab 'cola'). Replica el mockup picker-01-cola:
- * header con conteo total, banner de urgencia si hay pedidos antiguos, buscador, chips
- * de filtro y lista de cards de pedido tappeables.
+ * Pantalla "Cola de pedidos" del picker (tab 'cola').
  *
- * Hoy todo es mock data ([pedidosColaMock]). Cuando exista PickerApi se reemplaza el
- * `remember` por un `produceState` que llama al endpoint y maneja loading/error.
+ * Cableada al backend real ([StaffOrderApi.cola]) con polling cada
+ * [POLLING_MS] ms mientras la pantalla esta activa. El primer fetch muestra
+ * spinner; los siguientes refrescan en silencio sin parpadeo. Errores se
+ * reportan via [ErrorReporter] + toast amigable y la lista anterior se conserva
+ * (no se vacia ante un fallo transitorio de red).
+ *
+ * El backend filtra implicitamente por la `pickup_location` del picker, asi que
+ * cada usuario ve solo sus pedidos. La conversion DTO -> UI vive en
+ * [toPedidoColaItem] (calcula minutosEspera/prioridad localmente).
  */
+private const val POLLING_MS = 5_000L
+
 @Composable
 fun PickerColaContent(modifier: Modifier = Modifier) {
     val navigator = LocalNavigator.currentOrThrow
-    val pedidos = remember { pedidosColaMock() }
+    val staffApi = remember { StaffOrderApi() }
+    var pedidos by remember { mutableStateOf<List<PedidoColaItem>>(emptyList()) }
+    var cargandoInicial by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            runCatching { staffApi.cola().map { it.toPedidoColaItem() } }
+                .onSuccess {
+                    pedidos = it
+                    cargandoInicial = false
+                }
+                .onFailure { e ->
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    ErrorReporter.report(screen = "PickerCola", action = "fetch_cola", error = e)
+                    if (cargandoInicial) {
+                        // Primer fetch fallido: avisamos. Refresh silencioso si ya habia data.
+                        showToast(mensajeAmigable(e, "cargar la cola"))
+                        cargandoInicial = false
+                    }
+                }
+            delay(POLLING_MS)
+        }
+    }
+
     val urgentes = remember(pedidos) { pedidos.count { it.urgente } }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -73,18 +109,80 @@ fun PickerColaContent(modifier: Modifier = Modifier) {
         Spacer(Modifier.height(14.dp))
         BuscadorYFiltros(modifier = Modifier.padding(horizontal = 16.dp))
 
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(pedidos, key = { it.id }) { pedido ->
-                PedidoCard(
-                    pedido = pedido,
-                    onClick = { navigator.push(PickerPicklistScreen(pedidoId = pedido.id)) }
-                )
+        when {
+            cargandoInicial -> ColaLoading()
+            pedidos.isEmpty() -> ColaVacia()
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(pedidos, key = { it.backendId ?: it.id }) { pedido ->
+                    PedidoCard(
+                        pedido = pedido,
+                        onClick = {
+                            // Si vino del backend, navegamos con el UUID real para que el detalle
+                            // pueda hacer take/complete contra el endpoint. Para fixture mock,
+                            // pasamos el id legible (el detalle usa picklistMock en ese caso).
+                            // Propagamos numero/sector/cliente para que la pantalla "Listo"
+                            // final no tenga que mostrar el UUID feo ni "Sector Norte/Camila R."
+                            // hardcoded del mock.
+                            navigator.push(
+                                PickerPicklistScreen(
+                                    pedidoId = pedido.backendId ?: pedido.id,
+                                    numero = pedido.id.takeIf { pedido.backendId != null },
+                                    sector = pedido.sector.takeIf { pedido.backendId != null },
+                                    cliente = pedido.destino.removePrefix("Pedido de ").takeIf { pedido.backendId != null }
+                                )
+                            )
+                        }
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun ColaLoading() {
+    Box(
+        modifier = Modifier.fillMaxSize().padding(top = 40.dp),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        CircularProgressIndicator(color = FrutAppColors.Brand400)
+    }
+}
+
+@Composable
+private fun ColaVacia() {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier.size(64.dp).background(FrutAppColors.Brand50, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Filled.Inventory2,
+                contentDescription = null,
+                tint = FrutAppColors.Brand400,
+                modifier = Modifier.size(28.dp)
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "No hay pedidos por preparar",
+            color = FrutAppColors.Brand800,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Cuando llegue uno nuevo aparecera aca automaticamente.",
+            color = FrutAppColors.InkMuted,
+            fontSize = 13.sp
+        )
     }
 }
 

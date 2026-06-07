@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.showToast
@@ -58,7 +59,13 @@ import cl.frutapp.app.ui.theme.FrutAppColors
  */
 class PickerListoScreen(
     private val pedidoId: String,
-    private val estados: Map<Int, EstadoItem> = emptyMap()
+    private val estados: Map<Int, EstadoItem> = emptyMap(),
+    /** Numero legible del pedido (#FRU-XXX). Si null, se muestra pedidoId. */
+    private val numero: String? = null,
+    /** Sector/comuna del cliente (ej. "Las Condes"). Si null, se omite la linea. */
+    private val sector: String? = null,
+    /** Nombre corto del cliente para el destino. Si null, se omite. */
+    private val cliente: String? = null
 ) : Screen {
     @Composable
     override fun Content() {
@@ -90,7 +97,7 @@ class PickerListoScreen(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = FrutAppColors.Brand800)
                 }
                 Text(
-                    text = pedidoId,
+                    text = numero ?: pedidoId,
                     color = FrutAppColors.Brand800,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
@@ -172,9 +179,17 @@ class PickerListoScreen(
                         .border(1.dp, FrutAppColors.Brand100, RoundedCornerShape(14.dp))
                         .padding(14.dp)
                 ) {
-                    InfoLinea(icon = Icons.Filled.LocationOn, label = "Destino", valor = "Sector Norte / Restaurante Verde")
+                    val destinoTexto = when {
+                        sector != null && cliente != null -> "$sector · Pedido de $cliente"
+                        sector != null -> sector
+                        cliente != null -> "Pedido de $cliente"
+                        else -> "Pedido $pedidoId"
+                    }
+                    InfoLinea(icon = Icons.Filled.LocationOn, label = "Destino", valor = destinoTexto)
                     Spacer(Modifier.height(10.dp))
-                    InfoLinea(icon = Icons.Filled.Person, label = "Picker", valor = "Camila R.")
+                    // Picker = nombre del usuario logueado (corto: primer nombre).
+                    val pickerNombre = TokenStore.user?.name?.substringBefore(' ') ?: "Casero"
+                    InfoLinea(icon = Icons.Filled.Person, label = "Picker", valor = pickerNombre)
                     Spacer(Modifier.height(10.dp))
                     Row(
                         modifier = Modifier

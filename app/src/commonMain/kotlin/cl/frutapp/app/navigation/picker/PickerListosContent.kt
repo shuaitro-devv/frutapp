@@ -39,15 +39,18 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.ui.theme.FrutAppColors
 
 /**
- * Tab 'Listos' del picker. Historial del turno: pedidos terminados, mostrando hace cuanto
- * se completaron y si tuvieron incidencias. Tap → PickerListoScreen (vista de detalle).
+ * Tab 'Listos' del picker. Historial del turno: pedidos terminados.
  *
- * Mock con [pedidosListosMock]. En la version real, sera GET /v1/picker/orders?status=READY.
+ * **Pendiente**: cuando exista el endpoint `GET /v1/staff/orders?status=completados_hoy`
+ * (que filtre por assigned_picker_id + completados en ultimas 24h), cableamos como
+ * hicimos con `cola` y `en_curso`. Por ahora mostramos lista vacia para no
+ * confundir el demo con datos mockup que no concuerdan con el flujo real (los
+ * pedidos completados quedaban como si fueran de otro picker, en otros sectores).
  */
 @Composable
 fun PickerListosContent(modifier: Modifier = Modifier) {
     val navigator = LocalNavigator.currentOrThrow
-    val pedidos = remember { pedidosListosMock() }
+    val pedidos = remember { emptyList<PedidoListo>() }
     Column(modifier = modifier.fillMaxSize()) {
         Header(total = pedidos.size, hoyEntregados = pedidos.size)
         if (pedidos.isEmpty()) {

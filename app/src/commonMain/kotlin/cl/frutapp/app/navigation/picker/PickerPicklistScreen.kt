@@ -37,9 +37,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,25 +52,110 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.isUuidLike
+import cl.frutapp.app.data.remote.StaffOrderApi
+import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
+import cl.frutapp.app.ui.mensajeAmigable
 import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
+import kotlinx.coroutines.launch
 
 /**
  * Picklist del pedido (picker-02). Header con ID + chip estado, stat strip con donut de
  * progreso, lista de items con checkbox grande, botones inferiores para incidencia o
  * marcar como listo. Mock data — los toggles de check son local-state-only por ahora.
  */
-class PickerPicklistScreen(private val pedidoId: String) : Screen {
+class PickerPicklistScreen(
+    private val pedidoId: String,
+    /** True cuando se entra desde el tab "En curso" — el pedido YA es del picker,
+     *  no hay que hacer take (rebotaria con 409 ya_tomado). False cuando se entra
+     *  desde la cola (camino feliz: tomar y empezar a editar). */
+    private val yaTomado: Boolean = false,
+    /** Numero legible del pedido (ej. "#FRU-2026-797724"). Se pasa desde la cola
+     *  para que el header y la pantalla "Listo" muestren el numero amigable en
+     *  vez del UUID. Si es null, se usa el pedidoId tal cual. */
+    private val numero: String? = null,
+    /** Sector/comuna del cliente para mostrar en la pantalla "Listo". */
+    private val sector: String? = null,
+    /** Nombre del cliente para el destino ("Pedido de Mauricio"). */
+    private val cliente: String? = null
+) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val data = remember(pedidoId) { picklistMock(pedidoId) }
+        val scope = rememberCoroutineScope()
+        // Si pedidoId parece un UUID, vino del backend real -> hacemos take/complete
+        // contra los endpoints reales. Si es id legible (#FRU-XXX o nombre slug),
+        // estamos en modo mockup (demo offline) y el flujo se queda 100% en memoria.
+        val esBackendReal = remember(pedidoId) { pedidoId.isUuidLike() }
+        val staffApi = remember { StaffOrderApi() }
+        var completando by remember(pedidoId) { mutableStateOf(false) }
+
+        // Si el pedido es real Y todavia no es mio, hacemos `take` automaticamente
+        // al entrar (el usuario manifestó intencion al tap el card en la cola). Si
+        // otro picker llego primero, mostramos toast y volvemos a la cola.
+        LaunchedEffect(pedidoId) {
+            if (!esBackendReal || yaTomado) return@LaunchedEffect
+            runCatching { staffApi.take(pedidoId) }
+                .onSuccess { res ->
+                    if (!res.ok) {
+                        showToast("Otro Casero ya tomó este pedido. Refrescando cola.")
+                        navigator.pop()
+                    }
+                }
+                .onFailure { e ->
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    ErrorReporter.report(screen = "PickerPicklist", action = "take", error = e)
+                    showToast(mensajeAmigable(e, "tomar el pedido"))
+                    navigator.pop()
+                }
+        }
+
+        // Si es backend real: cargar el detalle (con items reales) del endpoint.
+        // Si es mock: usar el fixture. picklist queda null durante la carga inicial.
+        var picklist by remember(pedidoId) {
+            mutableStateOf<PicklistData?>(if (esBackendReal) null else picklistMock(pedidoId))
+        }
+        LaunchedEffect(pedidoId) {
+            if (!esBackendReal) return@LaunchedEffect
+            runCatching { staffApi.detalle(pedidoId) }
+                .onSuccess { picklist = it.toPicklistData() }
+                .onFailure { e ->
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    ErrorReporter.report(screen = "PickerPicklist", action = "detalle", error = e)
+                    // Fallback al mock para no dejar la pantalla vacia — el take ya se
+                    // hizo y el pedido es nuestro, mejor mostrar algo que un spinner eterno.
+                    picklist = picklistMock(pedidoId)
+                    showToast("No pudimos cargar los items del backend, mostrando vista parcial.")
+                }
+        }
+        val currentPicklist = picklist
+        if (currentPicklist == null) {
+            // Mientras carga el detalle, mostramos un splash minimal con el header
+            // back+id para que la transicion no parpadee.
+            Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 6.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { navigator.pop() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = FrutAppColors.Brand800)
+                    }
+                    Text(numero ?: pedidoId, color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                }
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    androidx.compose.material3.CircularProgressIndicator(color = FrutAppColors.Brand400)
+                }
+            }
+            return
+        }
+        val data = currentPicklist
         // State machine por item: Map<numeroItem, EstadoItem>. Cada item siempre tiene un
         // estado; el boton 'listo' se desbloquea cuando ninguno queda en PENDIENTE.
         // Cuando exista el endpoint, esto sera un PATCH al backend por item.
-        var estados by remember(pedidoId) {
+        var estados by remember(pedidoId, data) {
             mutableStateOf(data.items.associate { it.numero to it.estado })
         }
         var modalAbierto by remember { mutableStateOf<ModalPicklist?>(null) }
@@ -147,10 +234,29 @@ class PickerPicklistScreen(private val pedidoId: String) : Screen {
                 onIncidencia = { navigator.push(PickerIncidenciaScreen(data.pedidoId)) },
                 onListo = {
                     val pendientes = estados.values.count { it == EstadoItem.PENDIENTE }
-                    if (pendientes == 0) {
-                        navigator.replace(PickerListoScreen(data.pedidoId, estados))
-                    } else {
+                    if (pendientes != 0) {
                         showToast("Aún quedan $pendientes items por resolver")
+                        return@BotonesInferior
+                    }
+                    if (!esBackendReal) {
+                        // Modo mockup: avanza a la pantalla de "pedido listo" sin tocar red.
+                        navigator.replace(PickerListoScreen(data.pedidoId, estados, numero = numero, sector = sector, cliente = cliente))
+                        return@BotonesInferior
+                    }
+                    if (completando) return@BotonesInferior
+                    completando = true
+                    scope.launch {
+                        runCatching { staffApi.complete(pedidoId) }
+                            .onSuccess {
+                                showToast("Pedido listo para retiro 🌿")
+                                navigator.replace(PickerListoScreen(data.pedidoId, estados, numero = numero, sector = sector, cliente = cliente))
+                            }
+                            .onFailure { e ->
+                                if (e is kotlinx.coroutines.CancellationException) throw e
+                                ErrorReporter.report(screen = "PickerPicklist", action = "complete", error = e)
+                                showToast(mensajeAmigable(e, "marcar el pedido como listo"))
+                                completando = false
+                            }
                     }
                 }
             )
