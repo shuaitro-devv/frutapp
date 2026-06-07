@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- app_name lo inyecta cada flavor via resValue (ver app/build.gradle.kts:productFlavors). -->
 <resources>
-    <string name="app_name">FrutApp</string>
 </resources>

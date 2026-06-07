@@ -87,6 +87,7 @@ import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.components.ProductCard
 import cl.frutapp.app.ui.theme.FrutAppColors
+import cl.frutapp.app.ui.theme.LocalBrand
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.banner_frescos
 import frutapp.app.generated.resources.banner_fruit
@@ -225,7 +226,7 @@ private val HOME_TOUR_STEPS = listOf(
     CoachmarkStep(
         key = "quick_access",
         titulo = "Tu corazón verde",
-        texto = "Ofertas, FrutCoins y Recicla. Esto último es lo que nos hace distintos."
+        texto = "Ofertas, recompensas y reciclaje. Lo último es lo que nos hace distintos."
     ),
     CoachmarkStep(
         key = "categorias",
@@ -349,9 +350,10 @@ private fun QuickAccess(
     onRecicla: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val coinsName = LocalBrand.current.coinsName
     Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         QuickItem("Ofertas", Icons.Default.LocalOffer, FrutAppColors.Brand400, onOfertas, Modifier.weight(1f))
-        QuickItem("FrutCoins", Icons.Default.MonetizationOn, FrutAppColors.AmberCoin, onFrutCoins, Modifier.weight(1f))
+        QuickItem(coinsName, Icons.Default.MonetizationOn, FrutAppColors.AmberCoin, onFrutCoins, Modifier.weight(1f))
         QuickItem("Recicla", Icons.Default.Recycling, FrutAppColors.Brand600, onRecicla, Modifier.weight(1f))
     }
 }
@@ -418,13 +420,14 @@ private data class BannerSlide(
 
 @Composable
 private fun HeroCarousel(onOfertas: () -> Unit, onFrutCoins: () -> Unit, onCanastas: () -> Unit, onReyVegetal: () -> Unit, modifier: Modifier = Modifier) {
-    val slides = remember(onOfertas, onFrutCoins, onCanastas, onReyVegetal) {
+    val coinsName = LocalBrand.current.coinsName
+    val slides = remember(onOfertas, onFrutCoins, onCanastas, onReyVegetal, coinsName) {
         listOf(
             BannerSlide("Frescura que se nota,", "calidad que te acompaña", "Ver ofertas", Res.drawable.banner_frescos, 180.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas, fullBg = true),
             BannerSlide("Hasta 40% de", "descuento esta semana", "Ver ofertas", Res.drawable.banner_fruit, 150.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas, fullBg = true),
             BannerSlide("Mi canasta del mes,", "1 toque para volver a pedir", "Mis canastas", Res.drawable.canasta_frutas, 150.dp, FrutAppColors.Brand800, FrutAppColors.Brand400, onCanastas, fullBg = true),
             BannerSlide("👑 Rey Vegetal,", "compra gratis al mejor reciclador", "Ver ranking", Res.drawable.canasta_frutas, 120.dp, FrutAppColors.Brand800, FrutAppColors.AmberCoin, onReyVegetal, fullBg = true),
-            BannerSlide("Junta FrutCoins", "en cada compra", "Ver FrutCoins", Res.drawable.banner_frutcoins, 120.dp, FrutAppColors.Brand800, FrutAppColors.Brand400, onFrutCoins, fullBg = true)
+            BannerSlide("Junta $coinsName", "en cada compra", "Ver $coinsName", Res.drawable.banner_frutcoins, 120.dp, FrutAppColors.Brand800, FrutAppColors.Brand400, onFrutCoins, fullBg = true)
         )
     }
     val realCount = slides.size

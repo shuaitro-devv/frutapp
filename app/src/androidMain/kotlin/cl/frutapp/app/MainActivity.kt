@@ -8,9 +8,14 @@ import cl.frutapp.app.data.BiometricAuth
 import cl.frutapp.app.data.SessionStorage
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.ui.initToast
+import cl.frutapp.app.ui.theme.ActiveBrand
 
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // White-label: el flavor inyecta BRAND_ID en BuildConfig. Setear ActiveBrand
+        // ANTES de setContent para que el color scheme construido en FrutAppTheme
+        // tome la paleta correcta desde la primera composicion.
+        ActiveBrand.set(BuildConfig.BRAND_ID)
         // Sesión persistida: inicializar storage y restaurar antes de pintar la UI.
         SessionStorage.init(applicationContext)
         TokenStore.restore()

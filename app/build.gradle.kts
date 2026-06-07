@@ -81,6 +81,38 @@ android {
         versionName = "0.1.0"
     }
 
+    // White-label: dos flavors que generan FrutApp.apk y Sofruco.apk desde el
+    // mismo codigo. Cada flavor inyecta BRAND_ID por BuildConfig; MainActivity
+    // lo lee y setea ActiveBrand antes de setContent.
+    flavorDimensions += "brand"
+    productFlavors {
+        create("frutapp") {
+            dimension = "brand"
+            applicationId = "cl.frutapp.app"
+            buildConfigField("String", "BRAND_ID", "\"frutapp\"")
+            resValue("string", "app_name", "FrutApp")
+        }
+        create("sofruco") {
+            dimension = "brand"
+            applicationId = "cl.frutapp.app.sofruco"
+            buildConfigField("String", "BRAND_ID", "\"sofruco\"")
+            resValue("string", "app_name", "Sofruco")
+        }
+    }
+
+    // Nombre de salida del APK por flavor+buildType. Ej: FrutApp-frutapp-debug.apk,
+    // Sofruco-sofruco-release.apk. Para el demo basta correr `:app:assembleSofrucoDebug`
+    // y `:app:assembleFrutappDebug` por separado.
+    applicationVariants.all {
+        val variant = this
+        val brandName = if (variant.flavorName == "sofruco") "Sofruco" else "FrutApp"
+        variant.outputs
+            .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
+            .forEach { output ->
+                output.outputFileName = "$brandName-${variant.buildType.name}.apk"
+            }
+    }
+
     signingConfigs {
         if (keystoreProps.isNotEmpty()) {
             create("release") {
