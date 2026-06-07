@@ -1,38 +1,48 @@
-"""Genera mipmaps de Android para el flavor sofruco a partir de docs/_assets/sofruco/logo.png.
+"""Genera adaptive-icon assets para el flavor sofruco.
 
-Densidades estandar de Android:
-- mdpi:    48x48
-- hdpi:    72x72
-- xhdpi:   96x96
-- xxhdpi: 144x144
-- xxxhdpi:192x192
+Estrategia (la correcta segun Android docs):
+- El adaptive-icon del flavor main YA define:
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+- Para sofruco SOLO sobrescribimos los dos drawables (background + foreground)
+  manteniendo los nombres. Android resuelve los drawables del flavor sofruco
+  cuando compila ese variant, sin que tengamos que tocar el XML del adaptive-icon.
 
-El logo Sofruco no es cuadrado perfecto (443x427), asi que lo centramos en un canvas
-cuadrado verde Sofruco (#5F9A3B) con padding 8% para que en el adaptive-icon de
-Android no se corte el isotipo del arbol con el corte circular del launcher.
+Background: drawable vector con color #5F9A3B (verde Sofruco).
+Foreground: PNG del isotipo Sofruco (logo.png) sobre canvas transparente con
+padding 25% — esto respeta la "safe zone" del adaptive-icon: Android puede
+recortarlo en circulo, squircle o roundrect sin perder partes del logo.
+
+Densidades estandar (foreground PNG):
+- mdpi:    108x108 (38% del area visible total de 48dp)
+- hdpi:    162x162
+- xhdpi:   216x216
+- xxhdpi:  324x324
+- xxxhdpi: 432x432
 """
 from PIL import Image
 from pathlib import Path
 
 SRC = Path("c:/others/own/docs/_assets/sofruco/logo.png")
-ROUND_SRC = SRC  # Mismo origen; el sistema lo recorta circular si corresponde
 SOFRUCO_RES = Path("c:/others/own/frutapp/app/src/sofruco/res")
-GREEN = (95, 154, 59, 255)  # #5F9A3B verde Sofruco
 
-DENSITIES = {
-    "mdpi": 48,
-    "hdpi": 72,
-    "xhdpi": 96,
-    "xxhdpi": 144,
-    "xxxhdpi": 192,
+# Adaptive-icon foreground: 108dp x 108dp donde solo los 72dp centrales son visibles
+# en algunos shapes. Densidades en px:
+FOREGROUND_SIZES = {
+    "mdpi": 108,
+    "hdpi": 162,
+    "xhdpi": 216,
+    "xxhdpi": 324,
+    "xxxhdpi": 432,
 }
 
 
-def build_icon(size: int) -> Image.Image:
-    canvas = Image.new("RGBA", (size, size), GREEN)
+def build_foreground(size: int) -> Image.Image:
+    """Canvas transparente con el logo centrado al 55% para que quepa en la
+    safe zone (66% del adaptive icon, dejando margen para recorte circular)."""
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     logo = Image.open(SRC).convert("RGBA")
-    # Resize manteniendo aspecto para que quepa al 84% del canvas (padding seguro adaptive)
-    inner = int(size * 0.84)
+    inner = int(size * 0.55)
     aspect = logo.width / logo.height
     if aspect >= 1:
         w = inner
@@ -47,26 +57,33 @@ def build_icon(size: int) -> Image.Image:
     return canvas
 
 
-for density, size in DENSITIES.items():
-    out_dir = SOFRUCO_RES / f"mipmap-{density}"
+# Foreground PNG por densidad
+for density, size in FOREGROUND_SIZES.items():
+    out_dir = SOFRUCO_RES / f"drawable-{density}"
     out_dir.mkdir(parents=True, exist_ok=True)
-    icon = build_icon(size)
-    icon.save(out_dir / "ic_launcher.png")
-    icon.save(out_dir / "ic_launcher_round.png")
-    print(f"  {density}: {size}x{size} -> {out_dir}/ic_launcher.png")
+    fg = build_foreground(size)
+    fg.save(out_dir / "ic_launcher_foreground.png")
+    print(f"  fg {density}: {size}x{size} -> {out_dir}/ic_launcher_foreground.png")
 
-# Sobrescribe el adaptive-icon del main para que en API26+ tambien use el PNG
-# (sin esto, el sistema usa el adaptive XML del main que apunta a vectores FrutApp).
-anydpi = SOFRUCO_RES / "mipmap-anydpi-v26"
-anydpi.mkdir(parents=True, exist_ok=True)
-# Trick: declarar el adaptive-icon como pure bitmap usando el ic_launcher PNG como background y un foreground transparente.
-adaptive_xml = """<?xml version="1.0" encoding="utf-8"?>
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@mipmap/ic_launcher" />
-    <foreground android:drawable="@android:color/transparent" />
-</adaptive-icon>
+# Background drawable: vector con color verde Sofruco. Sobrescribe el
+# ic_launcher_background.xml del main (que era #234B07 FrutApp).
+bg_dir = SOFRUCO_RES / "drawable"
+bg_dir.mkdir(parents=True, exist_ok=True)
+bg_xml = """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#5F9A3B"
+        android:pathData="M0,0h108v108h-108z" />
+</vector>
 """
-(anydpi / "ic_launcher.xml").write_text(adaptive_xml, encoding="utf-8")
-(anydpi / "ic_launcher_round.xml").write_text(adaptive_xml, encoding="utf-8")
-print(f"  adaptive-icon override -> {anydpi}/ic_launcher.xml")
+(bg_dir / "ic_launcher_background.xml").write_text(bg_xml, encoding="utf-8")
+print(f"  bg -> {bg_dir}/ic_launcher_background.xml")
+
+# El adaptive-icon XML del main (mipmap-anydpi-v26/ic_launcher.xml) NO se
+# sobrescribe — referencia @drawable/ic_launcher_background y
+# @drawable/ic_launcher_foreground por nombre, que ya estan overrideados arriba.
 print("DONE")
