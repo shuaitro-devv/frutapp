@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -54,6 +55,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -70,6 +72,8 @@ import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.data.remote.CatalogApi
 import cl.frutapp.app.data.toProducto
 import cl.frutapp.app.navigation.canastas.MisCanastasScreen
+import cl.frutapp.app.navigation.catalog.BrandCategoryScreen
+import cl.frutapp.app.navigation.catalog.BuscadorScreen
 import cl.frutapp.app.navigation.catalog.CatalogScreen
 import cl.frutapp.app.navigation.offers.OfertasScreen
 import cl.frutapp.app.navigation.orders.MisPedidosScreen
@@ -184,12 +188,20 @@ class HomeScreen : Screen {
                     )
                 }
                 item { SectionHeader("Categorías", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 4.dp), onVerTodo = { navigator.push(CatalogScreen()) }) }
-                item { CategoriesRow(modifier = Modifier.padding(vertical = 8.dp).coachmarkTarget("categorias"), onCategoria = { cat ->
-                    // El chip "Orgánicos" filtra cross-categoría por flag producto.organico;
-                    // los demás filtran por categoría exacta.
-                    if (cat == Categoria.ORGANICOS) navigator.push(cl.frutapp.app.navigation.catalog.BuscadorScreen(soloOrganicos = true))
-                    else navigator.push(cl.frutapp.app.navigation.catalog.BuscadorScreen(categoriaPrefiltro = cat))
-                }) }
+                item { CategoriesRow(
+                    modifier = Modifier.padding(vertical = 8.dp).coachmarkTarget("categorias"),
+                    onCategoria = { cat ->
+                        // FrutApp: "Orgánicos" filtra cross-categoría por flag producto.organico;
+                        // los demás filtran por categoría exacta.
+                        if (cat == Categoria.ORGANICOS) navigator.push(BuscadorScreen(soloOrganicos = true))
+                        else navigator.push(BuscadorScreen(categoriaPrefiltro = cat))
+                    },
+                    onBrandCategoria = { id, label, emoji ->
+                        // Sofruco: las categorias del catalogo brand no estan en el backend,
+                        // navegan a BrandCategoryScreen que filtra BrandCatalogs.sofrucoProducts.
+                        navigator.push(BrandCategoryScreen(id, label, emoji))
+                    }
+                ) }
                 item { SectionHeader("Productos destacados", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp), onVerTodo = { navigator.push(CatalogScreen()) }) }
                 items(destacados.chunked(2)) { fila ->
                     Row(
@@ -568,7 +580,49 @@ private fun SectionHeader(title: String, modifier: Modifier = Modifier, onVerTod
 private data class CategoriaUi(val categoria: Categoria, val imagen: DrawableResource)
 
 @Composable
-private fun CategoriesRow(modifier: Modifier = Modifier, onCategoria: (Categoria) -> Unit = {}) {
+private fun CategoriesRow(
+    modifier: Modifier = Modifier,
+    onCategoria: (Categoria) -> Unit = {},
+    onBrandCategoria: (id: String, label: String, emoji: String) -> Unit = { _, _, _ -> }
+) {
+    val brand = LocalBrand.current
+    if (brand.id == SofrucoBrand.id) {
+        // Categorias Sofruco (6): jugos, aguas, fruta, cajas, secos, vinos.
+        // Mas que las 4 de FrutApp -> usamos LazyRow con scroll horizontal para
+        // que entren bien y respiren con el ancho del telefono.
+        val cats = BrandCatalogs.categoriesFor(brand)
+        LazyRow(
+            modifier = modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            items(cats, key = { it.id }) { cat ->
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.clickable { onBrandCategoria(cat.id, cat.label, cat.emoji) }
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(68.dp)
+                            .clip(CircleShape)
+                            .background(FrutAppColors.Brand50),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(cat.emoji, fontSize = 30.sp)
+                    }
+                    Text(
+                        text = cat.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = FrutAppColors.Ink,
+                        maxLines = 2,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 6.dp).width(78.dp)
+                    )
+                }
+            }
+        }
+        return
+    }
     val categorias = listOf(
         CategoriaUi(Categoria.FRUTAS, Res.drawable.manzana_roja),
         CategoriaUi(Categoria.VERDURAS, Res.drawable.zanahoria),
