@@ -28,11 +28,13 @@ import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -63,6 +65,8 @@ import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.FrutLoader
 import cl.frutapp.app.ui.mensajeAmigable
 import cl.frutapp.app.ui.theme.FrutAppColors
+import cl.frutapp.app.ui.theme.LocalBrand
+import cl.frutapp.app.ui.theme.SofrucoBrand
 import cl.frutapp.shared.dto.ClientContextDto
 import cl.frutapp.shared.dto.CreateOrderRequest
 import cl.frutapp.shared.dto.OrderItemRequest
@@ -101,6 +105,12 @@ class CheckoutScreen : Screen {
         var loading by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
         var mensajePagando by remember { mutableStateOf("Confirmando tu pedido…") }
+        // Demo Sofruco: el catalogo viene del scrape (no del backend), asi que
+        // cortamos el checkout antes de pegarle al API y mostramos un modal
+        // honesto. brandActualId se lee desde LocalBrand para que el switch
+        // sea reactivo al toggle "Modo de tienda" en Perfil.
+        val brandActualId = LocalBrand.current.id
+        var demoModalAbierto by remember { mutableStateOf(false) }
 
         // Saldo de FrutCoins (para ofrecer pagar con ellos). Fuente de verdad: backend.
         LaunchedEffect(Unit) {
@@ -161,6 +171,14 @@ class CheckoutScreen : Screen {
                         text = if (loading) "Procesando…" else "Pagar ${formatClp(totalLocal)}",
                         enabled = !loading && !CartStore.isEmpty,
                         onClick = {
+                            // White-label demo: en modo Sofruco el checkout real no
+                            // existe (el catalogo es hardcoded del scrape, no esta
+                            // en el backend). Abrimos un modal honesto y cortamos
+                            // el flow antes de pegarle al backend.
+                            if (brandActualId == SofrucoBrand.id) {
+                                demoModalAbierto = true
+                                return@FrutButtonPrimary
+                            }
                             error = null
                             loading = true
                             mensajePagando = "Confirmando tu pedido…"
@@ -269,6 +287,42 @@ class CheckoutScreen : Screen {
                     }
                 }
             }
+        }
+
+        if (demoModalAbierto) {
+            AlertDialog(
+                onDismissRequest = { demoModalAbierto = false },
+                title = {
+                    Text(
+                        "Vista demo Sofruco",
+                        color = FrutAppColors.Brand800,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Text(
+                        "Estás navegando una edición demo de la app con el catálogo de Sofruco. " +
+                            "El checkout real estará disponible cuando integremos su catálogo al backend de pedidos. " +
+                            "Por ahora podés explorar el flujo completo (productos, carrito, despacho) sin generar un pedido.",
+                        color = FrutAppColors.InkMuted,
+                        fontSize = 13.sp
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        demoModalAbierto = false
+                        CartStore.clear()
+                        navigator.popUntilRoot()
+                    }) {
+                        Text("Entendido", color = FrutAppColors.Brand600, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { demoModalAbierto = false }) {
+                        Text("Seguir explorando", color = FrutAppColors.InkSoft)
+                    }
+                }
+            )
         }
     }
 }

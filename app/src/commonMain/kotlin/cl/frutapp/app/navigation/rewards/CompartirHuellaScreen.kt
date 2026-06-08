@@ -55,9 +55,9 @@ import cl.frutapp.app.ui.rememberCaptureLayer
 import cl.frutapp.app.ui.shareImage
 import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
+import cl.frutapp.app.ui.theme.brandLogoWhite
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.huella_verde
-import frutapp.app.generated.resources.logo_white
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
@@ -188,7 +188,7 @@ fun ShareCardHuella(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Image(
-                    painter = painterResource(Res.drawable.logo_white),
+                    painter = painterResource(brandLogoWhite()),
                     contentDescription = null,
                     contentScale = ContentScale.FillHeight,
                     modifier = Modifier.height(22.dp)

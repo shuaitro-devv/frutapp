@@ -3,41 +3,65 @@ package cl.frutapp.app.ui.theme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
 
-private val FrutAppLightColors = lightColorScheme(
-    primary = FrutAppColors.Brand400,
-    onPrimary = androidx.compose.ui.graphics.Color.White,
-    primaryContainer = FrutAppColors.Brand50,
-    onPrimaryContainer = FrutAppColors.Brand800,
+/** CompositionLocal con el Brand activo. Util cuando un Composable necesita el
+ *  copy/coinsName/displayName, o para previews que quieran forzar otro brand. */
+val LocalBrand = staticCompositionLocalOf<Brand> { FrutAppBrand }
 
-    secondary = FrutAppColors.Brand600,
-    onSecondary = androidx.compose.ui.graphics.Color.White,
-    secondaryContainer = FrutAppColors.Brand100,
-    onSecondaryContainer = FrutAppColors.Brand800,
-
-    tertiary = FrutAppColors.AmberCoin,
-    onTertiary = androidx.compose.ui.graphics.Color.White,
-    tertiaryContainer = FrutAppColors.AmberSoft,
-    onTertiaryContainer = FrutAppColors.AmberCoin,
-
-    background = androidx.compose.ui.graphics.Color.White,
-    onBackground = FrutAppColors.Ink,
-
-    surface = androidx.compose.ui.graphics.Color.White,
-    onSurface = FrutAppColors.Ink,
-    surfaceVariant = FrutAppColors.Cream,
-    onSurfaceVariant = FrutAppColors.InkMuted,
-
-    error = FrutAppColors.Error,
-    onError = androidx.compose.ui.graphics.Color.White
-)
-
+/**
+ * Tema raiz de la app. Lee el Brand activo desde [ActiveBrand] (que es un
+ * mutableStateOf) y construye el `lightColorScheme` desde su paleta. Cuando el
+ * usuario cambia el Brand desde el toggle de Perfil, esta lectura se invalida
+ * y toda la app se recompone con la paleta nueva.
+ *
+ * Para overrides puntuales (preview/tests) usar
+ * `CompositionLocalProvider(LocalBrand provides X) { FrutAppTheme(brand = X) { ... } }`.
+ */
 @Composable
-fun FrutAppTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = FrutAppLightColors,
-        typography = FrutAppTypography,
-        shapes = FrutAppShapes,
-        content = content
-    )
+fun FrutAppTheme(
+    brand: Brand = ActiveBrand.current,
+    content: @Composable () -> Unit
+) {
+    val scheme = remember(brand.id) {
+        val p = brand.palette
+        lightColorScheme(
+            primary = p.brand400,
+            onPrimary = Color.White,
+            primaryContainer = p.brand50,
+            onPrimaryContainer = p.brand800,
+
+            secondary = p.brand600,
+            onSecondary = Color.White,
+            secondaryContainer = p.brand100,
+            onSecondaryContainer = p.brand800,
+
+            tertiary = p.amberCoin,
+            onTertiary = Color.White,
+            tertiaryContainer = p.amberSoft,
+            onTertiaryContainer = p.amberCoin,
+
+            background = Color.White,
+            onBackground = p.ink,
+
+            surface = Color.White,
+            onSurface = p.ink,
+            surfaceVariant = p.cream,
+            onSurfaceVariant = p.inkMuted,
+
+            error = p.error,
+            onError = Color.White
+        )
+    }
+    CompositionLocalProvider(LocalBrand provides brand) {
+        MaterialTheme(
+            colorScheme = scheme,
+            typography = FrutAppTypography,
+            shapes = FrutAppShapes,
+            content = content
+        )
+    }
 }

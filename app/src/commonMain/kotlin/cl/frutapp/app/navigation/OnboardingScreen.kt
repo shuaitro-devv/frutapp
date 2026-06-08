@@ -52,8 +52,9 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.navigation.auth.LoginScreen
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.theme.FrutAppColors
+import cl.frutapp.app.ui.theme.LocalBrand
+import cl.frutapp.app.ui.theme.brandLogoMain
 import frutapp.app.generated.resources.Res
-import frutapp.app.generated.resources.logo_main
 import frutapp.app.generated.resources.mascota_cajita
 import frutapp.app.generated.resources.mascota_coin
 import frutapp.app.generated.resources.mascota_palta
@@ -122,8 +123,8 @@ class OnboardingScreen(private val desdeSplash: Boolean = true) : Screen {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Image(
-                    painter = painterResource(Res.drawable.logo_main),
-                    contentDescription = "FrutApp",
+                    painter = painterResource(brandLogoMain()),
+                    contentDescription = LocalBrand.current.displayName,
                     contentScale = ContentScale.FillHeight,
                     modifier = Modifier.height(28.dp)
                 )

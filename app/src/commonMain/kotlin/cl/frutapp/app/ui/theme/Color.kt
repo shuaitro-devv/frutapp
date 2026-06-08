@@ -3,27 +3,34 @@ package cl.frutapp.app.ui.theme
 import androidx.compose.ui.graphics.Color
 
 /**
- * Paleta oficial FrutApp.
- * Documentada en `docs/FrutApp_Ingenieria.md` y memoria `project-frutapp-brand`.
- * Toda pantalla de la app debe usar tokens de esta paleta — nunca colores arbitrarios.
+ * Paleta de colores de la app. Delega en [ActiveBrand] para soportar white-label:
+ * el mismo codigo de pantalla pinta verde FrutApp por default, naranjo-verde Sofruco
+ * cuando el flavor sofruco arranca, etc.
+ *
+ * Esto preserva todos los call sites existentes (`FrutAppColors.Brand400`) sin tocar
+ * nada en las 30+ pantallas. Cuando cambia [ActiveBrand.current] antes de setContent,
+ * la siguiente lectura de cada token devuelve el color del brand activo.
+ *
+ * Para tematizar dentro de un Composable, preferir [LocalBrand].current.palette
+ * (se mantiene reactivo a CompositionLocalProvider para previews/tests).
  */
 object FrutAppColors {
-    val Brand50 = Color(0xFFEAF3DE)
-    val Brand100 = Color(0xFFDCE9C8)
-    val Brand200 = Color(0xFF97C459)
-    val Brand400 = Color(0xFF639922)
-    val Brand600 = Color(0xFF3B6D11)
-    val Brand800 = Color(0xFF27500A)
+    val Brand50: Color get() = ActiveBrand.current.palette.brand50
+    val Brand100: Color get() = ActiveBrand.current.palette.brand100
+    val Brand200: Color get() = ActiveBrand.current.palette.brand200
+    val Brand400: Color get() = ActiveBrand.current.palette.brand400
+    val Brand600: Color get() = ActiveBrand.current.palette.brand600
+    val Brand800: Color get() = ActiveBrand.current.palette.brand800
 
-    val AmberCoin = Color(0xFFBA7517)
-    val AmberSoft = Color(0xFFFAEEDA)
+    val AmberCoin: Color get() = ActiveBrand.current.palette.amberCoin
+    val AmberSoft: Color get() = ActiveBrand.current.palette.amberSoft
 
-    val Cream = Color(0xFFF1EFE8)
-    val Background = Color(0xFFFAF8F1)
-    val Ink = Color(0xFF1F2A14)
-    val InkMuted = Color(0xFF5C6B4A)
-    val InkSoft = Color(0xFF8A9377)
+    val Cream: Color get() = ActiveBrand.current.palette.cream
+    val Background: Color get() = ActiveBrand.current.palette.background
+    val Ink: Color get() = ActiveBrand.current.palette.ink
+    val InkMuted: Color get() = ActiveBrand.current.palette.inkMuted
+    val InkSoft: Color get() = ActiveBrand.current.palette.inkSoft
 
-    val Error = Color(0xFFE24B4A)
-    val Warning = Color(0xFFE2A04A)
+    val Error: Color get() = ActiveBrand.current.palette.error
+    val Warning: Color get() = ActiveBrand.current.palette.warning
 }

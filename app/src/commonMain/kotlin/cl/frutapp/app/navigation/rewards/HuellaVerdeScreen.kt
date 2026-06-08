@@ -50,9 +50,9 @@ import cl.frutapp.app.data.StreakStore
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.theme.FrutAppColors
+import cl.frutapp.app.ui.theme.brandLogoWhite
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.huella_verde
-import frutapp.app.generated.resources.logo_white
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
 
@@ -139,8 +139,8 @@ private fun HeroCard(recic: Int, gramos: Int, coins: Int, ahorrado: Int) {
             // Marca top-left + label top-right
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Image(
-                    painter = painterResource(Res.drawable.logo_white),
-                    contentDescription = "FrutApp",
+                    painter = painterResource(brandLogoWhite()),
+                    contentDescription = null,
                     contentScale = ContentScale.FillHeight,
                     modifier = Modifier.height(20.dp)
                 )
