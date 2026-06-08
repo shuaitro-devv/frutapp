@@ -88,11 +88,19 @@ import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.components.ProductCard
 import cl.frutapp.app.ui.theme.FrutAppColors
+import cl.frutapp.app.ui.theme.BrandCatalogs
+import cl.frutapp.app.ui.theme.BrandProduct
 import cl.frutapp.app.ui.theme.LocalBrand
+import cl.frutapp.app.ui.theme.SofrucoBrand
+import cl.frutapp.app.ui.theme.brandProductDrawable
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.banner_frescos
 import frutapp.app.generated.resources.banner_fruit
 import frutapp.app.generated.resources.manzana_roja
+import frutapp.app.generated.resources.sofruco_cajas_naranjas_15_kilos
+import frutapp.app.generated.resources.sofruco_jugo_de_naranja_3_litros_formato_bag_in_box
+import frutapp.app.generated.resources.sofruco_la_palma_reserva_carmenere_6_unidades
+import frutapp.app.generated.resources.sofruco_nuevo_wellmix_energia_150_gr_1_unidad
 import frutapp.app.generated.resources.banner_frutcoins
 import frutapp.app.generated.resources.canasta_frutas
 import frutapp.app.generated.resources.cilantro
@@ -112,10 +120,21 @@ class HomeScreen : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val brand = LocalBrand.current
         var selectedTab by remember { mutableStateOf(FrutTab.INICIO) }
-        // Catálogo real desde el backend; si falla la red, queda el mock como fallback.
-        var destacados by remember { mutableStateOf(DemoCatalog.destacados) }
-        LaunchedEffect(Unit) {
+        // Catálogo: en modo FrutApp viene del backend (real); en modo white-label
+        // (Sofruco) viene de [BrandCatalogs] hardcoded para que la app demo
+        // muestre productos del sponsor sin tocar el backend.
+        var destacados by remember(brand.id) {
+            mutableStateOf(
+                if (brand.id == SofrucoBrand.id)
+                    BrandCatalogs.sofrucoProducts.take(6).map { it.toProductoSofruco() }
+                else
+                    DemoCatalog.destacados
+            )
+        }
+        LaunchedEffect(brand.id) {
+            if (brand.id == SofrucoBrand.id) return@LaunchedEffect
             runCatching { CatalogApi().products() }
                 .onSuccess { dtos -> if (dtos.isNotEmpty()) destacados = dtos.map { it.toProducto() }.take(6) }
                 .onFailure { e -> cl.frutapp.app.ui.ErrorReporter.report(screen = "Home", action = "load_catalog", error = e) }
@@ -403,15 +422,29 @@ private data class BannerSlide(
 
 @Composable
 private fun HeroCarousel(onOfertas: () -> Unit, onFrutCoins: () -> Unit, onCanastas: () -> Unit, onReyVegetal: () -> Unit, modifier: Modifier = Modifier) {
-    val coinsName = LocalBrand.current.coinsName
-    val slides = remember(onOfertas, onFrutCoins, onCanastas, onReyVegetal, coinsName) {
-        listOf(
-            BannerSlide("Frescura que se nota,", "calidad que te acompaña", "Ver ofertas", Res.drawable.banner_frescos, 180.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas, fullBg = true),
-            BannerSlide("Hasta 40% de", "descuento esta semana", "Ver ofertas", Res.drawable.banner_fruit, 150.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas, fullBg = true),
-            BannerSlide("Mi canasta del mes,", "1 toque para volver a pedir", "Mis canastas", Res.drawable.canasta_frutas, 150.dp, FrutAppColors.Brand800, FrutAppColors.Brand400, onCanastas, fullBg = true),
-            BannerSlide("👑 Rey Vegetal,", "compra gratis al mejor reciclador", "Ver ranking", Res.drawable.canasta_frutas, 120.dp, FrutAppColors.Brand800, FrutAppColors.AmberCoin, onReyVegetal, fullBg = true),
-            BannerSlide("Junta $coinsName", "en cada compra", "Ver $coinsName", Res.drawable.banner_frutcoins, 120.dp, FrutAppColors.Brand800, FrutAppColors.Brand400, onFrutCoins, fullBg = true)
-        )
+    val brand = LocalBrand.current
+    val coinsName = brand.coinsName
+    val slides = remember(onOfertas, onFrutCoins, onCanastas, onReyVegetal, coinsName, brand.id) {
+        if (brand.id == SofrucoBrand.id) {
+            // Slides Sofruco: cajas premium, fruta de origen, viña La Rosa y Club.
+            // Las imagenes son productos hero del scrape — fotos de alta calidad
+            // con la marca de Sofruco bien visible.
+            listOf(
+                BannerSlide("Cosecha de origen,", "directo desde el campo", "Ver fruta", Res.drawable.sofruco_cajas_naranjas_15_kilos, 160.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas, fullBg = true),
+                BannerSlide("Cajas regalo Wellmix,", "frutos secos premium", "Ver cajas", Res.drawable.sofruco_nuevo_wellmix_energia_150_gr_1_unidad, 160.dp, FrutAppColors.Brand800, FrutAppColors.Brand400, onCanastas, fullBg = true),
+                BannerSlide("Jugos 100% naturales", "sin azucar añadida", "Ver jugos", Res.drawable.sofruco_jugo_de_naranja_3_litros_formato_bag_in_box, 160.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas, fullBg = true),
+                BannerSlide("Viña La Rosa,", "200 años de tradición", "Ver vinos", Res.drawable.sofruco_la_palma_reserva_carmenere_6_unidades, 160.dp, FrutAppColors.Brand800, FrutAppColors.AmberCoin, onCanastas, fullBg = true),
+                BannerSlide("Club Sofruco", "beneficios en cada compra", "Ver $coinsName", Res.drawable.banner_frutcoins, 120.dp, FrutAppColors.Brand800, FrutAppColors.Brand400, onFrutCoins, fullBg = true)
+            )
+        } else {
+            listOf(
+                BannerSlide("Frescura que se nota,", "calidad que te acompaña", "Ver ofertas", Res.drawable.banner_frescos, 180.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas, fullBg = true),
+                BannerSlide("Hasta 40% de", "descuento esta semana", "Ver ofertas", Res.drawable.banner_fruit, 150.dp, FrutAppColors.Brand800, FrutAppColors.Brand600, onOfertas, fullBg = true),
+                BannerSlide("Mi canasta del mes,", "1 toque para volver a pedir", "Mis canastas", Res.drawable.canasta_frutas, 150.dp, FrutAppColors.Brand800, FrutAppColors.Brand400, onCanastas, fullBg = true),
+                BannerSlide("👑 Rey Vegetal,", "compra gratis al mejor reciclador", "Ver ranking", Res.drawable.canasta_frutas, 120.dp, FrutAppColors.Brand800, FrutAppColors.AmberCoin, onReyVegetal, fullBg = true),
+                BannerSlide("Junta $coinsName", "en cada compra", "Ver $coinsName", Res.drawable.banner_frutcoins, 120.dp, FrutAppColors.Brand800, FrutAppColors.Brand400, onFrutCoins, fullBg = true)
+            )
+        }
     }
     val realCount = slides.size
     // Carrusel "infinito": muchas páginas virtuales pero ACOTADAS (no Int.MAX_VALUE, que
@@ -575,3 +608,19 @@ private fun CategoriesRow(modifier: Modifier = Modifier, onCategoria: (Categoria
         }
     }
 }
+
+/** Mapea un producto del catalogo white-label Sofruco al modelo [Producto] que
+ *  consume el resto de la app (ProductCard, CartStore, etc). La imagen se
+ *  resuelve via [brandProductDrawable] (con asset real scrapeado); si por algun
+ *  motivo el imageKey no matchea (deberia siempre matchear), cae a una manzana
+ *  como placeholder. La categoria se forza a FRUTAS porque el flujo Sofruco
+ *  no usa el filtro por categoria del Home. */
+private fun BrandProduct.toProductoSofruco(): Producto = Producto(
+    id = id,
+    nombre = nombre,
+    precioClp = precioCLP,
+    unidad = unidad,
+    categoria = Categoria.FRUTAS,
+    imagen = brandProductDrawable(imageKey) ?: Res.drawable.manzana_roja,
+    organico = false
+)
