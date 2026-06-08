@@ -33,6 +33,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import cl.frutapp.app.ui.PlatformBackHandler
 import cl.frutapp.app.ui.theme.FrutAppColors
+import cl.frutapp.app.ui.theme.LocalBrand
+import cl.frutapp.app.ui.theme.SofrucoBrand
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.hoja_decorativa
 import frutapp.app.generated.resources.limon
@@ -64,23 +66,29 @@ fun AuthScaffold(
     // VerifyCodeScreen 'salir del limbo' no se disparaba con el back del sistema, dejando
     // al usuario atrapado: cierra la app, abre, Splash lo vuelve a meter a VerifyCode).
     PlatformBackHandler(enabled = showBackButton, onBack = onBack)
+    // Brand: las decoraciones (hojas + tira de frutas inferior) son patrimonio
+    // visual FrutApp — no aplican a Sofruco ni a futuros brands. Se ocultan
+    // cuando el brand activo no es FrutApp para que el header quede limpio.
+    val esFrutApp = LocalBrand.current.id != SofrucoBrand.id
     Box(modifier = modifier.fillMaxSize().background(Color.White)) {
-        // Hojas decorativas — pegadas a las esquinas superiores y empujadas hacia arriba
-        // para no cruzarse con el logo (el logo es transparente y el verde se confundía).
-        Image(
-            painter = painterResource(Res.drawable.hoja_decorativa),
-            contentDescription = null,
-            modifier = Modifier.align(Alignment.TopEnd).size(132.dp).offset(x = 14.dp, y = (-30).dp),
-            contentScale = ContentScale.Fit
-        )
-        Image(
-            painter = painterResource(Res.drawable.hoja_decorativa),
-            contentDescription = null,
-            modifier = Modifier.align(Alignment.TopStart).size(90.dp).offset(x = (-8).dp, y = (-20).dp).scale(scaleX = -1f, scaleY = 1f),
-            contentScale = ContentScale.Fit
-        )
-
-        BottomFruits(modifier = Modifier.align(Alignment.BottomCenter))
+        if (esFrutApp) {
+            // Hojas decorativas — pegadas a las esquinas superiores y empujadas hacia
+            // arriba para no cruzarse con el logo (el logo es transparente y el verde
+            // se confundía).
+            Image(
+                painter = painterResource(Res.drawable.hoja_decorativa),
+                contentDescription = null,
+                modifier = Modifier.align(Alignment.TopEnd).size(132.dp).offset(x = 14.dp, y = (-30).dp),
+                contentScale = ContentScale.Fit
+            )
+            Image(
+                painter = painterResource(Res.drawable.hoja_decorativa),
+                contentDescription = null,
+                modifier = Modifier.align(Alignment.TopStart).size(90.dp).offset(x = (-8).dp, y = (-20).dp).scale(scaleX = -1f, scaleY = 1f),
+                contentScale = ContentScale.Fit
+            )
+            BottomFruits(modifier = Modifier.align(Alignment.BottomCenter))
+        }
 
         Column(
             modifier = Modifier
@@ -89,11 +97,15 @@ fun AuthScaffold(
                 .padding(horizontal = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(112.dp))
+            // Top spacing mayor en Sofruco para que el logo (mas ancho con la
+            // mancuerna Fundo Sofruco + Vina La Rosa) respire del status bar.
+            Spacer(Modifier.height(if (esFrutApp) 112.dp else 96.dp))
             FrutLogo()
-            Spacer(Modifier.height(28.dp))
+            // Mas espacio entre logo y titulo para que el bloque "Bienvenido" no
+            // quede pegado al logo Sofruco (que es horizontal y deja menos aire).
+            Spacer(Modifier.height(if (esFrutApp) 28.dp else 40.dp))
             content()
-            Spacer(Modifier.height(130.dp))
+            Spacer(Modifier.height(if (esFrutApp) 130.dp else 60.dp))
         }
 
         if (showBackButton) {

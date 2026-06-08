@@ -70,10 +70,10 @@ private val PAGINAS = listOf(
     OnboardPage(
         Res.drawable.mascota_palta,
         "Soy Palta",
-        "Te traigo lo más fresco de la feria, directo a tu mesa.",
+        "Te traigo lo más fresco, directo a tu mesa.",
         listOf(
             OnboardChip(Icons.Filled.Spa, "Fresco"),
-            OnboardChip(Icons.Filled.Storefront, "De feria"),
+            OnboardChip(Icons.Filled.Storefront, "De origen"),
             OnboardChip(Icons.Filled.Schedule, "Rápido")
         )
     ),
