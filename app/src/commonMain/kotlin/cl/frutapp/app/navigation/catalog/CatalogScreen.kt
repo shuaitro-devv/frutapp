@@ -64,7 +64,14 @@ import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.components.ProductCard
 import androidx.compose.runtime.LaunchedEffect
+import cl.frutapp.app.ui.theme.BrandCatalogs
+import cl.frutapp.app.ui.theme.BrandProduct
 import cl.frutapp.app.ui.theme.FrutAppColors
+import cl.frutapp.app.ui.theme.LocalBrand
+import cl.frutapp.app.ui.theme.SofrucoBrand
+import cl.frutapp.app.ui.theme.brandProductDrawable
+import frutapp.app.generated.resources.Res
+import frutapp.app.generated.resources.manzana_roja
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 
 private data class Filtro(val label: String, val match: (Producto) -> Boolean)
@@ -84,23 +91,45 @@ class CatalogScreen : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        var productos by remember { mutableStateOf(DemoCatalog.productos) }
-        LaunchedEffect(Unit) {
+        val brand = LocalBrand.current
+        val esSofruco = brand.id == SofrucoBrand.id
+        // Productos: en FrutApp arrancan con el mock y se reemplazan por el backend
+        // cuando contesta; en Sofruco salen del catalogo brand mapeado a Producto
+        // (con brandCategoryId seteado para que los filtros por categoria funcionen).
+        var productos by remember(brand.id) {
+            mutableStateOf(
+                if (esSofruco) BrandCatalogs.sofrucoProducts.map { it.toProductoSofrucoLocal() }
+                else DemoCatalog.productos
+            )
+        }
+        LaunchedEffect(brand.id) {
+            if (esSofruco) return@LaunchedEffect
             runCatching { CatalogApi().products() }
                 .onSuccess { dtos -> if (dtos.isNotEmpty()) productos = dtos.map { it.toProducto() } }
                 .onFailure { e -> cl.frutapp.app.ui.ErrorReporter.report(screen = "Catalog", action = "load_catalog", error = e) }
         }
 
-        val filtros = remember {
-            listOf(
-                Filtro("Todos") { true },
-                Filtro("Frutas") { it.categoria == Categoria.FRUTAS },
-                Filtro("Verduras") { it.categoria == Categoria.VERDURAS },
-                Filtro("Hierbas") { it.categoria == Categoria.HIERBAS },
-                Filtro("Orgánicos") { it.organico }
-            )
+        val filtros = remember(brand.id) {
+            if (esSofruco) {
+                // Filtros Sofruco: "Todos" + las 6 categorias del brand.
+                val cats = BrandCatalogs.categoriesFor(brand)
+                buildList {
+                    add(Filtro("Todos") { true })
+                    cats.forEach { c ->
+                        add(Filtro(c.label) { it.brandCategoryId == c.id })
+                    }
+                }
+            } else {
+                listOf(
+                    Filtro("Todos") { true },
+                    Filtro("Frutas") { it.categoria == Categoria.FRUTAS },
+                    Filtro("Verduras") { it.categoria == Categoria.VERDURAS },
+                    Filtro("Hierbas") { it.categoria == Categoria.HIERBAS },
+                    Filtro("Orgánicos") { it.organico }
+                )
+            }
         }
-        var filtroSel by remember { mutableStateOf(0) }
+        var filtroSel by remember(brand.id) { mutableStateOf(0) }
         var query by remember { mutableStateOf("") }
         var orden by remember { mutableStateOf(OrdenCatalogo.RECOMENDADOS) }
         var soloOrganicos by remember { mutableStateOf(false) }
@@ -128,7 +157,11 @@ class CatalogScreen : Screen {
                 ) {
                     Column {
                         Text("Catálogo", color = FrutAppColors.Brand800, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                        Text("Frescura seleccionada para ti", color = FrutAppColors.InkMuted, fontSize = 13.sp)
+                        Text(
+                            text = if (esSofruco) "Productos de origen ${brand.displayName}" else "Frescura seleccionada para ti",
+                            color = FrutAppColors.InkMuted,
+                            fontSize = 13.sp
+                        )
                     }
                     Box(modifier = Modifier.size(44.dp)) {
                         Box(
@@ -242,6 +275,7 @@ class CatalogScreen : Screen {
                         onOrden = { orden = it },
                         soloOrganicos = soloOrganicos,
                         onSoloOrganicos = { soloOrganicos = it },
+                        mostrarOrganicos = !esSofruco,
                         onLimpiar = {
                             orden = OrdenCatalogo.RECOMENDADOS
                             soloOrganicos = false
@@ -260,6 +294,7 @@ private fun FiltrosSheet(
     onOrden: (OrdenCatalogo) -> Unit,
     soloOrganicos: Boolean,
     onSoloOrganicos: (Boolean) -> Unit,
+    mostrarOrganicos: Boolean = true,
     onLimpiar: () -> Unit,
     onAplicar: () -> Unit
 ) {
@@ -307,36 +342,38 @@ private fun FiltrosSheet(
             }
         }
 
-        Text(
-            "Filtrar por",
-            color = FrutAppColors.Brand800,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 14.dp, bottom = 4.dp)
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().clickable { onSoloOrganicos(!soloOrganicos) }.padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Solo orgánicos", color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "Productos con certificación o de huerto familiar.",
-                    color = FrutAppColors.InkMuted,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(top = 2.dp)
+        if (mostrarOrganicos) {
+            Text(
+                "Filtrar por",
+                color = FrutAppColors.Brand800,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 14.dp, bottom = 4.dp)
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { onSoloOrganicos(!soloOrganicos) }.padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Solo orgánicos", color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Productos con certificación o de huerto familiar.",
+                        color = FrutAppColors.InkMuted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+                Switch(
+                    checked = soloOrganicos,
+                    onCheckedChange = onSoloOrganicos,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = FrutAppColors.Brand600,
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = FrutAppColors.InkSoft
+                    )
                 )
             }
-            Switch(
-                checked = soloOrganicos,
-                onCheckedChange = onSoloOrganicos,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = FrutAppColors.Brand600,
-                    uncheckedThumbColor = Color.White,
-                    uncheckedTrackColor = FrutAppColors.InkSoft
-                )
-            )
         }
 
         Spacer(Modifier.height(20.dp))
@@ -391,3 +428,17 @@ private fun CategoriaChip(label: String, selected: Boolean, onClick: () -> Unit)
         Text(label, color = if (selected) Color.White else FrutAppColors.Brand800, fontSize = 13.sp, fontWeight = FontWeight.Medium)
     }
 }
+
+/** Mapper local al modelo [Producto]; igual al de Home y BrandCategoryScreen.
+ *  Se queda local para no exportar helpers de mapping desde el modulo theme,
+ *  que es para tokens visuales/branding, no para data. */
+private fun BrandProduct.toProductoSofrucoLocal(): Producto = Producto(
+    id = id,
+    nombre = nombre,
+    precioClp = precioCLP,
+    unidad = unidad,
+    categoria = Categoria.FRUTAS,
+    imagen = brandProductDrawable(imageKey) ?: Res.drawable.manzana_roja,
+    organico = false,
+    brandCategoryId = categoriaId
+)

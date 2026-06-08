@@ -132,7 +132,8 @@ private fun BrandProduct.toProducto(): Producto = Producto(
     unidad = unidad,
     categoria = Categoria.FRUTAS,
     imagen = brandProductDrawable(imageKey) ?: Res.drawable.manzana_roja,
-    organico = false
+    organico = false,
+    brandCategoryId = categoriaId
 )
 
 private fun formatCLP(monto: Int): String {

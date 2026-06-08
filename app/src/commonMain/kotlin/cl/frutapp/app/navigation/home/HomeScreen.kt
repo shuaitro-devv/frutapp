@@ -676,5 +676,6 @@ private fun BrandProduct.toProductoSofruco(): Producto = Producto(
     unidad = unidad,
     categoria = Categoria.FRUTAS,
     imagen = brandProductDrawable(imageKey) ?: Res.drawable.manzana_roja,
-    organico = false
+    organico = false,
+    brandCategoryId = categoriaId
 )

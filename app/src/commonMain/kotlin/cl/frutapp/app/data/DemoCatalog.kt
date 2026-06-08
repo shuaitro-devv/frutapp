@@ -44,7 +44,12 @@ data class Producto(
     val unidad: String,
     val categoria: Categoria,
     val imagen: DrawableResource,
-    val organico: Boolean = false
+    val organico: Boolean = false,
+    /** Solo aplica al white-label Sofruco. Cuando el catalogo viene de un brand
+     *  alternativo, [categoria] queda forzada a FRUTAS por compatibilidad con el
+     *  enum, y la categoria real (jugos/aguas/fruta/cajas/secos/vinos) vive aca
+     *  para que los filtros de catalogo brand puedan match. */
+    val brandCategoryId: String? = null
 )
 
 object DemoCatalog {
