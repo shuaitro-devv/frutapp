@@ -8,6 +8,8 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import cl.frutapp.app.MainActivity
 import cl.frutapp.app.R
+import cl.frutapp.app.data.NotificacionesStore
+import cl.frutapp.app.data.TipoNotificacion
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
@@ -44,6 +46,20 @@ class FrutAppMessagingService : FirebaseMessagingService() {
         val body = message.notification?.body ?: message.data["body"] ?: ""
         val orderId = message.data["orderId"]
         showNotification(applicationContext, title, body, orderId)
+        // Persiste tambien en el inbox in-app: la pantalla Notificaciones lee de
+        // NotificacionesStore. Mapea el data["type"] del dispatcher al enum local
+        // para que el icono de cada notif tenga sentido (caja para pedido, regalo
+        // para promo, etc). Defecto a PEDIDO porque hoy todos los push del backend
+        // son de tipo order_status / picker_new_order / repartidor_new_dispatch.
+        val tipo = when (message.data["type"]) {
+            "picker_new_order", "repartidor_new_dispatch", "order_status" -> TipoNotificacion.PEDIDO
+            "coins" -> TipoNotificacion.COINS
+            "recicla" -> TipoNotificacion.RECICLA
+            "racha" -> TipoNotificacion.RACHA
+            "promo" -> TipoNotificacion.PROMO
+            else -> TipoNotificacion.PEDIDO
+        }
+        NotificacionesStore.add(titulo = title, detalle = body, tipo = tipo)
     }
 }
 

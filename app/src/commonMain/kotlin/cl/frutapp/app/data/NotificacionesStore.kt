@@ -34,6 +34,17 @@ object NotificacionesStore {
 
     val noLeidas: Int get() = items.count { !it.leida }
 
+    /**
+     * Inserta una notificacion nueva al inicio de la lista (mas reciente arriba).
+     * Llamada desde [FrutAppMessagingService.onMessageReceived] para que los push
+     * que llegan por FCM tambien queden visibles en la pantalla de Notificaciones,
+     * no solo en la barra de Android. El id se autoasigna sumando 1 al max actual.
+     */
+    fun add(titulo: String, detalle: String, tipo: TipoNotificacion = TipoNotificacion.PEDIDO) {
+        val nuevoId = (items.maxOfOrNull { it.id } ?: 0) + 1
+        items.add(0, Notificacion(nuevoId, tipo, titulo, detalle, "ahora", leida = false))
+    }
+
     fun marcarTodasLeidas() {
         val nuevos = items.map { it.copy(leida = true) }
         items.clear()

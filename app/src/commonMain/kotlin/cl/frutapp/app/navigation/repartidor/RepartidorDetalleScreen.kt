@@ -416,8 +416,15 @@ private fun BulletText(t: String) {
 
 @Composable
 internal fun EstadoStepper(activo: Int) {
-    // 5 etapas: Pedido preparado / Retirado / En ruta / En espera / Entregado.
-    val etapas = listOf("Pedido preparado", "Retirado", "En ruta", "En espera", "Entregado")
+    // 5 etapas alineadas al flujo del repartidor:
+    //  0 Pedido preparado (cliente pago, stock confirmado por el picker)
+    //  1 Retirado          (el repartidor lo retiro de la sucursal)
+    //  2 En ruta           (camino al cliente)
+    //  3 En destino        (llego, esta entregando — antes era "En espera"
+    //                       que sonaba pasivo y no calzaba con la pantalla de
+    //                       Confirmar entrega donde se usa con activo=3)
+    //  4 Entregado         (codigo verificado / firma / foto)
+    val etapas = listOf("Pedido preparado", "Retirado", "En ruta", "En destino", "Entregado")
     Column(
         modifier = Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp))
             .border(1.dp, FrutAppColors.Brand100, RoundedCornerShape(14.dp)).padding(14.dp)
