@@ -24,7 +24,11 @@ import cl.frutapp.backend.modules.rbac.RbacRepository
 import cl.frutapp.backend.plugins.configureCors
 import cl.frutapp.backend.plugins.configureDatabases
 import cl.frutapp.backend.modules.audit.UserEventService
+import cl.frutapp.backend.modules.notifications.DeviceTokenRepository
+import cl.frutapp.backend.modules.notifications.FcmSender
+import cl.frutapp.backend.modules.notifications.NotificationDispatcher
 import cl.frutapp.backend.modules.staff.StaffOrderService
+import java.io.File
 import cl.frutapp.backend.plugins.configureMonitoring
 import cl.frutapp.backend.plugins.configureRouting
 import cl.frutapp.backend.plugins.configureSecurity
@@ -43,6 +47,32 @@ import kotlinx.coroutines.runBlocking
  * servicios → seguridad → rutas) es explícito y se mantiene legible/testeable.
  */
 fun main(args: Array<String>) = EngineMain.main(args)
+
+/**
+ * Construye un [FcmSender] si la env FIREBASE_SERVICE_ACCOUNT_JSON esta presente.
+ * Acepta dos formatos:
+ *  - Inline JSON: el contenido directo de la service account (envuelto entre {...}).
+ *  - Path a archivo: cualquier valor que no empiece con '{' se trata como ruta de
+ *    archivo absoluto/relativo y se lee del disco.
+ *
+ * Si la env no esta o el contenido es invalido, devuelve null y FCM queda
+ * deshabilitado — el resto del backend sigue funcionando normal.
+ */
+private fun loadFcmSender(app: Application): FcmSender? {
+    val raw = System.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")?.trim()
+    if (raw.isNullOrBlank()) return null
+    val json = if (raw.startsWith("{")) raw
+    else runCatching { File(raw).readText(Charsets.UTF_8) }
+        .getOrElse {
+            app.environment.log.warn("FCM: no pude leer service account desde {} ({})", raw, it.message)
+            return null
+        }
+    return runCatching { FcmSender(json) }
+        .getOrElse {
+            app.environment.log.warn("FCM: service account inválida ({})", it.message)
+            null
+        }
+}
 
 fun Application.module() {
     val jwtConfig = JwtConfig.from(environment.config)
@@ -85,7 +115,22 @@ fun Application.module() {
     )
     val catalogRepository = CatalogRepository()
     val catalogService = CatalogService(catalogRepository)
-    val orderService = OrderService(OrderRepository(), catalogRepository, FrutCoinsRepository())
+    val orderRepository = OrderRepository()
+    // FCM: opcional. Si FIREBASE_SERVICE_ACCOUNT_JSON (inline JSON o path a archivo)
+    // no esta definido, el dispatcher queda en modo no-op y los push events se
+    // descartan silenciosamente. Permite que el backend siga funcionando sin Firebase
+    // (entornos de test, CI, dev local sin secret).
+    val deviceTokenRepository = DeviceTokenRepository()
+    val fcmSender: FcmSender? = loadFcmSender(this)
+    val notificationDispatcher = NotificationDispatcher(orderRepository, deviceTokenRepository, fcmSender)
+    val orderService = OrderService(
+        orderRepository,
+        catalogRepository,
+        FrutCoinsRepository(),
+        onTransitionFired = { id, from, to ->
+            notificationDispatcher.onOrderTransition(id, from, to)
+        }
+    )
     val adminUserService = AdminUserService(
         UserRepository(), rbacRepository, PasswordResetTokenRepository(), tokenService, emailSender
     )
@@ -93,7 +138,10 @@ fun Application.module() {
     val staffOrderService = StaffOrderService(userEventService)
 
     configureSecurity(jwtConfig, tokenService)
-    configureRouting(authService, catalogService, orderService, adminUserService, staffOrderService, userEventService)
+    configureRouting(
+        authService, catalogService, orderService,
+        adminUserService, staffOrderService, userEventService, deviceTokenRepository
+    )
 
     // Refresca la config de negocio cada 60s (cambios en app_config sin redeploy).
     launch {
@@ -104,6 +152,12 @@ fun Application.module() {
             runCatching { PermissionCache.refresh(rbacRepository) }
                 .onFailure { environment.log.warn("Refresh de permisos falló", it) }
         }
+    }
+
+    if (fcmSender != null) {
+        environment.log.info("FCM: push notifications HABILITADAS")
+    } else {
+        environment.log.info("FCM: sin service account → push deshabilitado (define FIREBASE_SERVICE_ACCOUNT_JSON)")
     }
 
     // Demo: auto-avance de pedidos (gated por env DEMO_AUTO_ADVANCE). En producción real = false.

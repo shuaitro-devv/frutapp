@@ -20,7 +20,10 @@ import kotlin.random.Random
 class OrderService(
     private val orders: OrderRepository,
     private val catalog: CatalogRepository,
-    private val frutCoins: FrutCoinsRepository
+    private val frutCoins: FrutCoinsRepository,
+    /** Hook opcional: fired tras cada transicion exitosa, fire-and-forget. Null
+     *  cuando FCM no esta configurado (sin service account) o en tests. */
+    private val onTransitionFired: ((orderId: java.util.UUID, from: OrderStatus, to: OrderStatus) -> Unit)? = null
 ) {
 
     suspend fun create(userId: UUID, req: CreateOrderRequest): OrderDto {
@@ -152,6 +155,11 @@ class OrderService(
             else -> null
         }
         orders.applyTransition(id, from, to, actor, actorUserId, nota, totalFinal, payment)
+        // Hook FCM al final: el push se dispara DESPUES de que la transicion esta
+        // persistida (no antes), asi un push nunca se entrega sin que la BD lo refleje.
+        // onTransitionFired es fire-and-forget; cualquier excepcion adentro la traga
+        // su propio scope, no bloquea ni revienta esta funcion.
+        onTransitionFired?.invoke(id, from, to)
     }
 
     private fun parseUuid(value: String, msg: String): UUID =

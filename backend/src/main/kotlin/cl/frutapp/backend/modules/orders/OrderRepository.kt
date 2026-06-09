@@ -201,6 +201,15 @@ class OrderRepository {
             ?.let { OrderStatus.parse(it[OrdersTable.status]) }
     }
 
+    /** Datos minimos para componer notificaciones push: dueno + numero visible. */
+    suspend fun findOwnerAndNumero(id: UUID): Pair<UUID, String>? = dbQuery {
+        OrdersTable
+            .select(OrdersTable.userId, OrdersTable.numero)
+            .where { OrdersTable.id eq id }
+            .singleOrNull()
+            ?.let { it[OrdersTable.userId] to it[OrdersTable.numero] }
+    }
+
     /** Pedidos activos (no borrados) con su estado, para el auto-avance de demo. */
     suspend fun listActive(): List<Pair<UUID, OrderStatus>> = dbQuery {
         OrdersTable.selectAll().where { OrdersTable.deletedAt.isNull() }
