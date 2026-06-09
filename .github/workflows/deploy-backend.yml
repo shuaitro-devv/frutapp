@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  # Re-trigger manual desde la pestaña Actions (util tras agregar/rotar un secret
+  # sin necesidad de un commit trivial). Ver: Actions → Deploy Backend → Run workflow.
+  workflow_dispatch:
     paths:
       - 'backend/**'
       - 'shared/**'
