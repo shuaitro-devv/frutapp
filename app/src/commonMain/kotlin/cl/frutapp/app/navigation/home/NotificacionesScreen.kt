@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.NotificacionesStore
 import cl.frutapp.app.data.remote.NotificationApi
 import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.theme.FrutAppColors
@@ -66,6 +67,9 @@ class NotificacionesScreen : Screen {
                 .onSuccess { resp ->
                     items = resp.items
                     loading = false
+                    // Vacia el badge local: el inbox ya esta abierto, no hace
+                    // falta seguir mostrando los push como pendientes.
+                    NotificacionesStore.resetAll()
                     // Marcar todas leídas en background — no bloquea el render.
                     if (resp.unreadCount > 0) {
                         scope.launch {

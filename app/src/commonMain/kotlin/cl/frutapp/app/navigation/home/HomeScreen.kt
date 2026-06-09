@@ -143,6 +143,19 @@ class HomeScreen : Screen {
                 .onSuccess { dtos -> if (dtos.isNotEmpty()) destacados = dtos.map { it.toProducto() }.take(6) }
                 .onFailure { e -> cl.frutapp.app.ui.ErrorReporter.report(screen = "Home", action = "load_catalog", error = e) }
         }
+        // Refresca el badge de la campanita: lee unreadCount real del backend.
+        // Sin esto el badge mostraria solo lo que llego via FCM en runtime
+        // (cero al cold-start tras force-stop), aunque el backend tenga notifs
+        // pendientes esperando al usuario.
+        LaunchedEffect(Unit) {
+            runCatching { cl.frutapp.app.data.remote.NotificationApi().list() }
+                .onSuccess { resp -> cl.frutapp.app.data.NotificacionesStore.updateBackendUnread(resp.unreadCount) }
+                .onFailure { e ->
+                    if (e !is kotlinx.coroutines.CancellationException) {
+                        cl.frutapp.app.ui.ErrorReporter.report(screen = "Home", action = "load_unread_count", error = e)
+                    }
+                }
+        }
 
         Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(

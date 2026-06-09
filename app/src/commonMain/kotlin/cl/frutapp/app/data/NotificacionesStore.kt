@@ -1,5 +1,8 @@
 package cl.frutapp.app.data
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
 
 enum class TipoNotificacion(val emoji: String) {
@@ -20,45 +23,61 @@ data class Notificacion(
 )
 
 /**
- * Notificaciones del usuario (dummy en memoria). En producción vendrían por push (FCM)
- * + endpoint de inbox. Para el demo arrancan con 3 sin leer para que el badge muestre algo.
+ * Cache LIVE de notificaciones en memoria — fuente de verdad es el backend
+ * (`GET /v1/notifications`). Sirve solo para que el BADGE de la campanita
+ * se actualice instantáneo cuando llega un push por FCM, sin esperar al
+ * próximo refresh contra el server.
+ *
+ * Dos contadores:
+ *  - [backendUnread]: lo que devolvió el último GET (refresh manual).
+ *  - delta in-memory: las notifs nuevas que llegaron via FCM después del refresh.
+ *
+ * [noLeidas] suma ambos para que el badge sea correcto sin importar el orden.
+ * Al entrar a [NotificacionesScreen] todo se marca leído server-side y se
+ * llama [resetAll] para vaciar el cache local.
  */
 object NotificacionesStore {
-    val items = mutableStateListOf<Notificacion>(
-        Notificacion(1, TipoNotificacion.PEDIDO, "Tu pedido está en camino", "Sale el repartidor desde Lo Valledor. Entrega entre 10:00-12:00.", "hace 5 min", leida = false),
-        Notificacion(2, TipoNotificacion.COINS, "¡Ganaste 50 FrutCoins!", "Por tu compra del jueves. Saldo total: 147 coins.", "hace 2 h", leida = false),
-        Notificacion(3, TipoNotificacion.RACHA, "🔥 12 días en racha verde", "Estás a 19 días del próximo nivel: Árbol.", "hace 1 día", leida = false),
-        Notificacion(4, TipoNotificacion.RECICLA, "Tu reciclaje fue validado", "390g de cartón al ciclo · +30 coins acreditados.", "hace 2 días", leida = true),
-        Notificacion(5, TipoNotificacion.PROMO, "🎁 -40% en frutas seleccionadas", "Solo hasta el domingo. Aprovecha la promo de fin de semana.", "hace 3 días", leida = true)
-    )
+    /** Notifs agregadas EN VIVO via FCM (no las del backend). Sirven solo para
+     *  el badge — la pantalla siempre consume el GET. */
+    val items = mutableStateListOf<Notificacion>()
 
-    val noLeidas: Int get() = items.count { !it.leida }
+    /** Snapshot del unreadCount que devolvió el ultimo `GET /v1/notifications`. */
+    var backendUnread by mutableStateOf(0)
+        private set
 
-    /**
-     * Inserta una notificacion nueva al inicio de la lista (mas reciente arriba).
-     * Llamada desde [FrutAppMessagingService.onMessageReceived] para que los push
-     * que llegan por FCM tambien queden visibles en la pantalla de Notificaciones,
-     * no solo en la barra de Android. El id se autoasigna sumando 1 al max actual.
-     */
+    /** Badge = lo que dijo el backend + lo que llegó en runtime después. */
+    val noLeidas: Int get() = backendUnread + items.count { !it.leida }
+
+    /** Sumá una notif que llegó por FCM. Llamado desde FrutAppMessagingService. */
     fun add(titulo: String, detalle: String, tipo: TipoNotificacion = TipoNotificacion.PEDIDO) {
         val nuevoId = (items.maxOfOrNull { it.id } ?: 0) + 1
         items.add(0, Notificacion(nuevoId, tipo, titulo, detalle, "ahora", leida = false))
+    }
+
+    /** Refresca el contador del badge desde el backend. Llamado al login y
+     *  cuando se vuelve a la home (sin entrar al inbox). Nombre con prefijo
+     *  `update` para no chocar con el setter implicito del `var` Compose. */
+    fun updateBackendUnread(count: Int) {
+        backendUnread = count
+    }
+
+    /** Limpia el cache local (las que llegaron por FCM ya no cuentan porque
+     *  el inbox se acaba de abrir). Llamado por NotificacionesScreen tras
+     *  recibir items del GET y disparar markAllRead. */
+    fun resetAll() {
+        items.clear()
+        backendUnread = 0
     }
 
     fun marcarTodasLeidas() {
         val nuevos = items.map { it.copy(leida = true) }
         items.clear()
         items.addAll(nuevos)
+        backendUnread = 0
     }
 
     fun reset() {
         items.clear()
-        items.addAll(
-            listOf(
-                Notificacion(1, TipoNotificacion.PEDIDO, "Tu pedido está en camino", "Sale el repartidor desde Lo Valledor. Entrega entre 10:00-12:00.", "hace 5 min", leida = false),
-                Notificacion(2, TipoNotificacion.COINS, "¡Ganaste 50 FrutCoins!", "Por tu compra del jueves. Saldo total: 147 coins.", "hace 2 h", leida = false),
-                Notificacion(3, TipoNotificacion.RACHA, "🔥 12 días en racha verde", "Estás a 19 días del próximo nivel: Árbol.", "hace 1 día", leida = false)
-            )
-        )
+        backendUnread = 0
     }
 }
