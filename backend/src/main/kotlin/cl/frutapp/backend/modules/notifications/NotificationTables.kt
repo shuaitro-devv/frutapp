@@ -20,3 +20,24 @@ object DeviceTokensTable : Table("device_token") {
     val updatedAt = timestamp("updated_at")
     override val primaryKey = PrimaryKey(id)
 }
+
+/**
+ * Inbox de notificaciones del usuario (V14). Cada push enviado via FCM se
+ * persiste primero acá para que la pantalla `NotificacionesScreen` lea de
+ * `GET /v1/notifications` y sea consistente entre devices (no del store
+ * local que se perdia al kill-cerrar la app).
+ *
+ * `data` queda como text (no jsonb tipado en Exposed) — basta para guardar
+ * un JSON con orderId/deltaCoins/etc. El front lo deserializa segun [type].
+ */
+object NotificationInboxTable : Table("notification") {
+    val id = uuid("id")
+    val userId = uuid("user_id")
+    val type = text("type")
+    val title = text("title")
+    val body = text("body")
+    val data = text("data").nullable()
+    val createdAt = timestamp("created_at")
+    val readAt = timestamp("read_at").nullable()
+    override val primaryKey = PrimaryKey(id)
+}

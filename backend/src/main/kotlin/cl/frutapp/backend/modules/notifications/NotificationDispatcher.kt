@@ -24,6 +24,7 @@ import java.util.UUID
 class NotificationDispatcher(
     private val orderRepo: OrderRepository,
     private val deviceTokens: DeviceTokenRepository,
+    private val inbox: NotificationInboxRepository,
     private val fcm: FcmSender?
 ) {
     private val logger = LoggerFactory.getLogger("NotificationDispatcher")
@@ -37,6 +38,21 @@ class NotificationDispatcher(
             runCatching {
                 val ownerInfo = orderRepo.findOwnerAndNumero(orderId) ?: return@launch
                 val (customerId, numero) = ownerInfo
+                val tituloFinal = mensaje.title
+                val cuerpoFinal = mensaje.body.replace("{numero}", numero)
+
+                // 1) Persistir en el inbox ANTES de enviar el push: asi la
+                //    pantalla Notificaciones de la app la muestra aunque el
+                //    FCM falle o el device no este registrado.
+                inbox.create(
+                    userId = customerId,
+                    type = "PEDIDO",
+                    title = tituloFinal,
+                    body = cuerpoFinal,
+                    data = """{"orderId":"$orderId","orderNumero":"$numero","status":"${to.name}"}"""
+                )
+
+                // 2) Enviar push.
                 val tokens = deviceTokens.listByUser(customerId)
                 if (tokens.isEmpty()) {
                     logger.debug("Sin tokens FCM para user {} (pedido {})", customerId, numero)
@@ -45,8 +61,8 @@ class NotificationDispatcher(
                 tokens.forEach { row ->
                     val msg = FcmMessage(
                         token = row.fcmToken,
-                        title = mensaje.title,
-                        body = mensaje.body.replace("{numero}", numero),
+                        title = tituloFinal,
+                        body = cuerpoFinal,
                         data = mapOf(
                             "type" to "order_status",
                             "orderId" to orderId.toString(),
@@ -76,16 +92,29 @@ class NotificationDispatcher(
      * Disparado desde `OrderService.create` tras persistir el pedido.
      */
     fun onOrderReadyForPickers(orderId: java.util.UUID, locationId: java.util.UUID, numero: String) {
-        if (fcm == null) return
         scope.launch {
             runCatching {
+                val titulo = "Nuevo pedido en cola"
+                val cuerpo = "Pedido $numero llegó a tu cola — está esperando un Seleccionador."
                 val tokens = deviceTokens.listTokensByRoleInLocation("picker", locationId)
                 if (tokens.isEmpty()) return@launch
+                // 1) Inbox por cada picker unico (un user puede tener varios tokens).
+                tokens.map { it.userId }.toSet().forEach { uid ->
+                    inbox.create(
+                        userId = uid,
+                        type = "PEDIDO",
+                        title = titulo,
+                        body = cuerpo,
+                        data = """{"orderId":"$orderId","orderNumero":"$numero","scope":"picker"}"""
+                    )
+                }
+                // 2) Push FCM (si esta habilitado).
+                if (fcm == null) return@launch
                 tokens.forEach { row ->
                     val msg = FcmMessage(
                         token = row.fcmToken,
-                        title = "Nuevo pedido en cola",
-                        body = "Pedido $numero llegó a tu cola — está esperando un Seleccionador.",
+                        title = titulo,
+                        body = cuerpo,
                         data = mapOf("type" to "picker_new_order", "orderId" to orderId.toString(), "orderNumero" to numero),
                         androidCollapseKey = "picker_new:$orderId",
                         androidChannelId = ANDROID_CHANNEL_STAFF
@@ -107,16 +136,27 @@ class NotificationDispatcher(
      * pedido pasa a STOCK_CONFIRMADO.
      */
     fun onDispatchReadyForRepartidores(orderId: java.util.UUID, locationId: java.util.UUID, numero: String) {
-        if (fcm == null) return
         scope.launch {
             runCatching {
+                val titulo = "Despacho listo para retiro"
+                val cuerpo = "Pedido $numero está listo. Pasa a buscarlo cuando puedas."
                 val tokens = deviceTokens.listTokensByRoleInLocation("repartidor", locationId)
                 if (tokens.isEmpty()) return@launch
+                tokens.map { it.userId }.toSet().forEach { uid ->
+                    inbox.create(
+                        userId = uid,
+                        type = "PEDIDO",
+                        title = titulo,
+                        body = cuerpo,
+                        data = """{"orderId":"$orderId","orderNumero":"$numero","scope":"repartidor"}"""
+                    )
+                }
+                if (fcm == null) return@launch
                 tokens.forEach { row ->
                     val msg = FcmMessage(
                         token = row.fcmToken,
-                        title = "Despacho listo para retiro",
-                        body = "Pedido $numero está listo. Pasa a buscarlo cuando puedas.",
+                        title = titulo,
+                        body = cuerpo,
                         data = mapOf("type" to "repartidor_new_dispatch", "orderId" to orderId.toString(), "orderNumero" to numero),
                         androidCollapseKey = "repartidor_new:$orderId",
                         androidChannelId = ANDROID_CHANNEL_STAFF

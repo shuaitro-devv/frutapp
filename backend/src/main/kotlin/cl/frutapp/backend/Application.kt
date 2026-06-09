@@ -27,6 +27,7 @@ import cl.frutapp.backend.modules.audit.UserEventService
 import cl.frutapp.backend.modules.notifications.DeviceTokenRepository
 import cl.frutapp.backend.modules.notifications.FcmSender
 import cl.frutapp.backend.modules.notifications.NotificationDispatcher
+import cl.frutapp.backend.modules.notifications.NotificationInboxRepository
 import cl.frutapp.backend.modules.staff.StaffOrderService
 import java.io.File
 import cl.frutapp.backend.plugins.configureMonitoring
@@ -121,8 +122,11 @@ fun Application.module() {
     // descartan silenciosamente. Permite que el backend siga funcionando sin Firebase
     // (entornos de test, CI, dev local sin secret).
     val deviceTokenRepository = DeviceTokenRepository()
+    val notificationInboxRepository = NotificationInboxRepository()
     val fcmSender: FcmSender? = loadFcmSender(this)
-    val notificationDispatcher = NotificationDispatcher(orderRepository, deviceTokenRepository, fcmSender)
+    val notificationDispatcher = NotificationDispatcher(
+        orderRepository, deviceTokenRepository, notificationInboxRepository, fcmSender
+    )
     val orderService = OrderService(
         orderRepository,
         catalogRepository,
@@ -143,7 +147,8 @@ fun Application.module() {
     configureSecurity(jwtConfig, tokenService)
     configureRouting(
         authService, catalogService, orderService,
-        adminUserService, staffOrderService, userEventService, deviceTokenRepository
+        adminUserService, staffOrderService, userEventService,
+        deviceTokenRepository, notificationInboxRepository
     )
 
     // Refresca la config de negocio cada 60s (cambios en app_config sin redeploy).

@@ -10,7 +10,9 @@ import cl.frutapp.backend.modules.catalog.catalogRoutes
 import cl.frutapp.backend.modules.health.healthRoutes
 import cl.frutapp.backend.modules.audit.UserEventService
 import cl.frutapp.backend.modules.notifications.DeviceTokenRepository
+import cl.frutapp.backend.modules.notifications.NotificationInboxRepository
 import cl.frutapp.backend.modules.notifications.deviceTokenRoutes
+import cl.frutapp.backend.modules.notifications.notificationInboxRoutes
 import cl.frutapp.backend.modules.orders.OrderService
 import cl.frutapp.backend.modules.orders.orderRoutes
 import cl.frutapp.backend.modules.staff.StaffOrderService
@@ -25,7 +27,8 @@ fun Application.configureRouting(
     adminUserService: AdminUserService,
     staffOrderService: StaffOrderService,
     userEventService: UserEventService,
-    deviceTokenRepository: DeviceTokenRepository
+    deviceTokenRepository: DeviceTokenRepository,
+    notificationInboxRepository: NotificationInboxRepository
 ) {
     routing {
         healthRoutes()
@@ -36,5 +39,6 @@ fun Application.configureRouting(
         configRoutes()
         adminUserRoutes(adminUserService)
         deviceTokenRoutes(deviceTokenRepository)
+        notificationInboxRoutes(notificationInboxRepository)
     }
 }
