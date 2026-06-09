@@ -6,7 +6,9 @@ import cl.frutapp.backend.error.ValidationException
 import cl.frutapp.backend.modules.audit.EventContext
 import cl.frutapp.backend.modules.audit.UserEventService
 import cl.frutapp.backend.modules.auth.UsersTable
+import cl.frutapp.backend.modules.notifications.NotificationDispatcher
 import cl.frutapp.backend.modules.orders.OrderItemsTable
+import cl.frutapp.backend.modules.orders.OrderStatus
 import cl.frutapp.backend.modules.orders.OrderStatusHistoryTable
 import cl.frutapp.backend.modules.orders.OrdersTable
 import cl.frutapp.shared.dto.StaffDispatchDetailDto
@@ -36,7 +38,10 @@ import kotlin.time.Duration.Companion.minutes
  * en el ledger user_event ([[V11]]).
  */
 class StaffOrderService(
-    private val events: UserEventService
+    private val events: UserEventService,
+    /** Opcional: dispara push al cliente cuando la transicion de picker/repartidor
+     *  avanza el estado del pedido. Null en tests donde no se quiere validar push. */
+    private val notifications: NotificationDispatcher? = null
 ) {
 
     /**
@@ -219,6 +224,9 @@ class StaffOrderService(
         if (!ok) return StaffTakeResult(ok = false, motivo = "ya_tomado_o_no_disponible")
 
         events.logSafely(eventType = "staff.order_taken", userId = pickerId, entityType = "order", entityId = orderId, context = context)
+        // Push al cliente: "Tu Seleccionador empezó". `from` se loguea como PAGADO,
+        // pero el dispatcher solo mira el `to` para decidir el copy del push.
+        notifications?.onOrderTransition(orderId, OrderStatus.PAGADO, OrderStatus.EN_PICKING)
         return StaffTakeResult(ok = true, orderId = orderId.toString())
     }
 
@@ -266,6 +274,23 @@ class StaffOrderService(
         if (!ok) throw ValidationException("Este pedido no está en picking o no es tuyo.")
 
         events.logSafely(eventType = "staff.order_completed", userId = pickerId, entityType = "order", entityId = orderId, context = context)
+        // Push al cliente: "Pedido confirmado".
+        notifications?.onOrderTransition(orderId, OrderStatus.EN_PICKING, OrderStatus.STOCK_CONFIRMADO)
+        // Push a repartidores de la misma location: "despacho listo para retiro".
+        // Reusa el lookup de numero+location que ya hace el cliente-push si fuera necesario.
+        val nd = notifications
+        if (nd != null) {
+            val (numeroDb, locId) = pickerHomeLocationLookup(orderId) ?: return
+            if (locId != null) nd.onDispatchReadyForRepartidores(orderId, locId, numeroDb)
+        }
+    }
+
+    /** Lookup minimo numero + pickup_location del pedido para hooks de push. */
+    private suspend fun pickerHomeLocationLookup(orderId: UUID): Pair<String, UUID?>? = dbQuery {
+        OrdersTable
+            .selectAll().where { OrdersTable.id eq orderId }
+            .singleOrNull()
+            ?.let { it[OrdersTable.numero] to it[OrdersTable.pickupLocationId] }
     }
 
     // ============================================================
@@ -406,6 +431,8 @@ class StaffOrderService(
 
         events.logSafely(eventType = "staff.dispatch_taken", userId = repartidorId,
             entityType = "order", entityId = orderId, context = context)
+        // Push al cliente: "Tu Repartidor va camino".
+        notifications?.onOrderTransition(orderId, OrderStatus.STOCK_CONFIRMADO, OrderStatus.EN_DESPACHO)
         return StaffTakeResult(ok = true, orderId = orderId.toString())
     }
 
@@ -431,6 +458,8 @@ class StaffOrderService(
 
         events.logSafely(eventType = "staff.dispatch_delivered", userId = repartidorId,
             entityType = "order", entityId = orderId, context = context)
+        // Push al cliente: "Pedido entregado".
+        notifications?.onOrderTransition(orderId, OrderStatus.EN_DESPACHO, OrderStatus.ENTREGADO)
     }
 
     private fun materializeDispatchSummaries(rows: List<ResultRow>, currentRepartidorId: UUID): List<StaffDispatchSummaryDto> {

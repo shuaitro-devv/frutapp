@@ -129,13 +129,16 @@ fun Application.module() {
         FrutCoinsRepository(),
         onTransitionFired = { id, from, to ->
             notificationDispatcher.onOrderTransition(id, from, to)
+        },
+        onOrderCreated = { id, locId, numero ->
+            notificationDispatcher.onOrderReadyForPickers(id, locId, numero)
         }
     )
     val adminUserService = AdminUserService(
         UserRepository(), rbacRepository, PasswordResetTokenRepository(), tokenService, emailSender
     )
     val userEventService = UserEventService()
-    val staffOrderService = StaffOrderService(userEventService)
+    val staffOrderService = StaffOrderService(userEventService, notificationDispatcher)
 
     configureSecurity(jwtConfig, tokenService)
     configureRouting(

@@ -25,8 +25,8 @@ actual object FcmBridge {
         scope.launch { FcmTokenSync.ensureRegisteredOnLogin(ctx) }
     }
 
-    actual fun onLogoutSuccess() {
+    actual fun onLogoutSuccess(jwt: String?) {
         val ctx = appContext ?: return
-        scope.launch { FcmTokenSync.unregister(ctx) }
+        scope.launch { FcmTokenSync.unregister(ctx, jwt) }
     }
 }

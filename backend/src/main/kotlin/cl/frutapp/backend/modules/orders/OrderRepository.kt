@@ -201,13 +201,24 @@ class OrderRepository {
             ?.let { OrderStatus.parse(it[OrdersTable.status]) }
     }
 
-    /** Datos minimos para componer notificaciones push: dueno + numero visible. */
+    /** Datos minimos para componer notificaciones push al CLIENTE: dueno + numero.
+     *  Excluye soft-deleted: si el pedido fue eliminado, no queremos notificar. */
     suspend fun findOwnerAndNumero(id: UUID): Pair<UUID, String>? = dbQuery {
         OrdersTable
             .select(OrdersTable.userId, OrdersTable.numero)
-            .where { OrdersTable.id eq id }
+            .where { (OrdersTable.id eq id) and OrdersTable.deletedAt.isNull() }
             .singleOrNull()
             ?.let { it[OrdersTable.userId] to it[OrdersTable.numero] }
+    }
+
+    /** Numero + pickup_location_id de un pedido. Usado para componer push a
+     *  staff (pickers/repartidores) de la location correspondiente. */
+    suspend fun findNumeroAndLocation(id: UUID): Pair<String, UUID?>? = dbQuery {
+        OrdersTable
+            .select(OrdersTable.numero, OrdersTable.pickupLocationId)
+            .where { (OrdersTable.id eq id) and OrdersTable.deletedAt.isNull() }
+            .singleOrNull()
+            ?.let { it[OrdersTable.numero] to it[OrdersTable.pickupLocationId] }
     }
 
     /** Pedidos activos (no borrados) con su estado, para el auto-avance de demo. */

@@ -84,6 +84,11 @@ object TokenStore {
     }
 
     fun clear() {
+        // Snapshot del JWT ANTES de nulear — se lo pasamos al bridge para que
+        // el DELETE /v1/device/token llegue con Bearer aunque la coroutine
+        // corra DESPUES de que limpiamos el estado local. Sin esto, el server
+        // contestaba 401 y el token quedaba huerfano (ver code review xhigh).
+        val jwtSnapshot = accessToken
         accessToken = null
         refreshToken = null
         user = null
@@ -94,6 +99,6 @@ object TokenStore {
         clearPendingEmail()
         // FCM: borra el token del backend para que pushes del user anterior NO
         // lleguen al sucesor que se loguee en el mismo celu.
-        FcmBridge.onLogoutSuccess()
+        FcmBridge.onLogoutSuccess(jwtSnapshot)
     }
 }

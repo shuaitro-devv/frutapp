@@ -23,7 +23,10 @@ class OrderService(
     private val frutCoins: FrutCoinsRepository,
     /** Hook opcional: fired tras cada transicion exitosa, fire-and-forget. Null
      *  cuando FCM no esta configurado (sin service account) o en tests. */
-    private val onTransitionFired: ((orderId: java.util.UUID, from: OrderStatus, to: OrderStatus) -> Unit)? = null
+    private val onTransitionFired: ((orderId: java.util.UUID, from: OrderStatus, to: OrderStatus) -> Unit)? = null,
+    /** Hook opcional: fired tras crear un pedido, para notificar a pickers
+     *  de la location correspondiente. Mismas reglas null en tests. */
+    private val onOrderCreated: ((orderId: java.util.UUID, locationId: java.util.UUID, numero: String) -> Unit)? = null
 ) {
 
     suspend fun create(userId: UUID, req: CreateOrderRequest): OrderDto {
@@ -103,6 +106,15 @@ class OrderService(
                 frutcoinsClpRequested = frutcoinsClpCapado
             )
         )
+        // Push fire-and-forget a pickers de la location: "pedido nuevo en cola".
+        // Lookup minimo del pickup_location_id (NewOrder NO lo expone aca; el
+        // repo lo asigno con su default). Si el pedido no tiene location todavia
+        // (legacy / migration en curso) el hook se descarta silenciosamente.
+        if (onOrderCreated != null) {
+            orders.findNumeroAndLocation(id)?.let { (numeroDb, locId) ->
+                if (locId != null) onOrderCreated.invoke(id, locId, numeroDb)
+            }
+        }
         return orders.findDetail(id, userId)
             ?: throw IllegalStateException("Pedido recién creado no encontrado")
     }

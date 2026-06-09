@@ -71,6 +71,67 @@ class NotificationDispatcher(
         }
     }
 
+    /**
+     * Notifica a pickers de una [locationId] que hay un pedido nuevo en cola.
+     * Disparado desde `OrderService.create` tras persistir el pedido.
+     */
+    fun onOrderReadyForPickers(orderId: java.util.UUID, locationId: java.util.UUID, numero: String) {
+        if (fcm == null) return
+        scope.launch {
+            runCatching {
+                val tokens = deviceTokens.listTokensByRoleInLocation("picker", locationId)
+                if (tokens.isEmpty()) return@launch
+                tokens.forEach { row ->
+                    val msg = FcmMessage(
+                        token = row.fcmToken,
+                        title = "Nuevo pedido en cola",
+                        body = "Pedido $numero llegó a tu cola — está esperando un Seleccionador.",
+                        data = mapOf("type" to "picker_new_order", "orderId" to orderId.toString(), "orderNumero" to numero),
+                        androidCollapseKey = "picker_new:$orderId",
+                        androidChannelId = ANDROID_CHANNEL_STAFF
+                    )
+                    when (fcm.send(msg)) {
+                        is SendResult.UnregisteredToken -> deviceTokens.deleteByToken(row.fcmToken)
+                        else -> Unit
+                    }
+                }
+            }.onFailure { e ->
+                logger.error("Error notificando pickers de location {} (pedido {})", locationId, numero, e)
+            }
+        }
+    }
+
+    /**
+     * Notifica a repartidores de una [locationId] que hay un despacho listo
+     * para retiro. Disparado desde `StaffOrderService.complete` cuando un
+     * pedido pasa a STOCK_CONFIRMADO.
+     */
+    fun onDispatchReadyForRepartidores(orderId: java.util.UUID, locationId: java.util.UUID, numero: String) {
+        if (fcm == null) return
+        scope.launch {
+            runCatching {
+                val tokens = deviceTokens.listTokensByRoleInLocation("repartidor", locationId)
+                if (tokens.isEmpty()) return@launch
+                tokens.forEach { row ->
+                    val msg = FcmMessage(
+                        token = row.fcmToken,
+                        title = "Despacho listo para retiro",
+                        body = "Pedido $numero está listo. Pasa a buscarlo cuando puedas.",
+                        data = mapOf("type" to "repartidor_new_dispatch", "orderId" to orderId.toString(), "orderNumero" to numero),
+                        androidCollapseKey = "repartidor_new:$orderId",
+                        androidChannelId = ANDROID_CHANNEL_STAFF
+                    )
+                    when (fcm.send(msg)) {
+                        is SendResult.UnregisteredToken -> deviceTokens.deleteByToken(row.fcmToken)
+                        else -> Unit
+                    }
+                }
+            }.onFailure { e ->
+                logger.error("Error notificando repartidores de location {} (pedido {})", locationId, numero, e)
+            }
+        }
+    }
+
     /** Devuelve el mensaje para el cliente o null si la transicion no le interesa. */
     private fun clientMessageFor(to: OrderStatus): ClientMessage? = when (to) {
         OrderStatus.EN_PICKING -> ClientMessage(
@@ -79,7 +140,7 @@ class NotificationDispatcher(
         )
         OrderStatus.STOCK_CONFIRMADO -> ClientMessage(
             title = "Pedido confirmado",
-            body = "Pedido {numero}: confirmamos lo que tenés, va camino a tu mesa."
+            body = "Pedido {numero}: confirmamos lo que tienes, va camino a tu mesa."
         )
         OrderStatus.EN_DESPACHO -> ClientMessage(
             title = "Tu Repartidor va camino",
@@ -100,8 +161,9 @@ class NotificationDispatcher(
     private data class ClientMessage(val title: String, val body: String)
 
     companion object {
-        /** Canal de notificaciones para estado de pedidos. La app debe crearlo con
-         *  el mismo id antes de mostrar notifs (Android 8+ exige canal). */
+        /** Canal de notificaciones para estado de pedidos (cara cliente). */
         const val ANDROID_CHANNEL_ORDERS = "frutapp_orders"
+        /** Canal para staff (picker / repartidor): nuevo pedido / despacho listo. */
+        const val ANDROID_CHANNEL_STAFF = "frutapp_staff"
     }
 }

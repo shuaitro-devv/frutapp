@@ -49,10 +49,13 @@ object FcmTokenSync {
         sendToBackend(token)
     }
 
-    /** Llamado tras logout. */
-    suspend fun unregister(context: Context) {
+    /** Llamado tras logout. [jwt] viene capturado sincronicamente por
+     *  [FcmBridge.onLogoutSuccess] ANTES de que TokenStore.clear lo nulee — sin
+     *  ese snapshot, el DELETE saldria sin Authorization y el server respondria
+     *  401, dejando el token huerfano. */
+    suspend fun unregister(context: Context, jwt: String?) {
         val token = FcmTokenStore.readLocal(context) ?: return
-        runCatching { api.delete(token) }
+        runCatching { api.delete(token, jwt) }
             .onFailure { Log.w(TAG, "No pude borrar token en backend: ${it.message}") }
         FcmTokenStore.clearLocal(context)
     }

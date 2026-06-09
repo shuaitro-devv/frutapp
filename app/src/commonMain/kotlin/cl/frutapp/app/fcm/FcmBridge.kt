@@ -17,5 +17,13 @@ package cl.frutapp.app.fcm
  */
 expect object FcmBridge {
     fun onLoginSuccess()
-    fun onLogoutSuccess()
+    /**
+     * Llamado al hacer logout. Recibe el `jwt` snapshot del access token de la
+     * sesion que se va, capturado ANTES de que [TokenStore.clear] nulee el
+     * estado — sin esto, el DELETE /v1/device/token saldria sin Bearer (la
+     * coroutine corre en background y el interceptor de ApiClient ya leeria
+     * null), el backend devolveria 401 y el token quedaria colgando en el
+     * server, recibiendo pushes viejos hasta que FCM lo marque UNREGISTERED.
+     */
+    fun onLogoutSuccess(jwt: String?)
 }

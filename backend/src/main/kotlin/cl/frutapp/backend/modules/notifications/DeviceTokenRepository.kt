@@ -1,9 +1,13 @@
 package cl.frutapp.backend.modules.notifications
 
 import cl.frutapp.backend.db.dbQuery
+import cl.frutapp.backend.modules.auth.UsersTable
+import cl.frutapp.backend.modules.rbac.RoleTable
+import cl.frutapp.backend.modules.rbac.UserRoleTable
 import kotlinx.datetime.Clock
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
@@ -63,6 +67,35 @@ class DeviceTokenRepository {
     suspend fun listByUser(userId: UUID): List<DeviceTokenRow> = dbQuery {
         DeviceTokensTable
             .selectAll().where { DeviceTokensTable.userId eq userId }
+            .map(::toRow)
+    }
+
+    /**
+     * Tokens de TODOS los users con [roleCode] cuyo `home_location_id` matchea
+     * [locationId]. Usado para notificar a pickers/repartidores cuando hay
+     * pedido o despacho nuevo en su location. Excluye usuarios soft-deleted.
+     *
+     * Implementacion en 3 lookups por separado en vez de un join multi-tabla:
+     * la cantidad de pickers/repartidores por location es chica (<10) y este
+     * camino es mucho mas legible que el SQL crudo.
+     */
+    suspend fun listTokensByRoleInLocation(roleCode: String, locationId: UUID): List<DeviceTokenRow> = dbQuery {
+        val roleId = RoleTable.selectAll().where { RoleTable.code eq roleCode }
+            .singleOrNull()?.get(RoleTable.id)
+            ?: return@dbQuery emptyList()
+        val userIdsWithRole = UserRoleTable.selectAll().where { UserRoleTable.roleId eq roleId }
+            .map { it[UserRoleTable.userId] }.toSet()
+        if (userIdsWithRole.isEmpty()) return@dbQuery emptyList()
+        val targetUserIds = UsersTable.selectAll()
+            .where {
+                (UsersTable.id inList userIdsWithRole.toList()) and
+                (UsersTable.homeLocationId eq locationId) and
+                UsersTable.deletedAt.isNull()
+            }
+            .map { it[UsersTable.id] }
+        if (targetUserIds.isEmpty()) return@dbQuery emptyList()
+        DeviceTokensTable.selectAll()
+            .where { DeviceTokensTable.userId inList targetUserIds }
             .map(::toRow)
     }
 
