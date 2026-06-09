@@ -17,10 +17,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,18 +35,55 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import cl.frutapp.app.data.Notificacion
-import cl.frutapp.app.data.NotificacionesStore
+import cl.frutapp.app.data.remote.NotificationApi
+import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.theme.FrutAppColors
+import cl.frutapp.shared.dto.NotificationDto
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 
-/** Inbox de notificaciones del usuario. Al abrirse, marca todo como leído. */
+/**
+ * Inbox de notificaciones del usuario. Source of truth es el backend
+ * (`GET /v1/notifications`). Al abrir la pantalla pega al API; cuando vuelven
+ * los items, dispara `POST /v1/notifications/read-all` para vaciar el badge
+ * (mismo UX que antes con el store local). Si el GET falla, muestra estado
+ * de error amigable y permite reintentar.
+ */
 class NotificacionesScreen : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val api = remember { NotificationApi() }
+        val scope = rememberCoroutineScope()
+        var loading by remember { mutableStateOf(true) }
+        var items by remember { mutableStateOf<List<NotificationDto>>(emptyList()) }
+        var errorMsg by remember { mutableStateOf<String?>(null) }
 
-        // Al abrir el inbox, las notificaciones quedan como leídas (badge se vacía).
-        LaunchedEffect(Unit) { NotificacionesStore.marcarTodasLeidas() }
+        LaunchedEffect(Unit) {
+            loading = true
+            errorMsg = null
+            runCatching { api.list() }
+                .onSuccess { resp ->
+                    items = resp.items
+                    loading = false
+                    // Marcar todas leídas en background — no bloquea el render.
+                    if (resp.unreadCount > 0) {
+                        scope.launch {
+                            runCatching { api.markAllRead() }
+                                .onFailure { e ->
+                                    if (e is kotlinx.coroutines.CancellationException) throw e
+                                    ErrorReporter.report(screen = "Notificaciones", action = "mark_all_read", error = e)
+                                }
+                        }
+                    }
+                }
+                .onFailure { e ->
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    ErrorReporter.report(screen = "Notificaciones", action = "list", error = e)
+                    errorMsg = "No pudimos cargar tus notificaciones. Tocá para reintentar."
+                    loading = false
+                }
+        }
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -58,11 +100,24 @@ class NotificacionesScreen : Screen {
                     Text("Notificaciones", color = FrutAppColors.Brand800, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 12.dp))
                 }
 
-                Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-                    if (NotificacionesStore.items.isEmpty()) {
+                when {
+                    loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = FrutAppColors.Brand400)
+                    }
+                    errorMsg != null -> Box(
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("⚠️", fontSize = 36.sp)
+                            Text(errorMsg!!, color = FrutAppColors.InkMuted, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp))
+                        }
+                    }
+                    items.isEmpty() -> Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
                         EmptyNotis()
-                    } else {
-                        NotificacionesStore.items.forEach { NotiRow(it) }
+                    }
+                    else -> Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+                        items.forEach { NotiRow(it) }
                     }
                 }
             }
@@ -71,7 +126,9 @@ class NotificacionesScreen : Screen {
 }
 
 @Composable
-private fun NotiRow(n: Notificacion) {
+private fun NotiRow(n: NotificationDto) {
+    val emoji = emojiFor(n.type)
+    val cuandoHumano = humanizeIsoToRelative(n.createdAt)
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)
             .background(if (n.leida) FrutAppColors.Brand50 else FrutAppColors.AmberSoft.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
@@ -82,18 +139,46 @@ private fun NotiRow(n: Notificacion) {
             modifier = Modifier.size(40.dp).background(Color.White, CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Text(n.tipo.emoji, fontSize = 20.sp)
+            Text(emoji, fontSize = 20.sp)
         }
         Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(n.titulo, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f, fill = false))
+                Text(n.title, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f, fill = false))
                 if (!n.leida) {
                     Box(modifier = Modifier.padding(start = 8.dp).size(8.dp).background(FrutAppColors.AmberCoin, CircleShape))
                 }
             }
-            Text(n.detalle, color = FrutAppColors.InkMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
-            Text(n.cuando, color = FrutAppColors.InkSoft, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+            Text(n.body, color = FrutAppColors.InkMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+            Text(cuandoHumano, color = FrutAppColors.InkSoft, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
         }
+    }
+}
+
+/** Mapeo type backend → emoji para el avatar circular. */
+private fun emojiFor(type: String): String = when (type) {
+    "PEDIDO" -> "📦"
+    "COINS" -> "🪙"
+    "RECICLA" -> "♻️"
+    "RACHA" -> "🔥"
+    "PROMO" -> "🎁"
+    else -> "🔔"
+}
+
+/** Convierte un timestamp ISO-8601 (lo que devuelve Instant.toString()) en
+ *  texto humano corto: "hace 5 min" / "hace 2 h" / "hace 3 días". Parseo
+ *  minimo sin libs nuevas. Si el formato no matchea, devolvemos el string
+ *  original truncado. */
+private fun humanizeIsoToRelative(iso: String): String {
+    val parsed = runCatching { kotlinx.datetime.Instant.parse(iso) }.getOrNull()
+        ?: return iso.take(16)
+    val now = kotlinx.datetime.Clock.System.now()
+    val diff = now - parsed
+    val mins = diff.inWholeMinutes
+    return when {
+        mins < 1 -> "ahora"
+        mins < 60 -> "hace $mins min"
+        mins < 60 * 24 -> "hace ${mins / 60} h"
+        else -> "hace ${mins / (60 * 24)} días"
     }
 }
 
