@@ -3,6 +3,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Android 13+ exige permiso runtime para mostrar notificaciones. Pre-13 lo da
+         por default. Lo pide MainActivity la primera vez que el user inicia sesion. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:label="@string/app_name"
@@ -32,6 +35,22 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Servicio que recibe los mensajes de FCM. Android lo arranca aunque la
+             app este cerrada (no force-stop). onMessageReceived / onNewToken. -->
+        <service
+            android:name="cl.frutapp.app.fcm.FrutAppMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Default channel id de FCM cuando no se especifica via data payload.
+             Tiene que matchear el canal que crea la app en MainActivity. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="frutapp_orders" />
     </application>
 
 </manifest>

@@ -147,6 +147,7 @@ jobs:
               -e JWT_SECRET='${{ secrets.JWT_SECRET }}' \
               -e RESEND_API_KEY='${{ secrets.RESEND_API_KEY }}' \
               -e MAIL_FROM='FrutApp <no-reply@frutapp.grandline.cl>' \
+              -e FIREBASE_SERVICE_ACCOUNT_JSON='${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}' \
               -e DEMO_AUTO_ADVANCE='false' \
               -e DEMO_AUTO_ADVANCE_SECONDS='15' \
               -v frutapp-logs:/app/logs \

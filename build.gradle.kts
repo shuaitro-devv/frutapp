@@ -8,4 +8,7 @@ plugins {
     alias(libs.plugins.android.library) apply false
     alias(libs.plugins.compose.multiplatform) apply false
     alias(libs.plugins.ktor) apply false
+    // Google Services para FCM: lee app/google-services.json y genera los
+    // resources que el SDK de Firebase espera al arrancar. Solo se aplica en :app.
+    id("com.google.gms.google-services") version "4.4.2" apply false
 }

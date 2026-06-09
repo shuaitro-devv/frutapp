@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Icono para la barra de notificaciones. Android exige que el smallIcon sea
+  monocromo blanco con fondo transparente (lo tinea con el color del system).
+  Si pasas un icono a color, en Android 5+ aparece como cuadrado blanco solido.
+
+  Este es una hoja simple — neutral para los dos brands (FrutApp + Sofruco) y
+  legible en cualquier tamano (24dp).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M17,8C8,10 5.9,16.17 3.82,21.34l1.89,0.66 1,-2.4c0.5,0.17 1.04,0.3 1.79,0.3 6,0 11.5,-5.5 12,-12C20.5,8 18,8 17,8L17,8zM14.13,15.84c-1.65,1.66 -3.61,2.46 -5.27,2.46 -0.34,0 -0.62,-0.04 -0.89,-0.1L13,13c-1.41,-1.41 -3.49,-1.83 -5.31,-1.27 1.81,-1.42 4.42,-2.12 6.56,-2.12 0.91,0 1.61,0.12 2.26,0.31 0.04,0.65 0.16,1.35 0.16,2.26 0,1.93 -0.7,4.27 -2.54,5.66z" />
+</vector>

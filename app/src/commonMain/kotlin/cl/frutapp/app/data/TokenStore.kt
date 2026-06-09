@@ -3,6 +3,7 @@ package cl.frutapp.app.data
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import cl.frutapp.app.fcm.FcmBridge
 import cl.frutapp.shared.dto.UserDto
 import kotlinx.serialization.json.Json
 
@@ -51,6 +52,9 @@ object TokenStore {
         SessionStorage.putString(K_USER, json.encodeToString(UserDto.serializer(), user))
         // Una sesion autenticada cierra el limbo: ya no estamos 'verificando'.
         clearPendingEmail()
+        // FCM: tras login efectivo manda el token al backend para que pushes de
+        // este user lleguen a este celu. Fire-and-forget, no bloquea.
+        FcmBridge.onLoginSuccess()
     }
 
     fun markPendingEmail(email: String) {
@@ -88,5 +92,8 @@ object TokenStore {
         SessionStorage.remove(K_USER)
         // Logout NO arrastra el limbo: el usuario quiere salir limpio.
         clearPendingEmail()
+        // FCM: borra el token del backend para que pushes del user anterior NO
+        // lleguen al sucesor que se loguee en el mismo celu.
+        FcmBridge.onLogoutSuccess()
     }
 }

@@ -5,6 +5,9 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.multiplatform)
+    // Lee app/google-services.json y materializa los strings que el SDK Firebase
+    // espera en runtime (no hay que escribirlos a mano).
+    id("com.google.gms.google-services")
 }
 
 // Carga credenciales de firma desde keystore.properties (fuera del repo). Si no existe,
@@ -65,6 +68,13 @@ kotlin {
             implementation("androidx.biometric:biometric:1.1.0")
             // Almacenamiento cifrado de la sesión (tokens)
             implementation("androidx.security:security-crypto:1.1.0-alpha06")
+            // Firebase Cloud Messaging — BoM resuelve versiones compatibles entre si.
+            // Sin firebase-analytics: no lo necesitamos y agrega ~3MB + tracking que
+            // no autorizamos en T&C. Solo el messaging.
+            implementation(platform("com.google.firebase:firebase-bom:33.4.0"))
+            implementation("com.google.firebase:firebase-messaging-ktx")
+            // .await() sobre Task<T> de Firebase desde corutinas.
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.0")
         }
     }
 }

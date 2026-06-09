@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "547362520552",
+    "project_id": "frutapp-qa",
+    "storage_bucket": "frutapp-qa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:547362520552:android:255429279ca5fa80cf385d",
+        "android_client_info": {
+          "package_name": "cl.frutapp.app.debug"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA6AAdt_otN1o6A3AzF8yvvoCBENUWJ024"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
