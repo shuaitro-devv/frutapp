@@ -431,7 +431,11 @@ internal fun EstadoStepper(activo: Int) {
     ) {
         Text("Estado del pedido", color = FrutAppColors.Brand800, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // verticalAlignment = Top porque los labels tienen alturas distintas
+        // ("Pedido preparado" wrappea a 2 lineas, "Retirado" no) y con Center
+        // los circulos quedaban desalineados. La linea separadora va con
+        // padding superior = 11.dp para quedar en el medio del circulo de 24dp.
+        Row(verticalAlignment = Alignment.Top) {
             etapas.forEachIndexed { i, label ->
                 val completada = i < activo
                 val esActivo = i == activo
@@ -456,7 +460,11 @@ internal fun EstadoStepper(activo: Int) {
                     )
                 }
                 if (i < etapas.lastIndex) {
-                    Box(modifier = Modifier.weight(0.3f).height(2.dp).background(if (i < activo) FrutAppColors.Brand400 else FrutAppColors.Brand100))
+                    Box(modifier = Modifier
+                        .weight(0.3f)
+                        .padding(top = 11.dp)
+                        .height(2.dp)
+                        .background(if (i < activo) FrutAppColors.Brand400 else FrutAppColors.Brand100))
                 }
             }
         }
