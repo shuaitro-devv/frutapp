@@ -69,11 +69,16 @@ import cl.frutapp.app.data.DemoCatalog
 import cl.frutapp.app.data.Producto
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.data.formatClp
+import cl.frutapp.app.data.NotificacionesStore
 import cl.frutapp.app.data.remote.CatalogApi
+import cl.frutapp.app.data.remote.NotificationApi
+import cl.frutapp.app.ui.ErrorReporter
+import kotlinx.coroutines.CancellationException
 import cl.frutapp.app.data.toProducto
 import cl.frutapp.app.navigation.canastas.MisCanastasScreen
 import cl.frutapp.app.navigation.catalog.BrandCategoryScreen
 import cl.frutapp.app.navigation.catalog.BuscadorScreen
+import cl.frutapp.app.navigation.rewards.ReyVegetalScreen
 import cl.frutapp.app.navigation.catalog.CatalogScreen
 import cl.frutapp.app.navigation.offers.OfertasScreen
 import cl.frutapp.app.navigation.orders.MisPedidosScreen
@@ -141,18 +146,18 @@ class HomeScreen : Screen {
             if (brand.id == SofrucoBrand.id) return@LaunchedEffect
             runCatching { CatalogApi().products() }
                 .onSuccess { dtos -> if (dtos.isNotEmpty()) destacados = dtos.map { it.toProducto() }.take(6) }
-                .onFailure { e -> cl.frutapp.app.ui.ErrorReporter.report(screen = "Home", action = "load_catalog", error = e) }
+                .onFailure { e -> ErrorReporter.report(screen = "Home", action = "load_catalog", error = e) }
         }
         // Refresca el badge de la campanita: lee unreadCount real del backend.
         // Sin esto el badge mostraria solo lo que llego via FCM en runtime
         // (cero al cold-start tras force-stop), aunque el backend tenga notifs
         // pendientes esperando al usuario.
         LaunchedEffect(Unit) {
-            runCatching { cl.frutapp.app.data.remote.NotificationApi().list() }
-                .onSuccess { resp -> cl.frutapp.app.data.NotificacionesStore.updateBackendUnread(resp.unreadCount) }
+            runCatching { NotificationApi().list() }
+                .onSuccess { resp -> NotificacionesStore.updateBackendUnread(resp.unreadCount) }
                 .onFailure { e ->
-                    if (e !is kotlinx.coroutines.CancellationException) {
-                        cl.frutapp.app.ui.ErrorReporter.report(screen = "Home", action = "load_unread_count", error = e)
+                    if (e !is CancellationException) {
+                        ErrorReporter.report(screen = "Home", action = "load_unread_count", error = e)
                     }
                 }
         }
@@ -182,13 +187,13 @@ class HomeScreen : Screen {
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
-                item { HomeHeader(modifier = Modifier.coachmarkTarget("header"), onFavoritos = { navigator.push(MisFavoritosScreen()) }, onNotificaciones = { navigator.push(NotificacionesScreen()) }, onCanastas = { navigator.push(MisCanastasScreen()) }, onBuscar = { navigator.push(cl.frutapp.app.navigation.catalog.BuscadorScreen()) }) }
+                item { HomeHeader(modifier = Modifier.coachmarkTarget("header"), onFavoritos = { navigator.push(MisFavoritosScreen()) }, onNotificaciones = { navigator.push(NotificacionesScreen()) }, onCanastas = { navigator.push(MisCanastasScreen()) }, onBuscar = { navigator.push(BuscadorScreen()) }) }
                 item {
                     HeroCarousel(
                         onOfertas = { navigator.push(OfertasScreen()) },
                         onFrutCoins = { navigator.push(FrutCoinsScreen()) },
                         onCanastas = { navigator.push(MisCanastasScreen()) },
-                        onReyVegetal = { navigator.push(cl.frutapp.app.navigation.rewards.ReyVegetalScreen()) },
+                        onReyVegetal = { navigator.push(ReyVegetalScreen()) },
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp).coachmarkTarget("hero")
                     )
                 }
@@ -328,7 +333,7 @@ private fun HomeHeader(modifier: Modifier = Modifier, onFavoritos: () -> Unit = 
                 Spacer(Modifier.width(8.dp))
                 HeaderIcon(Icons.Filled.ShoppingBasket, onClick = onCanastas)
                 Spacer(Modifier.width(8.dp))
-                HeaderIcon(Icons.Default.Notifications, onClick = onNotificaciones, badge = cl.frutapp.app.data.NotificacionesStore.noLeidas)
+                HeaderIcon(Icons.Default.Notifications, onClick = onNotificaciones, badge = NotificacionesStore.noLeidas)
             }
             Spacer(Modifier.height(18.dp))
             SearchBarMock(onClick = onBuscar, modifier = Modifier.padding(horizontal = 20.dp))
