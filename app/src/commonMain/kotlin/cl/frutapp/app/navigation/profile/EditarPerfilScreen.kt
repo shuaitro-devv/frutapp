@@ -21,12 +21,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,9 +42,16 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.TokenStore
+import cl.frutapp.app.data.remote.AvatarApi
+import cl.frutapp.app.platform.rememberSelectorImagenes
+import cl.frutapp.app.ui.ErrorReporter
+import cl.frutapp.app.ui.components.AvatarImage
 import cl.frutapp.app.ui.components.FrutButtonPrimary
+import cl.frutapp.app.ui.mensajeAmigable
 import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 /**
  * Editar nombre y teléfono del perfil. Email queda solo lectura (cambiar email requiere
@@ -63,6 +72,32 @@ class EditarPerfilScreen : Screen {
         val email = userActual?.email.orEmpty()
         val inicial = (nombre.firstOrNull()?.uppercase() ?: "F")
         val cambios = nombre.trim().isNotBlank() && (nombre != userActual?.name || telefono != userActual?.phone.orEmpty())
+
+        // Foto de perfil: URL presignada que vino del backend en /me. Se actualiza
+        // localmente al subir una nueva sin esperar al proximo /me.
+        var avatarUrl by remember { mutableStateOf(userActual?.avatarUrl) }
+        var subiendoFoto by remember { mutableStateOf(false) }
+        val scope = rememberCoroutineScope()
+        val avatarApi = remember { AvatarApi() }
+        val selectorImg = rememberSelectorImagenes { bytes ->
+            subiendoFoto = true
+            scope.launch {
+                runCatching { avatarApi.upload(bytes) }
+                    .onSuccess { newUrl ->
+                        avatarUrl = newUrl
+                        // Actualiza tambien el TokenStore.user.avatarUrl en sesion
+                        // para que el resto de la app vea el cambio.
+                        TokenStore.user?.let { u -> TokenStore.updateUser(u.copy(avatarUrl = newUrl)) }
+                        showToast("Foto actualizada ✓")
+                    }
+                    .onFailure { e ->
+                        if (e is CancellationException) throw e
+                        ErrorReporter.report(screen = "EditarPerfil", action = "upload_avatar", error = e)
+                        showToast(mensajeAmigable(e, "subir la foto"))
+                    }
+                subiendoFoto = false
+            }
+        }
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -88,25 +123,31 @@ class EditarPerfilScreen : Screen {
                 Column(
                     modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)
                 ) {
-                    // Avatar grande con inicial — botón de cámara que avisa "Próximamente".
+                    // Avatar circular: AvatarImage descarga la foto del backend si la
+                    // tiene; sino muestra la inicial. El boton de camara abre la
+                    // galeria; subiendoFoto loquea el tap para evitar dobles uploads.
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 28.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier.size(96.dp).background(FrutAppColors.Brand400, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(inicial, color = Color.White, fontSize = 38.sp, fontWeight = FontWeight.Bold)
+                        Box(contentAlignment = Alignment.BottomEnd) {
+                            AvatarImage(url = avatarUrl, initial = inicial, size = 96.dp)
                             Box(
                                 modifier = Modifier.size(34.dp)
                                     .background(Color.White, CircleShape)
                                     .border(2.dp, FrutAppColors.Brand50, CircleShape)
-                                    .align(Alignment.BottomEnd)
-                                    .clickable { showToast("Foto de perfil disponible próximamente") },
+                                    .clickable(enabled = !subiendoFoto) { selectorImg.galeria() },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Filled.CameraAlt, contentDescription = "Cambiar foto", tint = FrutAppColors.Brand600, modifier = Modifier.size(18.dp))
+                                if (subiendoFoto) {
+                                    CircularProgressIndicator(
+                                        color = FrutAppColors.Brand600,
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(Icons.Filled.CameraAlt, contentDescription = "Cambiar foto", tint = FrutAppColors.Brand600, modifier = Modifier.size(18.dp))
+                                }
                             }
                         }
                     }

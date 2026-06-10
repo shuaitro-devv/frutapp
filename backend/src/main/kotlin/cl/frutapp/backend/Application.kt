@@ -24,10 +24,13 @@ import cl.frutapp.backend.modules.rbac.RbacRepository
 import cl.frutapp.backend.plugins.configureCors
 import cl.frutapp.backend.plugins.configureDatabases
 import cl.frutapp.backend.modules.audit.UserEventService
+import cl.frutapp.backend.modules.media.AvatarService
+import cl.frutapp.backend.modules.media.StorageService
 import cl.frutapp.backend.modules.notifications.DeviceTokenRepository
 import cl.frutapp.backend.modules.notifications.FcmSender
 import cl.frutapp.backend.modules.notifications.NotificationDispatcher
 import cl.frutapp.backend.modules.notifications.NotificationInboxRepository
+import cl.frutapp.backend.config.StorageConfig
 import cl.frutapp.backend.modules.staff.StaffOrderService
 import java.io.File
 import cl.frutapp.backend.plugins.configureMonitoring
@@ -75,6 +78,42 @@ private fun loadFcmSender(app: Application): FcmSender? {
         }
 }
 
+/**
+ * Construye un [StorageService] (MinIO) si las env vars `STORAGE_*` están todas
+ * presentes. Si falta alguna, devuelve null y avatar queda deshabilitado —
+ * util en CI/dev sin MinIO local.
+ *
+ * `init()` crea el bucket si no existe (idempotente). Si MinIO no responde,
+ * se loguea warning y se devuelve null.
+ */
+private fun loadStorageService(app: Application): StorageService? {
+    val endpoint = System.getenv("STORAGE_ENDPOINT")
+    val publicEndpoint = System.getenv("STORAGE_PUBLIC_ENDPOINT")
+    val accessKey = System.getenv("STORAGE_ACCESS_KEY")
+    val secretKey = System.getenv("STORAGE_SECRET_KEY")
+    val bucket = System.getenv("STORAGE_BUCKET")
+    if (endpoint.isNullOrBlank() || publicEndpoint.isNullOrBlank() ||
+        accessKey.isNullOrBlank() || secretKey.isNullOrBlank() || bucket.isNullOrBlank()) {
+        return null
+    }
+    return runCatching {
+        val service = StorageService(
+            StorageConfig(
+                endpoint = endpoint,
+                publicEndpoint = publicEndpoint,
+                accessKey = accessKey,
+                secretKey = secretKey,
+                bucket = bucket
+            )
+        )
+        service.init()
+        service
+    }.getOrElse {
+        app.environment.log.warn("Storage: no pude conectar a MinIO ({})", it.message)
+        null
+    }
+}
+
 fun Application.module() {
     val jwtConfig = JwtConfig.from(environment.config)
 
@@ -105,6 +144,11 @@ fun Application.module() {
     }
 
     val tokenService = TokenService(jwtConfig)
+    // Storage S3-compatible (MinIO) — opcional. Si no está configurado (sin
+    // env vars STORAGE_*), el backend sigue funcionando y avatar queda
+    // deshabilitado silenciosamente (util en CI/dev sin MinIO local).
+    val storageService: StorageService? = loadStorageService(this)
+    val avatarService = storageService?.let { AvatarService(it) }
     val authService = AuthService(
         users = UserRepository(),
         refreshTokens = RefreshTokenRepository(),
@@ -112,7 +156,8 @@ fun Application.module() {
         emailVerificationTokens = EmailVerificationTokenRepository(),
         tokens = tokenService,
         emailSender = emailSender,
-        rbac = rbacRepository
+        rbac = rbacRepository,
+        avatarUrlResolver = avatarService?.let { svc -> { uid -> svc.urlFor(uid) } }
     )
     val catalogRepository = CatalogRepository()
     val catalogService = CatalogService(catalogRepository)
@@ -148,7 +193,7 @@ fun Application.module() {
     configureRouting(
         authService, catalogService, orderService,
         adminUserService, staffOrderService, userEventService,
-        deviceTokenRepository, notificationInboxRepository
+        deviceTokenRepository, notificationInboxRepository, avatarService
     )
 
     // Refresca la config de negocio cada 60s (cambios en app_config sin redeploy).
@@ -166,6 +211,11 @@ fun Application.module() {
         environment.log.info("FCM: push notifications HABILITADAS")
     } else {
         environment.log.info("FCM: sin service account → push deshabilitado (define FIREBASE_SERVICE_ACCOUNT_JSON)")
+    }
+    if (storageService != null) {
+        environment.log.info("Storage: MinIO HABILITADO (avatar de perfil disponible)")
+    } else {
+        environment.log.info("Storage: sin MinIO → avatar deshabilitado (define STORAGE_ENDPOINT/ACCESS_KEY/SECRET_KEY)")
     }
 
     // Demo: auto-avance de pedidos (gated por env DEMO_AUTO_ADVANCE). En producción real = false.

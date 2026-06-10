@@ -37,6 +37,9 @@ dependencies {
     implementation(libs.ktor.server.auth.jwt)
     implementation(libs.bcrypt)
 
+    // Storage S3-compatible (MinIO) para avatars/media
+    implementation(libs.minio)
+
     // Base de datos: Exposed + Postgres + HikariCP + Flyway
     implementation(libs.exposed.core)
     implementation(libs.exposed.jdbc)

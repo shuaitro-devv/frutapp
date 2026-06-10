@@ -19,6 +19,10 @@ object UsersTable : Table("app_user") {
     val deletedAt = timestamp("deleted_at").nullable()
     // V12: location donde opera por defecto (solo aplica a roles staff).
     val homeLocationId = uuid("home_location_id").nullable()
+    // V16: foto de perfil. Key del objeto en MinIO (formato `users/{userId}/avatar.jpg`).
+    // La URL presignada se genera al vuelo en cada GET /v1/auth/me — no la guardamos
+    // en BD porque tiene TTL de 1h, los `object_key` son estables.
+    val avatarObjectKey = text("avatar_object_key").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

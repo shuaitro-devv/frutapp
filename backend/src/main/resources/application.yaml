@@ -25,6 +25,17 @@ mail:
   resendApiKey: "$RESEND_API_KEY:"
   from: "$MAIL_FROM:FrutApp <onboarding@resend.dev>"
 
+# Storage S3-compatible (MinIO). Si todas las STORAGE_* faltan, avatar queda
+# deshabilitado y el backend sigue funcionando. `endpoint` lo ve el backend
+# por la red docker interna; `publicEndpoint` se usa para firmar URLs que la
+# app abrirá (en QA: frutapp-storage.grandline.cl detrás de Traefik).
+storage:
+  endpoint: "$STORAGE_ENDPOINT:http://localhost:9000"
+  publicEndpoint: "$STORAGE_PUBLIC_ENDPOINT:http://10.0.2.2:9000"
+  accessKey: "$STORAGE_ACCESS_KEY:frutapp"
+  secretKey: "$STORAGE_SECRET_KEY:frutapp-dev"
+  bucket: "$STORAGE_BUCKET:frutapp"
+
 # Demo: auto-avance de pedidos por el camino feliz (solo QA/demo; en producción real = false).
 demo:
   autoAdvance: "$DEMO_AUTO_ADVANCE:false"

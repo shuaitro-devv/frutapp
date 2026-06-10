@@ -37,6 +37,9 @@ postgres = "42.7.2"
 flyway = "10.7.1"
 hikari = "5.1.0"
 
+# Storage (MinIO/S3)
+minio = "8.5.10"
+
 # Navigation app
 voyager = "1.0.0"
 
@@ -80,6 +83,9 @@ logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "lo
 
 # === Seguridad ===
 bcrypt = { module = "at.favre.lib:bcrypt", version.ref = "bcrypt" }
+
+# === Storage S3-compatible (backend) ===
+minio = { module = "io.minio:minio", version.ref = "minio" }
 
 # === Android ===
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }

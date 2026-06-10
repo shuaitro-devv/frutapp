@@ -25,7 +25,10 @@ class AuthService(
     private val emailVerificationTokens: EmailVerificationTokenRepository,
     private val tokens: TokenService,
     private val emailSender: EmailSender,
-    private val rbac: cl.frutapp.backend.modules.rbac.RbacRepository
+    private val rbac: cl.frutapp.backend.modules.rbac.RbacRepository,
+    /** Resuelve la URL presignada del avatar del user para devolverla en /me.
+     *  Null cuando MinIO no esta configurado — el backend sigue funcionando. */
+    private val avatarUrlResolver: (suspend (UUID) -> String?)? = null
 ) {
     private val logger = LoggerFactory.getLogger(AuthService::class.java)
 
@@ -167,7 +170,8 @@ class AuthService(
         val uuid = runCatching { UUID.fromString(userId) }.getOrNull() ?: throw UnauthorizedException()
         val row = users.findById(uuid) ?: throw UnauthorizedException()
         val roles = rbac.rolesOf(row.id).ifEmpty { listOf("cliente") }
-        return row.toDto().copy(roles = roles)
+        val avatarUrl = avatarUrlResolver?.invoke(uuid)
+        return row.toDto().copy(roles = roles, avatarUrl = avatarUrl)
     }
 
     /** Genera y "envía" un código de recuperación. No revela si el correo existe. */

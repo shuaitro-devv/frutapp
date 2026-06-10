@@ -77,7 +77,11 @@ data class UserDto(
     val email: String,
     val phone: String? = null,
     val role: String,
-    val roles: List<String> = emptyList()
+    val roles: List<String> = emptyList(),
+    /** URL presignada de la foto de perfil. Null si el user no subió foto. Tiene
+     *  TTL de 1h — el cliente refresca llamando a `/v1/auth/me`. Default null para
+     *  retro-compatibilidad con clientes viejos. */
+    val avatarUrl: String? = null
 )
 
 /** Respuesta de auth: usuario + par de tokens. */
