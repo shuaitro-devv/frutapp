@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cl.frutapp.app.data.TokenStore
+import cl.frutapp.app.ui.components.AvatarImage
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.theme.FrutAppColors
 
@@ -94,12 +95,12 @@ fun PickerPerfilContent(
                 .padding(16.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier.size(56.dp).background(Color.White.copy(alpha = 0.2f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(nombrePicker.take(1).uppercase(), color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                }
+                AvatarImage(
+                    url = TokenStore.user?.avatarUrl,
+                    initial = nombrePicker.take(1).uppercase(),
+                    size = 56.dp,
+                    background = Color.White.copy(alpha = 0.2f)
+                )
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(nombrePicker, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
