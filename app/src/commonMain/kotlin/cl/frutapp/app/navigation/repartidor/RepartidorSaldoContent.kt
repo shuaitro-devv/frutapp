@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.LocalAtm
 import androidx.compose.material.icons.filled.MoneyOff
@@ -30,10 +31,15 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,7 +49,16 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cl.frutapp.app.data.TokenStore
+import cl.frutapp.app.data.remote.AvatarApi
+import cl.frutapp.app.platform.rememberSelectorImagenes
+import cl.frutapp.app.ui.ErrorReporter
+import cl.frutapp.app.ui.components.AvatarImage
+import cl.frutapp.app.ui.mensajeAmigable
+import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 /**
  * repartidor-06 — Saldo y ganancias. Hero verde con saldo disponible, stats de en-transito
@@ -55,6 +70,30 @@ import cl.frutapp.app.ui.theme.FrutAppColors
 @Composable
 fun RepartidorSaldoContent(modifier: Modifier = Modifier, onAyuda: () -> Unit = {}) {
     val resumen = remember { saldoResumenMock() }
+    val nombreRepartidor = remember { TokenStore.user?.name?.substringBefore(' ') ?: "Repartidor" }
+    val emailRepartidor = remember { TokenStore.user?.email.orEmpty() }
+    // Subida de foto: mismo patron unificado del cliente + picker. AvatarApi reusa
+    // el endpoint /v1/me/avatar (multipart), funciona para cualquier rol logueado.
+    var subiendoFoto by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val avatarApi = remember { AvatarApi() }
+    val selectorImg = rememberSelectorImagenes { bytes ->
+        subiendoFoto = true
+        scope.launch {
+            runCatching { avatarApi.upload(bytes) }
+                .onSuccess { newUrl ->
+                    TokenStore.user?.let { u -> TokenStore.updateUser(u.copy(avatarUrl = newUrl)) }
+                    showToast("Foto actualizada ✓")
+                }
+                .onFailure { e ->
+                    if (e is CancellationException) throw e
+                    ErrorReporter.report(screen = "RepartidorSaldo", action = "upload_avatar", error = e)
+                    showToast(mensajeAmigable(e, "subir la foto"))
+                }
+            subiendoFoto = false
+        }
+    }
+
     Column(modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
         Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -73,6 +112,44 @@ fun RepartidorSaldoContent(modifier: Modifier = Modifier, onAyuda: () -> Unit = 
                 Icon(Icons.AutoMirrored.Filled.HelpOutline, null, tint = FrutAppColors.Brand600, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("Ayuda", color = FrutAppColors.Brand600, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        // Card mini de identidad del repartidor con avatar editable. Va antes del hero
+        // de saldo para que el rol tenga foto en su propia pantalla (paralelo al cliente
+        // y al picker). El hero verde de saldo sigue siendo el foco principal.
+        Row(
+            modifier = Modifier.fillMaxWidth()
+                .background(FrutAppColors.Brand50, RoundedCornerShape(14.dp))
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(contentAlignment = Alignment.BottomEnd) {
+                AvatarImage(
+                    url = TokenStore.user?.avatarUrl,
+                    initial = nombreRepartidor.take(1).uppercase(),
+                    size = 48.dp
+                )
+                Box(
+                    modifier = Modifier.size(20.dp)
+                        .background(Color.White, CircleShape)
+                        .border(2.dp, FrutAppColors.Brand600, CircleShape)
+                        .clickable(enabled = !subiendoFoto) { selectorImg.galeria() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (subiendoFoto) {
+                        CircularProgressIndicator(color = FrutAppColors.Brand600, modifier = Modifier.size(10.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Filled.CameraAlt, contentDescription = "Cambiar foto", tint = FrutAppColors.Brand600, modifier = Modifier.size(10.dp))
+                    }
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(nombreRepartidor, color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                if (emailRepartidor.isNotBlank()) {
+                    Text(emailRepartidor, color = FrutAppColors.InkMuted, fontSize = 12.sp, maxLines = 1)
+                }
             }
         }
         Spacer(Modifier.height(14.dp))
