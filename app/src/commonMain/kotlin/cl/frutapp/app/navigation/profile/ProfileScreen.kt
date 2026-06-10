@@ -72,6 +72,7 @@ import cl.frutapp.app.navigation.legal.LegalDocScreen
 import cl.frutapp.app.navigation.rewards.FrutCoinsScreen
 import cl.frutapp.app.navigation.rewards.HuellaVerdeScreen
 import cl.frutapp.app.ui.showToast
+import cl.frutapp.app.ui.components.AvatarImage
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.FrutTab
@@ -118,6 +119,7 @@ class ProfileScreen : Screen {
                         nombre = user?.name ?: "Invitado",
                         email = user?.email ?: "",
                         telefono = user?.phone,
+                        avatarUrl = user?.avatarUrl,
                         onFrutCoins = { navigator.push(FrutCoinsScreen()) },
                         onHuella = { navigator.push(HuellaVerdeScreen()) },
                         onEditarPerfil = { navigator.push(EditarPerfilScreen()) },
@@ -259,17 +261,12 @@ private fun ModoTiendaDialog(
 }
 
 @Composable
-private fun UserCard(nombre: String, email: String, telefono: String?, onFrutCoins: () -> Unit, onHuella: () -> Unit, onEditarPerfil: () -> Unit, modifier: Modifier = Modifier) {
+private fun UserCard(nombre: String, email: String, telefono: String?, avatarUrl: String?, onFrutCoins: () -> Unit, onHuella: () -> Unit, onEditarPerfil: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier.fillMaxWidth().background(FrutAppColors.Brand50, RoundedCornerShape(18.dp)).padding(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier.size(56.dp).background(FrutAppColors.Brand400, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(nombre.take(1).uppercase(), color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            }
+            AvatarImage(url = avatarUrl, initial = nombre.take(1).uppercase(), size = 56.dp)
             Column(modifier = Modifier.weight(1f).padding(start = 14.dp)) {
                 Text(nombre, color = FrutAppColors.Brand800, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                 Text(email, color = FrutAppColors.InkMuted, fontSize = 13.sp, maxLines = 1)
