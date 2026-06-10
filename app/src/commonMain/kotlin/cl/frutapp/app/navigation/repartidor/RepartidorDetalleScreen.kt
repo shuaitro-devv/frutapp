@@ -100,7 +100,8 @@ class RepartidorDetalleScreen(private val pedidoId: String) : Screen {
                         items = dto.items.size,
                         unidades = dto.items.size,
                         backendId = dto.id,
-                        telefono = dto.telefono
+                        telefono = dto.telefono,
+                        avatarUrl = dto.clienteAvatarUrl
                     )
                 }
                 .onFailure { e ->
