@@ -132,6 +132,10 @@ class PickerPicklistScreen(
                 }
         }
         val currentPicklist = picklist
+        // OJO: NUNCA `return` en medio de un Composable function despues de
+        // haber abierto un Column/Box. Compose genera grupos invisibles entre
+        // el if y el resto del cuerpo; el return los salta y crashea con
+        // IndexOutOfBoundsException en Stack.pop. Refactor a if/else.
         if (currentPicklist == null) {
             // Mientras carga el detalle, mostramos un splash minimal con el header
             // back+id para que la transicion no parpadee.
@@ -149,8 +153,7 @@ class PickerPicklistScreen(
                     androidx.compose.material3.CircularProgressIndicator(color = FrutAppColors.Brand400)
                 }
             }
-            return
-        }
+        } else {
         val data = currentPicklist
         // State machine por item: Map<numeroItem, EstadoItem>. Cada item siempre tiene un
         // estado; el boton 'listo' se desbloquea cuando ninguno queda en PENDIENTE.
@@ -347,6 +350,7 @@ class PickerPicklistScreen(
                     androidx.compose.material3.TextButton(onClick = { pedirReverso = null }) { Text("Mantener") }
                 }
             )
+        }
         }
     }
 }

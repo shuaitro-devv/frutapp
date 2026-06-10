@@ -604,6 +604,8 @@ private fun CategoriesRow(
     onBrandCategoria: (id: String, label: String, emoji: String) -> Unit = { _, _, _ -> }
 ) {
     val brand = LocalBrand.current
+    // OJO: NUNCA `return` dentro de un Composable scope abierto. Convertimos el
+    // branch Sofruco / FrutApp en if/else para no romper el arbol del Composer.
     if (brand.id == SofrucoBrand.id) {
         // Categorias Sofruco (6): jugos, aguas, fruta, cajas, secos, vinos.
         // Mas que las 4 de FrutApp -> usamos LazyRow con scroll horizontal para
@@ -639,8 +641,7 @@ private fun CategoriesRow(
                 }
             }
         }
-        return
-    }
+    } else {
     val categorias = listOf(
         CategoriaUi(Categoria.FRUTAS, Res.drawable.manzana_roja),
         CategoriaUi(Categoria.VERDURAS, Res.drawable.zanahoria),
@@ -678,6 +679,7 @@ private fun CategoriesRow(
                 )
             }
         }
+    }
     }
 }
 

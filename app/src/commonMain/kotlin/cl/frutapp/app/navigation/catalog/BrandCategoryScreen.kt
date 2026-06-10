@@ -92,12 +92,14 @@ class BrandCategoryScreen(
                     )
                 }
             }
+            // OJO: NUNCA usar early `return` dentro de un Composable scope abierto
+            // (Column/Row/Box/Scaffold). Compose deja grupos sin cerrar → Stack.pop
+            // crashea en la recomposicion. Siempre if/else.
             if (productos.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("Sin productos en esta categoría aún.", color = FrutAppColors.InkMuted)
                 }
-                return
-            }
+            } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 modifier = Modifier.fillMaxSize(),
@@ -120,6 +122,7 @@ class BrandCategoryScreen(
                         onDecrement = { linea?.let { CartStore.setCantidad(it, it.cantidad - 1) } }
                     )
                 }
+            }
             }
         }
     }
