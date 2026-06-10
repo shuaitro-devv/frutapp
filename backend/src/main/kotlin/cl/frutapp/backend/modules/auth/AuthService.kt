@@ -206,8 +206,13 @@ class AuthService(
         val access = tokens.issueAccessToken(user.id, roles)
         val refresh = tokens.generateRefreshToken()
         refreshTokens.create(user.id, tokens.hashRefreshToken(refresh), tokens.refreshExpiry())
+        // Resolver el avatarUrl tambien en login/verifyEmail/refresh (no solo en /me).
+        // Antes solo /me lo poblaba, asi que un login sobrescribia el avatarUrl del
+        // TokenStore con null → la foto desaparecia hasta el proximo /me. Centralizando
+        // aca, todos los puntos que emiten AuthResponse incluyen la URL presignada.
+        val avatarUrl = avatarUrlResolver?.invoke(user.id)
         return AuthResponse(
-            user = user.toDto().copy(roles = roles),
+            user = user.toDto().copy(roles = roles, avatarUrl = avatarUrl),
             accessToken = access,
             refreshToken = refresh,
             accessExpiresInSeconds = tokens.accessTtlSeconds
