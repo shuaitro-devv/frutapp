@@ -46,19 +46,22 @@ fun RepartidorEntregadosContent(modifier: Modifier = Modifier) {
     val totalGanado = remember(despachos) { despachos.sumOf { it.gananciaCLP } }
     Column(modifier = modifier.fillMaxSize()) {
         Header(totalEntregas = despachos.size, totalGanado = totalGanado)
+        // OJO: NUNCA usar `return@Column` dentro de un Composable; Compose construye
+        // un arbol de grupos y el salto deja grupos sin cerrar → IndexOutOfBoundsException
+        // en Stack.pop del Composer al recomponer. Siempre usar if/else.
         if (despachos.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Aún no entregas pedidos hoy", color = FrutAppColors.InkMuted, fontSize = 14.sp)
             }
-            return@Column
-        }
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(despachos, key = { it.id }) { d ->
-                Card(item = d, onClick = { })
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(despachos, key = { it.id }) { d ->
+                    Card(item = d, onClick = { })
+                }
             }
         }
     }

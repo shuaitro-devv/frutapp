@@ -53,19 +53,22 @@ fun PickerListosContent(modifier: Modifier = Modifier) {
     val pedidos = remember { emptyList<PedidoListo>() }
     Column(modifier = modifier.fillMaxSize()) {
         Header(total = pedidos.size, hoyEntregados = pedidos.size)
+        // OJO: NUNCA usar `return@Column` dentro de un Composable; Compose construye
+        // un arbol de grupos y el salto deja grupos sin cerrar → IndexOutOfBoundsException
+        // en Stack.pop del Composer al recomponer. Siempre usar if/else.
         if (pedidos.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("No has completado pedidos hoy", color = FrutAppColors.InkMuted, fontSize = 14.sp)
             }
-            return@Column
-        }
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(pedidos, key = { it.id }) { p ->
-                Card(pedido = p, onClick = { navigator.push(PickerListoScreen(p.id)) })
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(pedidos, key = { it.id }) { p ->
+                    Card(pedido = p, onClick = { navigator.push(PickerListoScreen(p.id)) })
+                }
             }
         }
     }
