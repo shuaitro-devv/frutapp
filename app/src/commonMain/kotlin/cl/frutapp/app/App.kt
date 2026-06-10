@@ -4,10 +4,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.transitions.SlideTransition
@@ -23,40 +19,27 @@ fun App() {
         Surface(modifier = Modifier.fillMaxSize()) {
             // Voyager Navigator con transición deslizante entre pantallas (sensación app nativa).
             Navigator(SplashScreen()) { navigator ->
-                // Detección global de "sesión expirada": cuando el ApiClient detecta un
-                // 401 que no puede refrescar (refresh token invalidado server-side), llama
-                // a TokenStore.clear() — eso pone accessToken a null reactivamente.
-                // Si eso pasa mientras hay pantallas abiertas que no manejan 401 (MisPedidos,
-                // Home, FrutCoins, etc.), antes el usuario se quedaba "logueado en pantalla
-                // pero sin sesión real" hasta que probaba algo que sí chequeaba (Checkout).
-                // Ahora cualquier pantalla queda automaticamente redirigida a Login.
+                // Deteccion global de "sesion expirada en runtime": cuando ApiClient
+                // ve un 401 protegido + refresh tambien devuelve 401 (token invalidado
+                // server-side), llama TokenStore.markSessionExpired(). Observamos ese
+                // flag aca y pateamos a Login con toast.
                 //
-                // Trackeamos si EN ALGUN momento del proceso hubo sesion real. Sin esto,
-                // el LaunchedEffect dispara con accessToken=null en el arranque fresco y
-                // hace replaceAll(Login) clobereando al Splash antes que pueda enrutar
-                // (rompia el caso 'usuario con registro a medias → caer en VerifyCode').
-                var hadSession by remember { mutableStateOf(TokenStore.isLoggedIn) }
-                LaunchedEffect(TokenStore.accessToken) {
-                    if (TokenStore.accessToken != null) {
-                        hadSession = true
-                        return@LaunchedEffect
-                    }
-                    if (!hadSession) return@LaunchedEffect
-                    // accessToken paso de !=null a null en este proceso. Distinguimos DOS casos:
-                    // (a) expiracion real (refresh token invalidado server-side) — queremos toast
-                    //     + replaceAll(Login) para sacar al usuario de una pantalla muerta;
-                    // (b) logout voluntario desde ProfileScreen, que ya llamo TokenStore.clear()
-                    //     + navigator.replaceAll(LoginScreen()) por su cuenta — NO queremos
-                    //     mostrar 'sesion expiro' (mentira) ni dispatchear otro replaceAll (dos
-                    //     LoginScreen consecutivos rompe Voyager con 'Key was used multiple times').
-                    // Mirar navigator.lastItem: si ya estamos en una pantalla de auth, fue
-                    // deliberado (logout, expiracion ya manejada, o splash redirigiendo).
+                // Por que un flag explicito y no observar accessToken=null:
+                // - Logout voluntario desde ProfileScreen ya hace TokenStore.clear() +
+                //   navigator.replaceAll(LoginScreen()) por su cuenta. NO queremos
+                //   mostrar "tu sesion expiro" (mentira) ni hacer doble replaceAll.
+                // - El arranque fresco ve accessToken=null sin que sea expiracion.
+                // El flag distingue determinante: solo se setea cuando es expiracion real.
+                LaunchedEffect(TokenStore.sessionExpired) {
+                    if (!TokenStore.sessionExpired) return@LaunchedEffect
+                    // Si el usuario ya esta en una pantalla de auth (logout cruzado o
+                    // splash redirigiendo), no dupliques. Vacia el flag y sal.
                     val lastItem = navigator.lastItem
                     val yaEstaEnAuth = lastItem is LoginScreen ||
                         lastItem::class.qualifiedName?.contains("OnboardingScreen") == true ||
                         lastItem::class.qualifiedName?.contains("VerifyCodeScreen") == true ||
                         lastItem::class.qualifiedName?.contains("SplashScreen") == true
-                    hadSession = false
+                    TokenStore.consumeSessionExpired()
                     if (!yaEstaEnAuth) {
                         showToast("Tu sesión expiró. Vuelve a iniciar sesión.")
                         navigator.replaceAll(LoginScreen())

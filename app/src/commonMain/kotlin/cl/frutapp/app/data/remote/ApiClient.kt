@@ -73,6 +73,12 @@ object ApiClient {
                     error = RuntimeException("Refresh respondio ${resp.status.value} ${resp.status.description}: $body")
                 )
                 TokenStore.clear()
+                // Senal explicita para que App.kt patee a Login. Antes confiabamos en
+                // que el LaunchedEffect global detectara accessToken=null, pero ese
+                // patron dependia de un flag hadSession con timing fragil. Esto es
+                // determinista: ApiClient sabe que la expiracion es real (refresh
+                // respondio 401) y lo comunica directo.
+                TokenStore.markSessionExpired()
                 null
             }
         } catch (e: kotlinx.coroutines.CancellationException) {

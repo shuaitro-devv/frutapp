@@ -31,7 +31,17 @@ object TokenStore {
     var pendingEmail: String? by mutableStateOf(null)
         private set
 
+    // Senal explicita "sesion expiro en runtime" para que App.kt patee al login sin
+    // depender de heuristicas de timing sobre accessToken. La setea ApiClient cuando
+    // el refresh devuelve 401 (token invalidado server-side). El observador resetea
+    // a false despues de mostrar el toast + replaceAll(Login).
+    var sessionExpired: Boolean by mutableStateOf(false)
+        private set
+
     val isLoggedIn: Boolean get() = accessToken != null
+
+    fun markSessionExpired() { sessionExpired = true }
+    fun consumeSessionExpired() { sessionExpired = false }
 
     /** Carga la sesión persistida a memoria (idempotente). */
     fun restore() {

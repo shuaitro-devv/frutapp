@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -121,7 +122,7 @@ class EditarPerfilScreen : Screen {
                 }
 
                 Column(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)
+                    modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(horizontal = 24.dp)
                 ) {
                     // Avatar circular: AvatarImage descarga la foto del backend si la
                     // tiene; sino muestra la inicial. El boton de camara abre la

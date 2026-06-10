@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -73,7 +74,8 @@ class HuellaVerdeScreen : Screen {
             Column(modifier = Modifier.fillMaxSize()) {
                 TopBar(onBack = { navigator.pop() })
 
-                Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+                // navigationBarsPadding: respetar barra de nav del sistema (3-btn nav) para que el CTA no quede tapado.
+                Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 20.dp)) {
                     HeroCard(recic = recic, gramos = gramos, coins = coins, ahorrado = ahorrado)
 
                     RachaCard(

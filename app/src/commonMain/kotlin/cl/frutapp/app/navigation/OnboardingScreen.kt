@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -190,7 +191,11 @@ class OnboardingScreen(private val desdeSplash: Boolean = true) : Screen {
                 }
             }
 
-            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 20.dp)) {
+            // navigationBarsPadding: en celus con barra de gestos/3 botones del sistema
+            // el CTA quedaba parcialmente tapado por la barra (visto en Samsung con 3-btn nav).
+            // En emulador con gestos no se notaba — engaño visual. Regla general: CTA al fondo
+            // SIEMPRE lleva navigationBarsPadding.
+            Box(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 28.dp, vertical = 20.dp)) {
                 FrutButtonPrimary(
                     text = if (esUltima) (if (desdeSplash) "Comenzar" else "Entendido") else "Siguiente",
                     onClick = {
