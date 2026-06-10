@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocationOn
@@ -28,10 +29,15 @@ import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,9 +48,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cl.frutapp.app.data.TokenStore
+import cl.frutapp.app.data.remote.AvatarApi
+import cl.frutapp.app.platform.rememberSelectorImagenes
+import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.components.AvatarImage
 import cl.frutapp.app.ui.components.FrutButtonOutline
+import cl.frutapp.app.ui.mensajeAmigable
+import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 /**
  * Tab 'Perfil' del picker. Resumen del turno: hero verde con info del picker (nombre,
@@ -63,6 +76,27 @@ fun PickerPerfilContent(
 ) {
     val pedidosTurno = remember { pedidosListosMock() }
     val nombrePicker = remember { TokenStore.user?.name?.substringBefore(' ') ?: "Picker" }
+    // Subida de foto: mismo patron que EditarPerfilScreen. AvatarApi/SelectorImagenes
+    // estan en commonMain, asi que andan tanto en picker como en cliente.
+    var subiendoFoto by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val avatarApi = remember { AvatarApi() }
+    val selectorImg = rememberSelectorImagenes { bytes ->
+        subiendoFoto = true
+        scope.launch {
+            runCatching { avatarApi.upload(bytes) }
+                .onSuccess { newUrl ->
+                    TokenStore.user?.let { u -> TokenStore.updateUser(u.copy(avatarUrl = newUrl)) }
+                    showToast("Foto actualizada ✓")
+                }
+                .onFailure { e ->
+                    if (e is CancellationException) throw e
+                    ErrorReporter.report(screen = "PickerPerfil", action = "upload_avatar", error = e)
+                    showToast(mensajeAmigable(e, "subir la foto"))
+                }
+            subiendoFoto = false
+        }
+    }
     Column(modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
         Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -95,12 +129,27 @@ fun PickerPerfilContent(
                 .padding(16.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AvatarImage(
-                    url = TokenStore.user?.avatarUrl,
-                    initial = nombrePicker.take(1).uppercase(),
-                    size = 56.dp,
-                    background = Color.White.copy(alpha = 0.2f)
-                )
+                Box(contentAlignment = Alignment.BottomEnd) {
+                    AvatarImage(
+                        url = TokenStore.user?.avatarUrl,
+                        initial = nombrePicker.take(1).uppercase(),
+                        size = 56.dp,
+                        background = Color.White.copy(alpha = 0.2f)
+                    )
+                    Box(
+                        modifier = Modifier.size(24.dp)
+                            .background(Color.White, CircleShape)
+                            .border(2.dp, FrutAppColors.Brand600, CircleShape)
+                            .clickable(enabled = !subiendoFoto) { selectorImg.galeria() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (subiendoFoto) {
+                            CircularProgressIndicator(color = FrutAppColors.Brand600, modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Filled.CameraAlt, contentDescription = "Cambiar foto", tint = FrutAppColors.Brand600, modifier = Modifier.size(12.dp))
+                        }
+                    }
+                }
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(nombrePicker, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
