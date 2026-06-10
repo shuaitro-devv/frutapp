@@ -13,6 +13,7 @@ import cl.frutapp.app.data.BiometricAuth
 import cl.frutapp.app.data.SessionStorage
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.fcm.FcmBridge
+import cl.frutapp.app.platform.AvatarDiskCache
 import cl.frutapp.app.ui.initToast
 import cl.frutapp.app.ui.theme.ActiveBrand
 
@@ -36,6 +37,7 @@ class MainActivity : FragmentActivity() {
         // Setear ANTES de setContent para que la primera composicion ya use la
         // paleta correcta y no haya flash de colores.
         ActiveBrand.set(ActiveBrand.persistedOverride() ?: BuildConfig.BRAND_ID)
+        AvatarDiskCache.init(applicationContext)
         TokenStore.restore()
         initToast(applicationContext)
         BiometricAuth.bind(this)

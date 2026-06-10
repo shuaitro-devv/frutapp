@@ -1,6 +1,9 @@
 package cl.frutapp.app.data.remote
 
+import cl.frutapp.app.platform.AvatarDiskCache
+import cl.frutapp.app.platform.AvatarMemoryCache
 import cl.frutapp.app.platform.contentTypeImagen
+import cl.frutapp.app.platform.objectKeyFromUrl
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
@@ -40,7 +43,16 @@ class AvatarApi(
                 }
             ))
         }
-        return response.body<AvatarUploadResponse>().avatarUrl
+        val nuevaUrl = response.body<AvatarUploadResponse>().avatarUrl
+        // Invalida caches y precarga la imagen nueva: el object key se mantiene
+        // (users/<uuid>/avatar.jpg sobrescribe), asi que sin invalidar verias la
+        // foto vieja hasta proximo cold start. Guardamos los bytes recien
+        // comprimidos por el cliente — son los mismos que el server almaceno.
+        objectKeyFromUrl(nuevaUrl)?.let { key ->
+            AvatarMemoryCache.invalidate(key)
+            runCatching { AvatarDiskCache.put(key, bytes) }
+        }
+        return nuevaUrl
     }
 
     suspend fun delete() {

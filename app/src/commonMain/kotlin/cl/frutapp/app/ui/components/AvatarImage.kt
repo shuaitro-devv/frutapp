@@ -25,8 +25,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
+import cl.frutapp.app.platform.AvatarDiskCache
+import cl.frutapp.app.platform.AvatarMemoryCache
 import cl.frutapp.app.platform.Imagenes
 import cl.frutapp.app.platform.decodeImagen
+import cl.frutapp.app.platform.objectKeyFromUrl
 import cl.frutapp.app.ui.theme.FrutAppColors
 import kotlinx.coroutines.CancellationException
 
@@ -48,18 +51,47 @@ fun AvatarImage(
     initialColor: Color = Color.White,
     expandible: Boolean = true,
 ) {
-    var bitmap by remember(url) { mutableStateOf<ImageBitmap?>(null) }
+    val objectKey = remember(url) { url?.let { objectKeyFromUrl(it) } }
+    // Memory cache hit es sincronico: lo leemos como valor inicial del state para que
+    // la primera composicion ya pinte la imagen, sin parpadeo de spinner.
+    var bitmap by remember(objectKey) { mutableStateOf(objectKey?.let { AvatarMemoryCache.get(it) }) }
     var failed by remember(url) { mutableStateOf(false) }
-    var cargando by remember(url) { mutableStateOf(!url.isNullOrBlank()) }
+    var cargando by remember(url, bitmap) { mutableStateOf(bitmap == null && !url.isNullOrBlank()) }
     var mostrarGrande by remember { mutableStateOf(false) }
 
-    LaunchedEffect(url) {
+    LaunchedEffect(url, objectKey) {
         if (url.isNullOrBlank()) { cargando = false; return@LaunchedEffect }
+        // Si memory cache ya tiene el bitmap, nada que hacer (el state inicial lo cubrio).
+        if (objectKey != null && AvatarMemoryCache.get(objectKey) != null) return@LaunchedEffect
+
+        // Disk cache: si tenemos los bytes guardados de una corrida anterior, decodificamos
+        // y mostramos al toque. Evita la descarga + el spinner en la mayoria de los casos.
+        if (objectKey != null) {
+            val cached = runCatching { AvatarDiskCache.get(objectKey) }.getOrNull()
+            if (cached != null) {
+                val decoded = decodeImagen(cached)
+                if (decoded != null) {
+                    AvatarMemoryCache.put(objectKey, decoded)
+                    bitmap = decoded
+                    cargando = false
+                    return@LaunchedEffect
+                }
+            }
+        }
+
+        // Sin cache: descarga real desde la URL presignada.
         runCatching { Imagenes.descargar(url) }
             .onSuccess { bytes ->
-                bitmap = decodeImagen(bytes)
+                val decoded = decodeImagen(bytes)
+                bitmap = decoded
                 cargando = false
-                if (bitmap == null) failed = true
+                if (decoded == null) {
+                    failed = true
+                } else if (objectKey != null) {
+                    AvatarMemoryCache.put(objectKey, decoded)
+                    // Disk write fire-and-forget — si falla, la proxima vez se vuelve a bajar.
+                    runCatching { AvatarDiskCache.put(objectKey, bytes) }
+                }
             }
             .onFailure { e ->
                 if (e is CancellationException) throw e
