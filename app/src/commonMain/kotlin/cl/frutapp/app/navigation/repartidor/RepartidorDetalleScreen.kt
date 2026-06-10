@@ -60,6 +60,7 @@ import androidx.compose.material.icons.filled.Cancel
 import cl.frutapp.app.data.isUuidLike
 import cl.frutapp.app.data.remote.StaffDispatchApi
 import cl.frutapp.app.ui.ErrorReporter
+import cl.frutapp.app.ui.components.AvatarImage
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.StaffActionsSheet
@@ -313,9 +314,13 @@ private fun ClienteCard(despacho: DespachoItem) {
             .padding(14.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(40.dp).background(FrutAppColors.Brand50, CircleShape), contentAlignment = Alignment.Center) {
-                Text(despacho.cliente.take(1).uppercase(), color = FrutAppColors.Brand600, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            }
+            AvatarImage(
+                url = despacho.avatarUrl,
+                initial = despacho.cliente.take(1).uppercase(),
+                size = 40.dp,
+                background = FrutAppColors.Brand50,
+                initialColor = FrutAppColors.Brand600
+            )
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text("Cliente", color = FrutAppColors.InkMuted, fontSize = 11.sp)

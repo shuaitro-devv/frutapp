@@ -15,7 +15,9 @@ data class DespachoEnRuta(
     val etaTexto: String, // ej. "10:25 - 10:40"
     val transito: String, // ej. "Normal", "Pesado"
     /** UUID del pedido en backend; null cuando viene del fixture mock. */
-    val backendId: String? = null
+    val backendId: String? = null,
+    /** URL presignada del avatar del cliente; null si el cliente nunca subio foto. */
+    val avatarUrl: String? = null
 )
 
 /** Item del tab 'Entregados': despacho ya completado, historial del turno. */

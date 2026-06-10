@@ -35,7 +35,8 @@ internal fun StaffDispatchSummaryDto.toDespachoItem(): DespachoItem {
         items = itemsCount,
         unidades = itemsCount,         // approx — el detalle real lo vemos al tap
         backendId = id,
-        telefono = telefono
+        telefono = telefono,
+        avatarUrl = clienteAvatarUrl
     )
 }
 
@@ -62,7 +63,8 @@ internal fun StaffDispatchDetailDto.toDespachoItem(): DespachoItem {
         items = items.size,
         unidades = items.size,
         backendId = id,
-        telefono = telefono
+        telefono = telefono,
+        avatarUrl = clienteAvatarUrl
     )
 }
 
@@ -75,5 +77,6 @@ internal fun StaffDispatchSummaryDto.toDespachoEnRuta(): DespachoEnRuta = Despac
     kmRestantes = 3.0,  // placeholder hasta integrar Maps
     etaTexto = "Por confirmar",
     transito = "Normal",
-    backendId = id
+    backendId = id,
+    avatarUrl = clienteAvatarUrl
 )

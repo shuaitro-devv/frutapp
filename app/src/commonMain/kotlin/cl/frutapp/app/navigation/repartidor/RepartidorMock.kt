@@ -26,7 +26,9 @@ data class DespachoItem(
     /** UUID del pedido en backend; null cuando viene del fixture mock. */
     val backendId: String? = null,
     /** Telefono del cliente; null si no esta cargado o el cliente no lo tiene. */
-    val telefono: String? = null
+    val telefono: String? = null,
+    /** URL presignada del avatar del cliente; null si el cliente nunca subio foto. */
+    val avatarUrl: String? = null
 ) {
     /** Urgente cuando lleva > 30 min en cola sin tomarse (semantica nueva: minutosEntrega
      *  ahora representa "minutos desde creado"). Para fixture mock con valores tipo 18,

@@ -187,7 +187,11 @@ fun Application.module() {
         UserRepository(), rbacRepository, PasswordResetTokenRepository(), tokenService, emailSender
     )
     val userEventService = UserEventService()
-    val staffOrderService = StaffOrderService(userEventService, notificationDispatcher)
+    val staffOrderService = StaffOrderService(
+        userEventService,
+        notificationDispatcher,
+        avatarUrlResolver = avatarService?.let { svc -> { uid -> svc.urlFor(uid) } }
+    )
 
     configureSecurity(jwtConfig, tokenService)
     configureRouting(

@@ -183,6 +183,7 @@ data class StaffDispatchSummaryDto(
     val itemsCount: Int,
     val createdAt: String,
     val clienteNombre: String,
+    val clienteAvatarUrl: String? = null, // URL presignada con TTL — opcional, fallback a inicial
     val sector: String,
     val direccion: String,        // direccion completa (acá si la necesita el repartidor)
     val telefono: String? = null, // contacto para coordinar entrega
@@ -199,6 +200,7 @@ data class StaffDispatchDetailDto(
     val total: Int,
     val createdAt: String,
     val clienteNombre: String,
+    val clienteAvatarUrl: String? = null,
     val sector: String,
     val direccion: String,
     val telefono: String? = null,

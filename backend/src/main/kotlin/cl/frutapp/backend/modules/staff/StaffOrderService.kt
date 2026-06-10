@@ -41,7 +41,10 @@ class StaffOrderService(
     private val events: UserEventService,
     /** Opcional: dispara push al cliente cuando la transicion de picker/repartidor
      *  avanza el estado del pedido. Null en tests donde no se quiere validar push. */
-    private val notifications: NotificationDispatcher? = null
+    private val notifications: NotificationDispatcher? = null,
+    /** Resuelve la URL presignada del avatar del cliente para que el repartidor lo
+     *  vea en su pantalla de detalle/cola. Null cuando MinIO no esta configurado. */
+    private val avatarUrlResolver: (suspend (UUID) -> String?)? = null
 ) {
 
     /**
@@ -302,93 +305,109 @@ class StaffOrderService(
      *  (mismo modelo que el picker). Auto-rescate de pedidos atascados en
      *  EN_DESPACHO si el repartidor se desconecto y no completo en 60 min
      *  (mas tiempo que el picker porque entregar lleva mas). */
-    suspend fun colaDispatch(repartidorId: UUID): List<StaffDispatchSummaryDto> = dbQuery {
-        val location = pickerHomeLocation(repartidorId)
-        val rescateThreshold = Clock.System.now().minus(STUCK_DISPATCH_THRESHOLD)
-        val rows = OrdersTable
-            .selectAll()
-            .where {
-                (OrdersTable.pickupLocationId eq location) and (
-                    (
-                        (OrdersTable.status eq STATUS_STOCK_CONFIRMADO) and
-                        OrdersTable.assignedRepartidorId.isNull()
-                    ) or (
-                        (OrdersTable.status eq STATUS_EN_DESPACHO) and
-                        OrdersTable.assignedAt.less(rescateThreshold)
+    suspend fun colaDispatch(repartidorId: UUID): List<StaffDispatchSummaryDto> {
+        val rows = dbQuery {
+            val location = pickerHomeLocation(repartidorId)
+            val rescateThreshold = Clock.System.now().minus(STUCK_DISPATCH_THRESHOLD)
+            OrdersTable
+                .selectAll()
+                .where {
+                    (OrdersTable.pickupLocationId eq location) and (
+                        (
+                            (OrdersTable.status eq STATUS_STOCK_CONFIRMADO) and
+                            OrdersTable.assignedRepartidorId.isNull()
+                        ) or (
+                            (OrdersTable.status eq STATUS_EN_DESPACHO) and
+                            OrdersTable.assignedAt.less(rescateThreshold)
+                        )
                     )
-                )
-            }
-            .orderBy(OrdersTable.createdAt)
-            .limit(50)
-            .toList()
-        materializeDispatchSummaries(rows, repartidorId)
+                }
+                .orderBy(OrdersTable.createdAt)
+                .limit(50)
+                .toList()
+        }
+        return materializeDispatchSummaries(rows, repartidorId)
     }
 
     /** Mis despachos en ruta (status EN_DESPACHO, asignados a mi). */
-    suspend fun enRutaDispatch(repartidorId: UUID): List<StaffDispatchSummaryDto> = dbQuery {
-        val rows = OrdersTable
-            .selectAll()
-            .where {
-                (OrdersTable.assignedRepartidorId eq repartidorId) and
-                (OrdersTable.status eq STATUS_EN_DESPACHO)
-            }
-            .orderBy(OrdersTable.assignedAt)
-            .toList()
-        materializeDispatchSummaries(rows, repartidorId)
+    suspend fun enRutaDispatch(repartidorId: UUID): List<StaffDispatchSummaryDto> {
+        val rows = dbQuery {
+            OrdersTable
+                .selectAll()
+                .where {
+                    (OrdersTable.assignedRepartidorId eq repartidorId) and
+                    (OrdersTable.status eq STATUS_EN_DESPACHO)
+                }
+                .orderBy(OrdersTable.assignedAt)
+                .toList()
+        }
+        return materializeDispatchSummaries(rows, repartidorId)
     }
 
     /** Detalle del despacho: cabecera + items + datos de contacto del cliente.
      *  A diferencia del detalle del picker, aqui SI incluimos direccion y
      *  telefono porque el repartidor los necesita para entregar. */
-    suspend fun detalleDispatch(repartidorId: UUID, orderId: UUID): StaffDispatchDetailDto = dbQuery {
-        val location = pickerHomeLocation(repartidorId)
-        val orderRow = OrdersTable
-            .selectAll()
-            .where { OrdersTable.id eq orderId }
-            .singleOrNull()
-            ?: throw NotFoundException("Pedido no encontrado.")
-        if (orderRow[OrdersTable.pickupLocationId] != location) {
-            throw ValidationException("Este pedido no es de tu location.")
+    suspend fun detalleDispatch(repartidorId: UUID, orderId: UUID): StaffDispatchDetailDto {
+        data class Cabecera(
+            val orderRow: ResultRow,
+            val clienteRow: ResultRow?,
+            val items: List<StaffOrderItemDto>
+        )
+        val cabecera = dbQuery {
+            val location = pickerHomeLocation(repartidorId)
+            val orderRow = OrdersTable
+                .selectAll()
+                .where { OrdersTable.id eq orderId }
+                .singleOrNull()
+                ?: throw NotFoundException("Pedido no encontrado.")
+            if (orderRow[OrdersTable.pickupLocationId] != location) {
+                throw ValidationException("Este pedido no es de tu location.")
+            }
+            val clienteRow = UsersTable
+                .selectAll()
+                .where { UsersTable.id eq orderRow[OrdersTable.userId] }
+                .singleOrNull()
+            val itemsRows = OrderItemsTable
+                .selectAll()
+                .where { OrderItemsTable.orderId eq orderId }
+                .toList()
+            val items = itemsRows.mapIndexed { index, row ->
+                val unidad = row[OrderItemsTable.unidad]
+                val gramos = row[OrderItemsTable.gramos]
+                val esKg = unidad == "kg"
+                val cantidadDouble = if (esKg && gramos != null) row[OrderItemsTable.cantidad] * gramos / 1000.0
+                    else row[OrderItemsTable.cantidad].toDouble()
+                StaffOrderItemDto(
+                    numero = index + 1,
+                    productId = row[OrderItemsTable.productId].toString(),
+                    nombre = row[OrderItemsTable.nombre],
+                    unidad = unidad,
+                    cantidad = cantidadDouble,
+                    gramos = gramos,
+                    precioUnitario = row[OrderItemsTable.precioUnitario],
+                    montoEstimado = row[OrderItemsTable.montoEstimado],
+                    pesoVariable = esKg && gramos != null,
+                    emoji = emojiForProduct(row[OrderItemsTable.nombre])
+                )
+            }
+            Cabecera(orderRow, clienteRow, items)
         }
-        val clienteRow = UsersTable
-            .selectAll()
-            .where { UsersTable.id eq orderRow[OrdersTable.userId] }
-            .singleOrNull()
-        val clienteNombre = (clienteRow?.get(UsersTable.name) ?: "Cliente").substringBefore(' ')
-        val telefono = clienteRow?.get(UsersTable.phone)
-
-        val itemsRows = OrderItemsTable
-            .selectAll()
-            .where { OrderItemsTable.orderId eq orderId }
-            .toList()
-
-        val items = itemsRows.mapIndexed { index, row ->
-            val unidad = row[OrderItemsTable.unidad]
-            val gramos = row[OrderItemsTable.gramos]
-            val esKg = unidad == "kg"
-            val cantidadDouble = if (esKg && gramos != null) row[OrderItemsTable.cantidad] * gramos / 1000.0
-                else row[OrderItemsTable.cantidad].toDouble()
-            StaffOrderItemDto(
-                numero = index + 1,
-                productId = row[OrderItemsTable.productId].toString(),
-                nombre = row[OrderItemsTable.nombre],
-                unidad = unidad,
-                cantidad = cantidadDouble,
-                gramos = gramos,
-                precioUnitario = row[OrderItemsTable.precioUnitario],
-                montoEstimado = row[OrderItemsTable.montoEstimado],
-                pesoVariable = esKg && gramos != null,
-                emoji = emojiForProduct(row[OrderItemsTable.nombre])
-            )
-        }
-
-        StaffDispatchDetailDto(
-            id = orderId.toString(),
+        // Resolver avatarUrl FUERA del dbQuery — el resolver hace su propio acceso a
+        // BD y a MinIO, no anido transacciones aca.
+        val clienteId = cabecera.orderRow[OrdersTable.userId]
+        val clienteAvatarUrl = avatarUrlResolver?.invoke(clienteId)
+        val clienteNombre = (cabecera.clienteRow?.get(UsersTable.name) ?: "Cliente").substringBefore(' ')
+        val telefono = cabecera.clienteRow?.get(UsersTable.phone)
+        val orderRow = cabecera.orderRow
+        val items = cabecera.items
+        return StaffDispatchDetailDto(
+            id = orderRow[OrdersTable.id].toString(),
             numero = orderRow[OrdersTable.numero],
             status = orderRow[OrdersTable.status],
             total = orderRow[OrdersTable.totalFinal] ?: orderRow[OrdersTable.totalEstimado],
             createdAt = orderRow[OrdersTable.createdAt].toString(),
             clienteNombre = clienteNombre,
+            clienteAvatarUrl = clienteAvatarUrl,
             sector = sectorFromAddress(orderRow[OrdersTable.direccion]),
             direccion = orderRow[OrdersTable.direccion],
             telefono = telefono,
@@ -462,24 +481,35 @@ class StaffOrderService(
         notifications?.onOrderTransition(orderId, OrderStatus.EN_DESPACHO, OrderStatus.ENTREGADO)
     }
 
-    private fun materializeDispatchSummaries(rows: List<ResultRow>, currentRepartidorId: UUID): List<StaffDispatchSummaryDto> {
+    private suspend fun materializeDispatchSummaries(rows: List<ResultRow>, currentRepartidorId: UUID): List<StaffDispatchSummaryDto> {
         if (rows.isEmpty()) return emptyList()
         val userIds = rows.map { it[OrdersTable.userId] }.toSet()
-        val userInfo: Map<UUID, Pair<String, String?>> = UsersTable
-            .selectAll()
-            .where { UsersTable.id inList userIds }
-            .associate { it[UsersTable.id] to (it[UsersTable.name] to it[UsersTable.phone]) }
+        val userInfo: Map<UUID, Pair<String, String?>> = dbQuery {
+            UsersTable
+                .selectAll()
+                .where { UsersTable.id inList userIds }
+                .associate { it[UsersTable.id] to (it[UsersTable.name] to it[UsersTable.phone]) }
+        }
+        // Resolver avatarUrl una vez por user en paralelo, con cache para no repetir en
+        // listas donde el mismo cliente tiene varios pedidos. Si el resolver es null
+        // (MinIO no configurado), todos quedan null.
+        val avatarUrls: Map<UUID, String?> = userIds.associateWith { uid ->
+            avatarUrlResolver?.invoke(uid)
+        }
 
         val orderIds = rows.map { it[OrdersTable.id] }
-        val itemsCountPorOrder: Map<UUID, Int> = OrderItemsTable
-            .selectAll()
-            .where { OrderItemsTable.orderId inList orderIds }
-            .groupBy { it[OrderItemsTable.orderId] }
-            .mapValues { it.value.size }
+        val itemsCountPorOrder: Map<UUID, Int> = dbQuery {
+            OrderItemsTable
+                .selectAll()
+                .where { OrderItemsTable.orderId inList orderIds }
+                .groupBy { it[OrderItemsTable.orderId] }
+                .mapValues { it.value.size }
+        }
 
         return rows.map { row ->
             val orderId = row[OrdersTable.id]
-            val (nombreFull, telefono) = userInfo[row[OrdersTable.userId]] ?: ("Cliente" to null)
+            val clienteId = row[OrdersTable.userId]
+            val (nombreFull, telefono) = userInfo[clienteId] ?: ("Cliente" to null)
             val nombreCorto = nombreFull.substringBefore(' ')
             StaffDispatchSummaryDto(
                 id = orderId.toString(),
@@ -489,6 +519,7 @@ class StaffOrderService(
                 itemsCount = itemsCountPorOrder[orderId] ?: 0,
                 createdAt = row[OrdersTable.createdAt].toString(),
                 clienteNombre = nombreCorto,
+                clienteAvatarUrl = avatarUrls[clienteId],
                 sector = sectorFromAddress(row[OrdersTable.direccion]),
                 direccion = row[OrdersTable.direccion],
                 telefono = telefono,
