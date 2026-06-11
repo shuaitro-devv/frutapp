@@ -47,6 +47,7 @@ import cl.frutapp.app.data.remote.AvatarApi
 import cl.frutapp.app.platform.rememberSelectorImagenes
 import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.components.AvatarImage
+import cl.frutapp.app.ui.components.CropAvatarSheet
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.mensajeAmigable
 import cl.frutapp.app.ui.showToast
@@ -78,26 +79,36 @@ class EditarPerfilScreen : Screen {
         // localmente al subir una nueva sin esperar al proximo /me.
         var avatarUrl by remember { mutableStateOf(userActual?.avatarUrl) }
         var subiendoFoto by remember { mutableStateOf(false) }
+        // bytesPendientes != null abre el CropAvatarSheet sobre la pantalla. El
+        // usuario ajusta encuadre y al confirmar sube SOLO el cuadrado recortado.
+        var bytesPendientes by remember { mutableStateOf<ByteArray?>(null) }
         val scope = rememberCoroutineScope()
         val avatarApi = remember { AvatarApi() }
-        val selectorImg = rememberSelectorImagenes { bytes ->
-            subiendoFoto = true
-            scope.launch {
-                runCatching { avatarApi.upload(bytes) }
-                    .onSuccess { newUrl ->
-                        avatarUrl = newUrl
-                        // Actualiza tambien el TokenStore.user.avatarUrl en sesion
-                        // para que el resto de la app vea el cambio.
-                        TokenStore.user?.let { u -> TokenStore.updateUser(u.copy(avatarUrl = newUrl)) }
-                        showToast("Foto actualizada ✓")
+        val selectorImg = rememberSelectorImagenes { bytes -> bytesPendientes = bytes }
+
+        bytesPendientes?.let { src ->
+            CropAvatarSheet(
+                bytes = src,
+                onDismiss = { bytesPendientes = null },
+                onListo = { recortados ->
+                    bytesPendientes = null
+                    subiendoFoto = true
+                    scope.launch {
+                        runCatching { avatarApi.upload(recortados) }
+                            .onSuccess { newUrl ->
+                                avatarUrl = newUrl
+                                TokenStore.user?.let { u -> TokenStore.updateUser(u.copy(avatarUrl = newUrl)) }
+                                showToast("Foto actualizada ✓")
+                            }
+                            .onFailure { e ->
+                                if (e is CancellationException) throw e
+                                ErrorReporter.report(screen = "EditarPerfil", action = "upload_avatar", error = e)
+                                showToast(mensajeAmigable(e, "subir la foto"))
+                            }
+                        subiendoFoto = false
                     }
-                    .onFailure { e ->
-                        if (e is CancellationException) throw e
-                        ErrorReporter.report(screen = "EditarPerfil", action = "upload_avatar", error = e)
-                        showToast(mensajeAmigable(e, "subir la foto"))
-                    }
-                subiendoFoto = false
-            }
+                }
+            )
         }
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {

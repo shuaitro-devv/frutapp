@@ -52,6 +52,7 @@ import cl.frutapp.app.data.remote.AvatarApi
 import cl.frutapp.app.platform.rememberSelectorImagenes
 import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.components.AvatarImage
+import cl.frutapp.app.ui.components.CropAvatarSheet
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.mensajeAmigable
 import cl.frutapp.app.ui.showToast
@@ -79,23 +80,33 @@ fun PickerPerfilContent(
     // Subida de foto: mismo patron que EditarPerfilScreen. AvatarApi/SelectorImagenes
     // estan en commonMain, asi que andan tanto en picker como en cliente.
     var subiendoFoto by remember { mutableStateOf(false) }
+    var bytesPendientes by remember { mutableStateOf<ByteArray?>(null) }
     val scope = rememberCoroutineScope()
     val avatarApi = remember { AvatarApi() }
-    val selectorImg = rememberSelectorImagenes { bytes ->
-        subiendoFoto = true
-        scope.launch {
-            runCatching { avatarApi.upload(bytes) }
-                .onSuccess { newUrl ->
-                    TokenStore.user?.let { u -> TokenStore.updateUser(u.copy(avatarUrl = newUrl)) }
-                    showToast("Foto actualizada ✓")
+    val selectorImg = rememberSelectorImagenes { bytes -> bytesPendientes = bytes }
+
+    bytesPendientes?.let { src ->
+        CropAvatarSheet(
+            bytes = src,
+            onDismiss = { bytesPendientes = null },
+            onListo = { recortados ->
+                bytesPendientes = null
+                subiendoFoto = true
+                scope.launch {
+                    runCatching { avatarApi.upload(recortados) }
+                        .onSuccess { newUrl ->
+                            TokenStore.user?.let { u -> TokenStore.updateUser(u.copy(avatarUrl = newUrl)) }
+                            showToast("Foto actualizada ✓")
+                        }
+                        .onFailure { e ->
+                            if (e is CancellationException) throw e
+                            ErrorReporter.report(screen = "PickerPerfil", action = "upload_avatar", error = e)
+                            showToast(mensajeAmigable(e, "subir la foto"))
+                        }
+                    subiendoFoto = false
                 }
-                .onFailure { e ->
-                    if (e is CancellationException) throw e
-                    ErrorReporter.report(screen = "PickerPerfil", action = "upload_avatar", error = e)
-                    showToast(mensajeAmigable(e, "subir la foto"))
-                }
-            subiendoFoto = false
-        }
+            }
+        )
     }
     Column(modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
         Spacer(Modifier.height(12.dp))
