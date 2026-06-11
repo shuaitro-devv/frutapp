@@ -85,11 +85,39 @@ fun CropAvatarSheet(
         ) {
             val img = bitmap
             val dims = dimensiones
+            // No usar return@Box: el Composer rastrea slots por arbol estructural y un
+            // return temprano rompe el conteo en el siguiente frame (Stack.pop crash).
+            // Patron seguro: if/else con dos sub-arboles distintos.
             if (img == null || dims == null) {
                 CircularProgressIndicator(color = Color.White)
-                return@Box
+            } else {
+                CropContent(
+                    bytes = bytes,
+                    img = img,
+                    imgWPx = dims.first,
+                    imgHPx = dims.second,
+                    procesando = procesando,
+                    setProcesando = { procesando = it },
+                    onDismiss = onDismiss,
+                    onListo = onListo
+                )
             }
-            val (imgWPx, imgHPx) = dims
+        }
+    }
+}
+
+@Composable
+private fun CropContent(
+    bytes: ByteArray,
+    img: ImageBitmap,
+    imgWPx: Int,
+    imgHPx: Int,
+    procesando: Boolean,
+    setProcesando: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+    onListo: (ByteArray) -> Unit
+) {
+    val scope = rememberCoroutineScope()
 
             // Estado de la transformacion: scale + offset que aplica el usuario.
             var scaleUser by remember(bytes) { mutableStateOf(1f) }
@@ -199,7 +227,7 @@ fun CropAvatarSheet(
                         enabled = !procesando,
                         onClick = {
                             if (procesando) return@FrutButtonPrimary
-                            procesando = true
+                            setProcesando(true)
                             scope.launch {
                                 runCatching {
                                     // Mapeo viewport → bitmap original. La imagen se renderiza
@@ -225,7 +253,7 @@ fun CropAvatarSheet(
                                     .onSuccess { onListo(it) }
                                     .onFailure { e ->
                                         if (e is CancellationException) throw e
-                                        procesando = false
+                                        setProcesando(false)
                                         // Fallback: subir la imagen original sin recortar para que el
                                         // usuario no quede atrapado. Errores del crop son raros (clamp
                                         // del actual ya cubre coords fuera de rango).
@@ -236,8 +264,6 @@ fun CropAvatarSheet(
                     )
                 }
             }
-        }
-    }
 }
 
 /** Helper para drawIntoCanvas — Compose Multiplatform lo expone via DrawScope.drawContext */
