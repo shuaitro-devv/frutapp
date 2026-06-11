@@ -132,10 +132,14 @@ class AuthService(
 
     suspend fun login(req: LoginRequest): AuthResponse {
         val email = normalizeEmail(req.email)
+        // Password > 72 bytes hace que bcrypt tire IllegalArgumentException (->500).
+        // No revelamos al cliente que el motivo es la longitud (ni saltamos el dummy
+        // hash para preservar el timing anti-enumeracion): hacemos como si no hubiera
+        // match y caemos en la rama de UnauthorizedException despues del dummy hash.
+        val passwordValido = req.password.toByteArray(Charsets.UTF_8).size <= 72
         val user = users.findByEmail(email)
-        if (user == null) {
-            // Gasta el mismo tiempo de bcrypt aunque el usuario no exista (anti-enumeración).
-            PasswordHasher.verify(req.password, dummyHash)
+        if (user == null || !passwordValido) {
+            PasswordHasher.verify("frutapp-dummy", dummyHash)
             throw UnauthorizedException()
         }
         if (!PasswordHasher.verify(req.password, user.passwordHash)) throw UnauthorizedException()
@@ -228,6 +232,12 @@ class AuthService(
     private fun validatePassword(password: String) {
         if (password.length < 6 || password.none { it.isLetter() } || password.none { it.isDigit() }) {
             throw ValidationException("La contraseña debe tener mínimo 6 caracteres e incluir letras y números.")
+        }
+        // bcrypt corta silenciosamente a 72 bytes UTF-8 → si dejamos pasar passwords mas
+        // largos, el hash que guardariamos en BD seria del prefijo, y el login despues
+        // fallaria de formas raras. Tope hard claro para el usuario al registrarse.
+        if (password.toByteArray(Charsets.UTF_8).size > 72) {
+            throw ValidationException("La contraseña es demasiado larga. Usá hasta 72 caracteres.")
         }
     }
 
