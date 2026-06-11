@@ -9,6 +9,7 @@ import io.ktor.server.application.install
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.plugins.NotFoundException as KtorNotFoundException
 import io.ktor.server.plugins.statuspages.StatusPages
+import io.ktor.server.plugins.statuspages.StatusPagesConfig
 import io.ktor.server.response.respond
 import org.slf4j.LoggerFactory
 import java.util.UUID
@@ -58,6 +59,14 @@ fun Application.configureStatusPages() {
             call.respond(
                 HttpStatusCode.InternalServerError,
                 ApiError("internal_error", "Ocurrió un error inesperado. Intenta de nuevo más tarde.")
+            )
+        }
+        // 429 del RateLimit plugin: cliente legitimo en retry-storm o atacante en
+        // brute force. Devolvemos JSON consistente; Ktor agrega Retry-After header.
+        status(HttpStatusCode.TooManyRequests) { call, _ ->
+            call.respond(
+                HttpStatusCode.TooManyRequests,
+                ApiError("rate_limited", "Demasiados intentos. Esperá un momento e intentá de nuevo.")
             )
         }
     }

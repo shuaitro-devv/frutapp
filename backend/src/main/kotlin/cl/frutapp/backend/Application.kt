@@ -22,6 +22,7 @@ import cl.frutapp.backend.modules.orders.OrderService
 import cl.frutapp.backend.modules.rbac.PermissionCache
 import cl.frutapp.backend.modules.rbac.RbacRepository
 import cl.frutapp.backend.plugins.configureCors
+import cl.frutapp.backend.plugins.configureRateLimit
 import cl.frutapp.backend.plugins.configureDatabases
 import cl.frutapp.backend.modules.audit.UserEventService
 import cl.frutapp.backend.modules.media.AvatarService
@@ -119,6 +120,7 @@ fun Application.module() {
 
     configureSerialization()
     configureCors()
+    configureRateLimit()
     configureStatusPages()
     configureMonitoring()
     configureDatabases()
