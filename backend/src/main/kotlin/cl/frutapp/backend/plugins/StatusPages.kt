@@ -22,11 +22,14 @@ fun Application.configureStatusPages() {
         exception<ApiException> { call, cause ->
             call.respond(cause.statusCode, ApiError(cause.errorCode, cause.message))
         }
-        // Body malformado / faltante al deserializar.
-        exception<BadRequestException> { call, cause ->
+        // Body malformado / faltante al deserializar. NO devolvemos cause.message
+        // porque suele filtrar el FQN del DTO interno ("Failed to convert request
+        // body to class cl.frutapp.shared.dto.LoginRequest"), pista util para un
+        // atacante. Mensaje generico cubre el caso normal sin revelar internals.
+        exception<BadRequestException> { call, _ ->
             call.respond(
                 HttpStatusCode.BadRequest,
-                ApiError("bad_request", cause.message ?: "Solicitud inválida.")
+                ApiError("bad_request", "El cuerpo de la solicitud no es válido.")
             )
         }
         // JSON con tipos/structures invalidos. Ktor a veces los envuelve como JsonConvertException
@@ -37,7 +40,15 @@ fun Application.configureStatusPages() {
                 ApiError("bad_request", "El cuerpo de la solicitud no es válido.")
             )
         }
-        // 404 de Ktor (path no matcheado) — devolvemos JSON consistente en lugar de HTML.
+        // 404 de Ktor (path no matcheado) — devolvemos JSON consistente en lugar de
+        // body vacio. exception<KtorNotFoundException> no se dispara para paths que
+        // simplemente no calzan con ninguna ruta; hay que usar status() para esos.
+        status(HttpStatusCode.NotFound) { call, _ ->
+            call.respond(
+                HttpStatusCode.NotFound,
+                ApiError("not_found", "Recurso no encontrado.")
+            )
+        }
         exception<KtorNotFoundException> { call, _ ->
             call.respond(
                 HttpStatusCode.NotFound,
