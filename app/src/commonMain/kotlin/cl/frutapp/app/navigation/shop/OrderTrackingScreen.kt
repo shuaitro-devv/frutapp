@@ -121,6 +121,11 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
                             Spacer(Modifier.height(12.dp))
                         }
                     }
+                    o.status == "ESPERANDO_AJUSTE_CLIENTE" -> AjusteBanner(
+                        numero = o.numero,
+                        modifier = Modifier.weight(1f),
+                        onRevisar = { navigator.push(AjusteAprobacionScreen(o.id)) }
+                    )
                     else -> Detail(
                         o,
                         modifier = Modifier.weight(1f),
@@ -151,6 +156,56 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
                 )
             }
         }
+    }
+}
+
+/** Banner full-screen cuando el pedido esta en ESPERANDO_AJUSTE_CLIENTE: oculta el
+ *  timeline (no aporta info nueva) y empuja al cliente a la pantalla de aprobacion.
+ *  Hasta que actue, el pedido no avanza. */
+@Composable
+private fun AjusteBanner(numero: String, modifier: Modifier = Modifier, onRevisar: () -> Unit) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .background(FrutAppColors.Brand50, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Filled.Star,
+                null,
+                tint = FrutAppColors.Brand600,
+                modifier = Modifier.size(36.dp)
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "Hay un ajuste de peso",
+            color = FrutAppColors.Brand800,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Pedido $numero · Tu Seleccionador pesó tus frutas y algunos items quedaron " +
+                "con un peso distinto al pedido. Revisa el nuevo total antes de continuar.",
+            color = FrutAppColors.InkSoft,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(horizontal = 8.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            lineHeight = 20.sp
+        )
+        Spacer(Modifier.height(24.dp))
+        FrutButtonPrimary(
+            text = "Revisar ajuste",
+            onClick = onRevisar
+        )
     }
 }
 

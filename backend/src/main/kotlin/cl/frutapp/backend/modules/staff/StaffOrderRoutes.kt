@@ -5,14 +5,17 @@ import cl.frutapp.backend.modules.audit.eventContext
 import cl.frutapp.backend.modules.audit.userId
 import cl.frutapp.backend.modules.rbac.hasPermission
 import cl.frutapp.backend.plugins.JWT_AUTH
+import cl.frutapp.shared.dto.SetItemPesoRequest
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.auth.authenticate
+import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import java.util.UUID
 
@@ -78,6 +81,22 @@ fun Route.staffOrderRoutes(staffOrders: StaffOrderService) {
                 val pickerId = call.userId()
                 val orderId = call.orderIdParam()
                 staffOrders.release(pickerId, orderId, call.eventContext())
+                call.respond(HttpStatusCode.NoContent)
+            }
+
+            // PUT /v1/staff/orders/{id}/items/{itemId}/peso -> registrar peso real
+            // del item desde la bascula. Gated por order:pick. El service valida
+            // ownership + que el item sea por kg + recalcula monto_final.
+            put("/{id}/items/{itemId}/peso") {
+                if (!call.hasPermission("order:pick")) {
+                    call.respond(HttpStatusCode.Forbidden)
+                    return@put
+                }
+                val pickerId = call.userId()
+                val orderId = call.orderIdParam()
+                val itemId = call.itemIdParam()
+                val body = call.receive<SetItemPesoRequest>()
+                staffOrders.setItemPeso(pickerId, orderId, itemId, body.gramosReales, call.eventContext())
                 call.respond(HttpStatusCode.NoContent)
             }
 
@@ -154,5 +173,11 @@ private fun ApplicationCall.orderIdParam(): UUID {
     val raw = parameters["id"].orEmpty()
     return runCatching { UUID.fromString(raw) }.getOrNull()
         ?: throw ValidationException("orderId inválido")
+}
+
+private fun ApplicationCall.itemIdParam(): UUID {
+    val raw = parameters["itemId"].orEmpty()
+    return runCatching { UUID.fromString(raw) }.getOrNull()
+        ?: throw ValidationException("itemId inválido")
 }
 

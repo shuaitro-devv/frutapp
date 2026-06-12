@@ -31,8 +31,22 @@ class NotificationDispatcher(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun onOrderTransition(orderId: UUID, from: OrderStatus, to: OrderStatus) {
+        // Cuando un pedido pasa a STOCK_CONFIRMADO (sea desde el complete del picker
+        // o desde aprobar/rechazar ajuste del cliente), avisamos a los repartidores
+        // de la location. Antes solo lo hacia StaffOrderService.complete, y los
+        // pedidos que pasaban por ESPERANDO_AJUSTE_CLIENTE quedaban invisibles
+        // para la cola de despacho.
+        if (to == OrderStatus.STOCK_CONFIRMADO) {
+            scope.launch {
+                runCatching {
+                    val info = orderRepo.findNumeroAndLocation(orderId) ?: return@launch
+                    val (numero, locId) = info
+                    if (locId != null) onDispatchReadyForRepartidores(orderId, locId, numero)
+                }
+            }
+        }
         if (fcm == null) return
-        // Filtro: solo pushes para transiciones que le interesan al cliente.
+        // Filtro: solo pushes al cliente para transiciones que le interesan.
         val mensaje = clientMessageFor(to) ?: return
         scope.launch {
             runCatching {
@@ -181,6 +195,10 @@ class NotificationDispatcher(
         OrderStatus.STOCK_CONFIRMADO -> ClientMessage(
             title = "Pedido confirmado",
             body = "Pedido {numero}: confirmamos lo que tienes, va camino a tu mesa."
+        )
+        OrderStatus.ESPERANDO_AJUSTE_CLIENTE -> ClientMessage(
+            title = "Tu pedido tiene un ajuste de peso",
+            body = "Pedido {numero}: hay items con peso diferente al pedido. Revísalo y aprobá el nuevo total."
         )
         OrderStatus.EN_DESPACHO -> ClientMessage(
             title = "Tu Repartidor va camino",

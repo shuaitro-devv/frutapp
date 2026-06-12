@@ -5,8 +5,10 @@ import cl.frutapp.backend.error.NotFoundException
 import cl.frutapp.backend.error.PricingChangedException
 import cl.frutapp.backend.error.ValidationException
 import cl.frutapp.backend.modules.catalog.CatalogRepository
+import cl.frutapp.shared.dto.AjusteResumenDto
 import cl.frutapp.shared.dto.CreateOrderRequest
 import cl.frutapp.shared.dto.FrutCoinsBalanceDto
+import cl.frutapp.shared.dto.ItemAjusteDto
 import cl.frutapp.shared.dto.OrderDto
 import cl.frutapp.shared.dto.OrderSummaryDto
 import cl.frutapp.shared.dto.TransitionRequest
@@ -182,10 +184,114 @@ class OrderService(
         }
     }
 
+    /**
+     * Resumen del ajuste de peso pendiente que el cliente ve en su pantalla de
+     * aprobacion. Solo tiene sentido en estado ESPERANDO_AJUSTE_CLIENTE.
+     *  - `itemsAjustados`: pasaron el umbral de tolerancia (los que ENG aprueba/rechaza).
+     *  - `itemsDentroTolerancia`: tambien cambiaron, pero no requieren aprobacion
+     *    (informativos en la pantalla).
+     */
+    suspend fun getResumenAjuste(userId: UUID, orderIdStr: String): AjusteResumenDto {
+        val orderId = parseUuid(orderIdStr, "Id inválido.")
+        val owner = orders.findOwner(orderId) ?: throw NotFoundException("Pedido no encontrado.")
+        if (owner != userId) throw NotFoundException("Pedido no encontrado.") // 404 en lugar de 403: no filtramos existencia
+        val current = orders.currentStatus(orderId) ?: throw NotFoundException("Pedido no encontrado.")
+        if (current != OrderStatus.ESPERANDO_AJUSTE_CLIENTE) {
+            throw ValidationException("Este pedido no tiene un ajuste pendiente.")
+        }
+        val full = orders.findById(orderId) ?: throw NotFoundException("Pedido no encontrado.")
+        val items = orders.listItemsPesoInfo(orderId)
+        val tolerancia = BusinessConfig.PESO_TOLERANCIA_PORC
+
+        val (sobre, dentro) = items
+            .filter { it.unidad == "kg" && it.gramos != null && it.pesoReal != null && it.montoFinal != null }
+            .map { item ->
+                // Comparamos contra el peso esperado TOTAL (gramos por unidad * cantidad).
+                // pesoReal es el peso total pesado en bascula.
+                val pesoEsperadoTotal = item.gramos!! * item.cantidad
+                val delta = (item.pesoReal!! - pesoEsperadoTotal).toDouble() / pesoEsperadoTotal
+                ItemAjusteDto(
+                    nombre = item.nombre,
+                    unidad = item.unidad,
+                    imageKey = "",  // el cliente lo tiene de OrderDto; ItemAjusteDto es solo el delta.
+                    gramosPedidos = pesoEsperadoTotal,
+                    gramosReales = item.pesoReal,
+                    cantidad = item.cantidad,
+                    montoEstimado = item.montoEstimado,
+                    montoFinal = item.montoFinal!!,
+                    deltaPorc = delta
+                )
+            }
+            .partition { kotlin.math.abs(it.deltaPorc) > tolerancia }
+
+        // total ajustado SI EL CLIENTE APRUEBA: suma monto_final real + envio.
+        val totalAjustado = orders.calcularTotalFinal(orderId)
+        return AjusteResumenDto(
+            orderId = orderId.toString(),
+            numero = full.numero,
+            totalEstimadoOriginal = full.totalEstimado,
+            totalAjustado = totalAjustado,
+            itemsAjustados = sobre,
+            itemsDentroTolerancia = dentro
+        )
+    }
+
+    /** El cliente acepta el ajuste de peso → ESPERANDO_AJUSTE_CLIENTE → STOCK_CONFIRMADO. */
+    suspend fun aprobarAjuste(userId: UUID, orderIdStr: String): OrderDto {
+        val orderId = parseUuid(orderIdStr, "Id inválido.")
+        val owner = orders.findOwner(orderId) ?: throw NotFoundException("Pedido no encontrado.")
+        if (owner != userId) throw NotFoundException("Pedido no encontrado.")
+        val from = orders.currentStatus(orderId) ?: throw NotFoundException("Pedido no encontrado.")
+        if (from != OrderStatus.ESPERANDO_AJUSTE_CLIENTE) {
+            throw ValidationException("Este pedido no tiene un ajuste pendiente.")
+        }
+        applyStep(orderId, from, OrderStatus.STOCK_CONFIRMADO, OrderActor.CLIENTE, userId, "cliente_aprobo_ajuste")
+        return orders.findById(orderId) ?: throw NotFoundException("Pedido no encontrado.")
+    }
+
+    /** El cliente rechaza los items con delta > tolerancia: se marcan SIN_STOCK (no se
+     *  cobran), el resto sigue, total_final se recalcula sin esos items. Va a
+     *  STOCK_CONFIRMADO con el total reducido. */
+    suspend fun rechazarAjuste(userId: UUID, orderIdStr: String): OrderDto {
+        val orderId = parseUuid(orderIdStr, "Id inválido.")
+        val owner = orders.findOwner(orderId) ?: throw NotFoundException("Pedido no encontrado.")
+        if (owner != userId) throw NotFoundException("Pedido no encontrado.")
+        val from = orders.currentStatus(orderId) ?: throw NotFoundException("Pedido no encontrado.")
+        if (from != OrderStatus.ESPERANDO_AJUSTE_CLIENTE) {
+            throw ValidationException("Este pedido no tiene un ajuste pendiente.")
+        }
+
+        // Rechazo basado en LO QUE EL CLIENTE VIO: marcamos SIN_STOCK los items por kg
+        // donde el peso real difiere del pedido (delta != 0). NO usamos la tolerancia
+        // actual porque pudo haberse editado entre que el cliente abrio la pantalla
+        // y aprobo — el cliente decide sobre el snapshot que tenia en pantalla, no
+        // sobre la regla actual del operador.
+        val items = orders.listItemsPesoInfo(orderId)
+        val itemsARechazar = items.filter { item ->
+            item.unidad == "kg" && item.gramos != null && item.pesoReal != null && run {
+                val pesoEsperadoTotal = item.gramos * item.cantidad
+                item.pesoReal != pesoEsperadoTotal
+            }
+        }
+        itemsARechazar.forEach { orders.marcarItemSinStock(orderId, it.id) }
+
+        // Si el cliente rechazo TODOS los items con peso (el pedido queda en saco
+        // vacio: solo envio), cancelamos en vez de pasar a STOCK_CONFIRMADO — no
+        // tiene sentido despachar nada. El payment va a REEMBOLSADO via applyStep.
+        val totalTrasRechazo = orders.calcularTotalFinal(orderId)
+        val subtotalTrasRechazo = totalTrasRechazo - (orders.findById(orderId)?.envio ?: 0)
+        val destino = if (subtotalTrasRechazo <= 0) OrderStatus.CANCELADO else OrderStatus.STOCK_CONFIRMADO
+        applyStep(orderId, from, destino, OrderActor.CLIENTE, userId, "cliente_rechazo_items_ajuste")
+        return orders.findById(orderId) ?: throw NotFoundException("Pedido no encontrado.")
+    }
+
     /** Aplica una transición ya validada, con los efectos de negocio (captura/reembolso). */
     private suspend fun applyStep(id: UUID, from: OrderStatus, to: OrderStatus, actor: OrderActor, actorUserId: UUID?, nota: String?) {
-        // MVP: al confirmar stock se fija el total final (= estimado) y se captura el pago.
-        val totalFinal = if (to == OrderStatus.STOCK_CONFIRMADO) orders.findById(id)?.totalEstimado else null
+        // Al confirmar stock fijamos el total final REAL (suma de monto_final por item,
+        // fallback a monto_estimado) + envio. Antes usabamos solo el estimado, lo que
+        // ignoraba ajustes de peso dentro de tolerancia (1kg -> 1.05kg cobraba el
+        // estimado, no el real). Y captura el pago.
+        val totalFinal = if (to == OrderStatus.STOCK_CONFIRMADO) orders.calcularTotalFinal(id) else null
         val payment = when (to) {
             OrderStatus.STOCK_CONFIRMADO -> PaymentStatus.CAPTURADO
             OrderStatus.CANCELADO -> PaymentStatus.REEMBOLSADO

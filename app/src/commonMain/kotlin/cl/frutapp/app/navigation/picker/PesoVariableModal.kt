@@ -49,7 +49,13 @@ import cl.frutapp.app.ui.theme.FrutAppColors
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PesoVariableModal(item: ItemPicklist, onCerrar: () -> Unit, onConfirmar: () -> Unit) {
+fun PesoVariableModal(
+    item: ItemPicklist,
+    onCerrar: () -> Unit,
+    /** Recibe gramosReales (no kg) para que el caller los mande al backend tal cual.
+     *  Ej: pesoReal kg=1.2 → gramosReales=1200. */
+    onConfirmar: (gramosReales: Int) -> Unit
+) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var pesoReal by remember { mutableStateOf(item.cantidad) }
 
@@ -159,7 +165,16 @@ fun PesoVariableModal(item: ItemPicklist, onCerrar: () -> Unit, onConfirmar: () 
             Spacer(Modifier.height(20.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 FrutButtonOutline(text = "Cancelar", onClick = onCerrar, modifier = Modifier.weight(1f))
-                FrutButtonPrimary(text = "Confirmar", onClick = onConfirmar, modifier = Modifier.weight(1.4f))
+                FrutButtonPrimary(
+                    text = "Confirmar",
+                    onClick = {
+                        // El picker ingresa el peso en KG (Double). Convertimos a gramos
+                        // para que el backend reciba un entero exacto y no perdamos
+                        // precision por float. Ej: 1.234 kg -> 1234 g.
+                        onConfirmar((pesoReal * 1000).toInt())
+                    },
+                    modifier = Modifier.weight(1.4f)
+                )
             }
         }
     }

@@ -1,5 +1,6 @@
 package cl.frutapp.app.data.remote
 
+import cl.frutapp.shared.dto.AjusteResumenDto
 import cl.frutapp.shared.dto.CreateOrderRequest
 import cl.frutapp.shared.dto.FrutCoinsBalanceDto
 import cl.frutapp.shared.dto.OrderDto
@@ -57,4 +58,16 @@ class OrderApi(
 
     suspend fun frutCoins(): FrutCoinsBalanceDto =
         client.get("$baseUrl/v1/frutcoins").body()
+
+    /** El cliente abre la pantalla "Hay un ajuste de peso": traemos delta + total ajustado. */
+    suspend fun getAjuste(orderId: String): AjusteResumenDto =
+        client.get("$baseUrl/v1/orders/$orderId/ajuste").body()
+
+    /** El cliente aprueba el ajuste: el pedido pasa a STOCK_CONFIRMADO con el total nuevo. */
+    suspend fun aprobarAjuste(orderId: String): OrderDto =
+        client.post("$baseUrl/v1/orders/$orderId/aprobar-ajuste").body()
+
+    /** El cliente rechaza items con delta grande: se descartan, el resto sigue. */
+    suspend fun rechazarAjuste(orderId: String): OrderDto =
+        client.post("$baseUrl/v1/orders/$orderId/rechazar-ajuste").body()
 }

@@ -35,6 +35,16 @@ fun Route.orderRoutes(orderService: OrderService) {
                 val actions = OrderStatus.parse(dto.status)?.let { OrderStatus.allowedActions(it, perms) } ?: emptyList()
                 call.respond(dto.copy(allowedActions = actions))
             }
+            // Ajuste de peso del picker: el cliente ve el resumen, aprueba o rechaza.
+            get("/{id}/ajuste") {
+                call.respond(orderService.getResumenAjuste(call.userId(), call.parameters["id"].orEmpty()))
+            }
+            post("/{id}/aprobar-ajuste") {
+                call.respond(orderService.aprobarAjuste(call.userId(), call.parameters["id"].orEmpty()))
+            }
+            post("/{id}/rechazar-ajuste") {
+                call.respond(orderService.rechazarAjuste(call.userId(), call.parameters["id"].orEmpty()))
+            }
         }
 
         get("/v1/frutcoins") {

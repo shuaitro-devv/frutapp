@@ -105,7 +105,48 @@ data class OrderItemDto(
     val cantidad: Int,
     val montoEstimado: Int,
     val montoFinal: Int? = null,
-    val itemStatus: String
+    val itemStatus: String,
+    /** Identificador del item dentro del pedido. La app cliente lo necesita para
+     *  identificar items con ajuste; la app picker lo necesita para el endpoint
+     *  PUT /v1/staff/orders/{id}/items/{itemId}/peso. */
+    val id: String? = null,
+    /** Peso real medido por el picker (solo para unidad=kg). null = aun no pesado. */
+    val pesoReal: Int? = null
+)
+
+/** Request del picker para registrar el peso real medido en bascula. */
+@Serializable
+data class SetItemPesoRequest(
+    /** Peso real en gramos (no en kg). Ej. 1200 = 1.2 kg. Debe ser > 0. */
+    val gramosReales: Int
+)
+
+/** Resumen del ajuste pendiente: items que excedieron la tolerancia + delta del total.
+ *  El cliente ve esto en la pantalla de aprobacion antes de decidir aprobar o rechazar. */
+@Serializable
+data class AjusteResumenDto(
+    val orderId: String,
+    val numero: String,
+    val totalEstimadoOriginal: Int,
+    val totalAjustado: Int,
+    /** Items que excedieron la tolerancia (los que el cliente va a aprobar/rechazar). */
+    val itemsAjustados: List<ItemAjusteDto>,
+    /** Items dentro de tolerancia: ajustados sin pedir aprobacion (informativo). */
+    val itemsDentroTolerancia: List<ItemAjusteDto>
+)
+
+@Serializable
+data class ItemAjusteDto(
+    val nombre: String,
+    val unidad: String,
+    val imageKey: String,
+    val gramosPedidos: Int,
+    val gramosReales: Int,
+    val cantidad: Int,
+    val montoEstimado: Int,
+    val montoFinal: Int,
+    /** Variación porcentual respecto al pedido. Ej. 0.15 = +15%, -0.08 = -8%. */
+    val deltaPorc: Double
 )
 
 /** Resumen para la lista "Mis pedidos". */
@@ -186,7 +227,13 @@ data class StaffOrderItemDto(
     val precioUnitario: Int,
     val montoEstimado: Int,
     val pesoVariable: Boolean,       // true si requiere balanza al armar
-    val emoji: String                // placeholder visual mientras no haya fotos
+    val emoji: String,               // placeholder visual mientras no haya fotos
+    /** UUID del item — el picker lo necesita para el endpoint PUT .../items/{id}/peso. */
+    val id: String? = null,
+    /** Peso real medido por el picker (null hasta confirmar en bascula). */
+    val pesoReal: Int? = null,
+    /** Estado del item: PENDIENTE / CONFIRMADO / SUSTITUIDO / SIN_STOCK. */
+    val itemStatus: String = "PENDIENTE"
 )
 
 /** Resumen de despacho que ve el repartidor en su cola. A DIFERENCIA del picker, aca el

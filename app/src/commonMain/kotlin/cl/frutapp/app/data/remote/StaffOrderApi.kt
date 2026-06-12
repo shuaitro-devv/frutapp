@@ -1,5 +1,6 @@
 package cl.frutapp.app.data.remote
 
+import cl.frutapp.shared.dto.SetItemPesoRequest
 import cl.frutapp.shared.dto.StaffOrderDetailDto
 import cl.frutapp.shared.dto.StaffOrderSummaryDto
 import cl.frutapp.shared.dto.StaffTakeResult
@@ -8,6 +9,10 @@ import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 
 /**
  * Endpoints del staff (picker / repartidor). Protegidos por JWT con permisos
@@ -47,6 +52,16 @@ class StaffOrderApi(
     /** Devolver el pedido a la cola libre (se equivoco al tomar). */
     suspend fun release(orderId: String) {
         client.post("$baseUrl/v1/staff/orders/$orderId/release")
+    }
+
+    /** Registra el peso real medido en bascula para un item por kg. El backend
+     *  recalcula `monto_final` y lo guarda; al `complete()` decide si pasa por
+     *  ESPERANDO_AJUSTE_CLIENTE (delta sobre tolerancia) o STOCK_CONFIRMADO directo. */
+    suspend fun setItemPeso(orderId: String, itemId: String, gramosReales: Int) {
+        client.put("$baseUrl/v1/staff/orders/$orderId/items/$itemId/peso") {
+            contentType(ContentType.Application.Json)
+            setBody(SetItemPesoRequest(gramosReales = gramosReales))
+        }
     }
 
     /** Marcar como STOCK_CONFIRMADO — listo para que el repartidor lo retire. */

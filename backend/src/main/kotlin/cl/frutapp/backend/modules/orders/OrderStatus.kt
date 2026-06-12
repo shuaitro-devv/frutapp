@@ -8,6 +8,12 @@ enum class OrderStatus {
     CREADO,
     PAGADO,
     EN_PICKING,
+    /** El picker confirmo stock pero algun item por kg salio con un delta de peso
+     *  superior a la tolerancia configurada (peso_tolerancia_porc). El pedido se
+     *  detiene aca hasta que el cliente apruebe el ajuste o rechace los items
+     *  afectados — recien ahi pasa a STOCK_CONFIRMADO. Bajo tolerancia, no se
+     *  pasa por aqui (UX fluida en el caso comun). */
+    ESPERANDO_AJUSTE_CLIENTE,
     STOCK_CONFIRMADO,
     FACTURADO,
     EN_DESPACHO,
@@ -19,7 +25,8 @@ enum class OrderStatus {
         private val transitions: Map<OrderStatus, Set<OrderStatus>> = mapOf(
             CREADO to setOf(PAGADO, CANCELADO),
             PAGADO to setOf(EN_PICKING, CANCELADO),
-            EN_PICKING to setOf(STOCK_CONFIRMADO, CANCELADO),
+            EN_PICKING to setOf(STOCK_CONFIRMADO, ESPERANDO_AJUSTE_CLIENTE, CANCELADO),
+            ESPERANDO_AJUSTE_CLIENTE to setOf(STOCK_CONFIRMADO, CANCELADO),
             STOCK_CONFIRMADO to setOf(FACTURADO, CANCELADO),
             FACTURADO to setOf(EN_DESPACHO),
             EN_DESPACHO to setOf(ENTREGADO),
@@ -40,6 +47,9 @@ enum class OrderStatus {
         fun permissionFor(to: OrderStatus): String? = when (to) {
             EN_PICKING -> "order:pick"
             STOCK_CONFIRMADO -> "order:confirm_stock"
+            // ESPERANDO_AJUSTE_CLIENTE lo dispara el sistema (al confirmar stock con delta).
+            // No es una accion manual, no tiene permiso para back office.
+            ESPERANDO_AJUSTE_CLIENTE -> null
             FACTURADO -> "order:invoice"
             EN_DESPACHO -> "order:dispatch"
             ENTREGADO -> "order:deliver"
@@ -54,7 +64,9 @@ enum class OrderStatus {
             nextStates(from).filter { to -> permissionFor(to)?.let { it in permissions } == true }.map { it.name }
 
         /** Siguiente estado del "camino feliz" (sin ramas de cancelación/devolución).
-         *  null = estado terminal o que no avanza solo. Lo usa el auto-avance de demo. */
+         *  null = estado terminal o que no avanza solo. Lo usa el auto-avance de demo.
+         *  ESPERANDO_AJUSTE_CLIENTE NO tiene "next happy" automatico: requiere accion
+         *  del cliente, asi que el auto-avance del demo lo salta. */
         fun nextHappy(from: OrderStatus): OrderStatus? = when (from) {
             PAGADO -> EN_PICKING
             EN_PICKING -> STOCK_CONFIRMADO

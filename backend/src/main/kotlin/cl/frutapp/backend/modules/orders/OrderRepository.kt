@@ -2,14 +2,18 @@ package cl.frutapp.backend.modules.orders
 
 import cl.frutapp.backend.config.BusinessConfig
 import cl.frutapp.backend.db.dbQuery
+import cl.frutapp.backend.modules.auth.UsersTable
+import cl.frutapp.shared.dto.AdminOrderSummaryDto
 import cl.frutapp.shared.dto.OrderDto
 import cl.frutapp.shared.dto.OrderItemDto
 import cl.frutapp.shared.dto.OrderPaymentDto
 import cl.frutapp.shared.dto.OrderSummaryDto
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.andWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
@@ -49,6 +53,13 @@ data class NewOrder(
     val cashMethod: String,
     /** CLP que el cliente quiere pagar con FrutCoins (ya capado por config). */
     val frutcoinsClpRequested: Int
+)
+
+/** Datos de contacto del cliente dueño de un pedido (back office). */
+data class ClienteContacto(
+    val nombre: String,
+    val email: String,
+    val telefono: String?
 )
 
 class OrderRepository {
@@ -196,9 +207,188 @@ class OrderRepository {
             }
     }
 
+    /**
+     * Back office: lista TODOS los pedidos (no scopeados a un usuario) creados en
+     * el rango [startInclusive, endExclusive), opcionalmente filtrados por estado.
+     * Excluye soft-deleted. Prefetch de nombres e items_count para evitar N+1.
+     */
+    suspend fun listForAdmin(
+        startInclusive: Instant,
+        endExclusive: Instant,
+        status: String?
+    ): List<AdminOrderSummaryDto> = dbQuery {
+        var query = OrdersTable.selectAll().where {
+            OrdersTable.deletedAt.isNull() and
+                (OrdersTable.createdAt greaterEq startInclusive) and
+                (OrdersTable.createdAt less endExclusive)
+        }
+        if (!status.isNullOrBlank()) {
+            query = query.andWhere { OrdersTable.status eq status }
+        }
+        val rows = query.orderBy(OrdersTable.createdAt to SortOrder.DESC).toList()
+        if (rows.isEmpty()) return@dbQuery emptyList()
+
+        val userIds = rows.map { it[OrdersTable.userId] }.toSet()
+        val nombrePorUser = UsersTable
+            .selectAll().where { UsersTable.id inList userIds }
+            .associate { it[UsersTable.id] to it[UsersTable.name] }
+
+        val orderIds = rows.map { it[OrdersTable.id] }
+        val itemsCountPorOrder = OrderItemsTable
+            .selectAll().where { OrderItemsTable.orderId inList orderIds }
+            .groupBy { it[OrderItemsTable.orderId] }
+            .mapValues { it.value.size }
+
+        rows.map { row ->
+            val oid = row[OrdersTable.id]
+            AdminOrderSummaryDto(
+                id = oid.toString(),
+                numero = row[OrdersTable.numero],
+                status = row[OrdersTable.status],
+                paymentStatus = row[OrdersTable.paymentStatus],
+                total = row[OrdersTable.totalFinal] ?: row[OrdersTable.totalEstimado],
+                itemsCount = itemsCountPorOrder[oid] ?: 0,
+                createdAt = row[OrdersTable.createdAt].toString(),
+                clienteNombre = (nombrePorUser[row[OrdersTable.userId]] ?: "Cliente").substringBefore(' '),
+                sector = sectorFromAddress(row[OrdersTable.direccion]),
+                fulfillmentType = row[OrdersTable.fulfillmentType]
+            )
+        }
+    }
+
+    /** Back office: nombre/email/teléfono del cliente dueño de un pedido. */
+    suspend fun findClienteOf(orderId: UUID): ClienteContacto? = dbQuery {
+        val orderRow = OrdersTable
+            .select(OrdersTable.userId)
+            .where { OrdersTable.id eq orderId }
+            .singleOrNull() ?: return@dbQuery null
+        val uid = orderRow[OrdersTable.userId]
+        UsersTable.selectAll().where { UsersTable.id eq uid }.singleOrNull()?.let {
+            ClienteContacto(
+                nombre = it[UsersTable.name],
+                email = it[UsersTable.email],
+                telefono = it[UsersTable.phone]
+            )
+        }
+    }
+
+    /** Heurística simple para el sector visible en la lista ("Av. X, Comuna" -> "Comuna"). */
+    private fun sectorFromAddress(direccion: String): String =
+        direccion.split(",").map { it.trim() }.lastOrNull { it.isNotEmpty() } ?: "Santiago"
+
     suspend fun currentStatus(id: UUID): OrderStatus? = dbQuery {
         OrdersTable.selectAll().where { OrdersTable.id eq id }.singleOrNull()
             ?.let { OrderStatus.parse(it[OrdersTable.status]) }
+    }
+
+    /** Snapshot por item para calcular ajustes de peso variable.
+     *  Incluye lo necesario para: identificar al item, decidir si aplica (unidad=kg),
+     *  comparar peso pedido vs real, y recomponer el monto final.
+     *  No expone al exterior — solo lo usa StaffOrderService / OrderService internos. */
+    data class ItemPesoRow(
+        val id: UUID,
+        val nombre: String,
+        val unidad: String,
+        val precioUnitario: Int,
+        val gramos: Int?,
+        val cantidad: Int,
+        val montoEstimado: Int,
+        val pesoReal: Int?,
+        val montoFinal: Int?,
+        val itemStatus: String
+    )
+
+    suspend fun listItemsPesoInfo(orderId: UUID): List<ItemPesoRow> = dbQuery {
+        OrderItemsTable.selectAll().where { OrderItemsTable.orderId eq orderId }.map {
+            ItemPesoRow(
+                id = it[OrderItemsTable.id],
+                nombre = it[OrderItemsTable.nombre],
+                unidad = it[OrderItemsTable.unidad],
+                precioUnitario = it[OrderItemsTable.precioUnitario],
+                gramos = it[OrderItemsTable.gramos],
+                cantidad = it[OrderItemsTable.cantidad],
+                montoEstimado = it[OrderItemsTable.montoEstimado],
+                pesoReal = it[OrderItemsTable.pesoReal],
+                montoFinal = it[OrderItemsTable.montoFinal],
+                itemStatus = it[OrderItemsTable.itemStatus]
+            )
+        }
+    }
+
+    /** El picker registra el peso real medido en bascula. Marca el item como CONFIRMADO
+     *  y graba `monto_final` ya calculado por el service. Atomico: requiere que el
+     *  pedido este EN_PICKING con assignedPickerId = pickerId. Devuelve filas afectadas:
+     *  0 = el pedido cambio de estado o ya no es del picker (otro picker rescato por
+     *  timeout, o el picker mismo completo). El service traduce 0 a 409/422. */
+    suspend fun setItemPeso(orderId: UUID, pickerId: UUID, itemId: UUID, gramosReales: Int, montoFinal: Int): Int = dbQuery {
+        // Subquery: ¿este order_id existe + asignado a este picker + en EN_PICKING?
+        // Solo si TODO eso es true, hacemos el UPDATE. Esto cierra la race entre el
+        // check de ownership en una dbQuery separada y el UPDATE en otra: si entre
+        // medio el pedido cambia de estado, el UPDATE deja 0 filas afectadas y el
+        // service tira ValidationException sin haber escrito basura.
+        val ownerEnPicking = OrdersTable.selectAll().where {
+            (OrdersTable.id eq orderId) and
+            (OrdersTable.assignedPickerId eq pickerId) and
+            (OrdersTable.status eq "EN_PICKING")
+        }.any()
+        if (!ownerEnPicking) return@dbQuery 0
+        OrderItemsTable.update({
+            (OrderItemsTable.id eq itemId) and (OrderItemsTable.orderId eq orderId)
+        }) {
+            it[pesoReal] = gramosReales
+            it[OrderItemsTable.montoFinal] = montoFinal
+            it[itemStatus] = ITEM_STATUS_CONFIRMADO
+        }
+    }
+
+    /** Marca un item como SIN_STOCK (cliente rechazo el ajuste de este item). */
+    suspend fun marcarItemSinStock(orderId: UUID, itemId: UUID): Int = dbQuery {
+        OrderItemsTable.update({
+            (OrderItemsTable.id eq itemId) and (OrderItemsTable.orderId eq orderId)
+        }) {
+            it[itemStatus] = ITEM_STATUS_SIN_STOCK
+            // monto_final = 0: el item no se cobra. peso_real puede quedar como esta.
+            it[montoFinal] = 0
+        }
+    }
+
+    /** Setea total_final sin tocar el estado. Usado al confirmar/rechazar ajuste para
+     *  que la pantalla de confirmacion del cliente muestre el monto correcto. */
+    suspend fun setTotalFinal(orderId: UUID, totalFinal: Int) = dbQuery {
+        OrdersTable.update({ OrdersTable.id eq orderId }) {
+            it[OrdersTable.totalFinal] = totalFinal
+            it[updatedAt] = Clock.System.now()
+        }
+        Unit
+    }
+
+    /** Calcula el total final real basandose en los monto_final que dejo el picker
+     *  (fallback a monto_estimado si el item no fue pesado, ej. unidad o atado). Le
+     *  agrega el envio del pedido. Items en SIN_STOCK suman 0 (no se cobran). */
+    suspend fun calcularTotalFinal(orderId: UUID): Int = dbQuery {
+        val items = OrderItemsTable.selectAll()
+            .where { OrderItemsTable.orderId eq orderId }
+            .toList()
+        val subtotalReal = items.sumOf { row ->
+            val status = row[OrderItemsTable.itemStatus]
+            if (status == ITEM_STATUS_SIN_STOCK) 0
+            else row[OrderItemsTable.montoFinal] ?: row[OrderItemsTable.montoEstimado]
+        }
+        val envio = OrdersTable.selectAll()
+            .where { OrdersTable.id eq orderId }
+            .singleOrNull()
+            ?.get(OrdersTable.envio) ?: 0
+        subtotalReal + envio
+    }
+
+    /** Dueno del pedido: para validar que el cliente que aprueba/rechaza es el mismo
+     *  que lo creo. Excluye soft-deleted. */
+    suspend fun findOwner(orderId: UUID): UUID? = dbQuery {
+        OrdersTable
+            .select(OrdersTable.userId)
+            .where { (OrdersTable.id eq orderId) and OrdersTable.deletedAt.isNull() }
+            .singleOrNull()
+            ?.let { it[OrdersTable.userId] }
     }
 
     /** Datos minimos para componer notificaciones push al CLIENTE: dueno + numero.
@@ -294,7 +484,9 @@ class OrderRepository {
         cantidad = r[OrderItemsTable.cantidad],
         montoEstimado = r[OrderItemsTable.montoEstimado],
         montoFinal = r[OrderItemsTable.montoFinal],
-        itemStatus = r[OrderItemsTable.itemStatus]
+        itemStatus = r[OrderItemsTable.itemStatus],
+        id = r[OrderItemsTable.id].toString(),
+        pesoReal = r[OrderItemsTable.pesoReal]
     )
 
     private fun toOrderDto(r: ResultRow, items: List<OrderItemDto>, payments: List<OrderPaymentDto>) = OrderDto(
@@ -320,5 +512,11 @@ class OrderRepository {
         // Codigo de la pickup_location por defecto (seedeada en V12). Cuando exista
         // admin web podra elegirse en checkout segun la comuna del cliente.
         const val DEFAULT_PICKUP_LOCATION_CODE = "lo-valledor-centro"
+
+        // Estados del item (definidos en V4__orders.sql).
+        const val ITEM_STATUS_PENDIENTE = "PENDIENTE"
+        const val ITEM_STATUS_CONFIRMADO = "CONFIRMADO"
+        const val ITEM_STATUS_SUSTITUIDO = "SUSTITUIDO"
+        const val ITEM_STATUS_SIN_STOCK = "SIN_STOCK"
     }
 }

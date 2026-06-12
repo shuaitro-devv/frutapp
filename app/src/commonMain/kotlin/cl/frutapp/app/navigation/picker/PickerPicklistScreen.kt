@@ -269,10 +269,27 @@ class PickerPicklistScreen(
             PesoVariableModal(
                 item = itemModal!!,
                 onCerrar = { modalAbierto = null; itemModal = null },
-                onConfirmar = {
-                    estados = estados + (itemModal!!.numero to EstadoItem.COMPLETADO)
+                onConfirmar = { gramosReales ->
+                    val item = itemModal!!
+                    // Marcar local primero (UX optimista) y cerrar el modal.
+                    estados = estados + (item.numero to EstadoItem.COMPLETADO)
                     modalAbierto = null
                     itemModal = null
+                    // En backend real, persistir el peso. En mock no tocamos red.
+                    // Si falla el backend, revertimos el estado local y avisamos —
+                    // sin esto el picker creeria que confirmo y al apretar Listo
+                    // el complete() encontraria items sin pesar.
+                    if (esBackendReal && item.backendId != null) {
+                        scope.launch {
+                            runCatching { staffApi.setItemPeso(pedidoId, item.backendId, gramosReales) }
+                                .onFailure { e ->
+                                    if (e is kotlinx.coroutines.CancellationException) throw e
+                                    ErrorReporter.report(screen = "PickerPicklist", action = "set_peso", error = e)
+                                    estados = estados + (item.numero to EstadoItem.PENDIENTE)
+                                    showToast(mensajeAmigable(e, "guardar el peso"))
+                                }
+                        }
+                    }
                 }
             )
         }

@@ -1,5 +1,6 @@
 package cl.frutapp.backend.modules.staff
 
+import cl.frutapp.backend.config.BusinessConfig
 import cl.frutapp.backend.db.dbQuery
 import cl.frutapp.backend.error.NotFoundException
 import cl.frutapp.backend.error.ValidationException
@@ -8,6 +9,7 @@ import cl.frutapp.backend.modules.audit.UserEventService
 import cl.frutapp.backend.modules.auth.UsersTable
 import cl.frutapp.backend.modules.notifications.NotificationDispatcher
 import cl.frutapp.backend.modules.orders.OrderItemsTable
+import cl.frutapp.backend.modules.orders.OrderRepository
 import cl.frutapp.backend.modules.orders.OrderStatus
 import cl.frutapp.backend.modules.orders.OrderStatusHistoryTable
 import cl.frutapp.backend.modules.orders.OrdersTable
@@ -44,7 +46,11 @@ class StaffOrderService(
     private val notifications: NotificationDispatcher? = null,
     /** Resuelve la URL presignada del avatar del cliente para que el repartidor lo
      *  vea en su pantalla de detalle/cola. Null cuando MinIO no esta configurado. */
-    private val avatarUrlResolver: (suspend (UUID) -> String?)? = null
+    private val avatarUrlResolver: (suspend (UUID) -> String?)? = null,
+    /** Para los flows de peso variable (setItemPeso, complete con discriminacion
+     *  por tolerancia). Usa los helpers tipados del repo en vez de SQL inline para
+     *  evitar duplicar logica de calculo. */
+    private val orderRepository: OrderRepository = OrderRepository()
 ) {
 
     /**
@@ -123,7 +129,10 @@ class StaffOrderService(
                 precioUnitario = row[OrderItemsTable.precioUnitario],
                 montoEstimado = row[OrderItemsTable.montoEstimado],
                 pesoVariable = esKg && gramos != null,
-                emoji = emojiForProduct(row[OrderItemsTable.nombre])
+                emoji = emojiForProduct(row[OrderItemsTable.nombre]),
+                id = row[OrderItemsTable.id].toString(),
+                pesoReal = row[OrderItemsTable.pesoReal],
+                itemStatus = row[OrderItemsTable.itemStatus]
             )
         }
 
@@ -257,8 +266,75 @@ class StaffOrderService(
         events.logSafely(eventType = "staff.order_released", userId = pickerId, entityType = "order", entityId = orderId, context = context)
     }
 
-    /** Marcar el pedido como STOCK_CONFIRMADO (listo para que lo retire el repartidor). */
+    /**
+     * El picker mide el peso real en bascula y lo registra. Valida:
+     *  - ownership: el picker tiene el pedido asignado y esta en EN_PICKING.
+     *  - el item es por kg (unidad="kg"), si no rechaza (no tiene sentido pesar unidades).
+     *  - gramosReales > 0.
+     *
+     * Calcula `monto_final = precio_unitario * gramos_reales / 1000 * cantidad`,
+     * persiste peso_real + monto_final, marca item_status=CONFIRMADO.
+     */
+    suspend fun setItemPeso(pickerId: UUID, orderId: UUID, itemId: UUID, gramosReales: Int, context: EventContext) {
+        if (gramosReales <= 0) throw ValidationException("El peso debe ser mayor a 0.")
+
+        // Lectura del item para validar que es por kg + calcular montoFinal. Esto
+        // puede salir desactualizado si el pedido cambia de estado entre acá y el
+        // UPDATE — pero el UPDATE de abajo es atomico (chequea ownership + EN_PICKING
+        // en la misma dbQuery), asi que el peor caso es que escribimos NADA y
+        // devolvemos error (no quedamos en estado inconsistente).
+        val items = orderRepository.listItemsPesoInfo(orderId)
+        val item = items.firstOrNull { it.id == itemId }
+            ?: throw NotFoundException("Item no encontrado en este pedido.")
+        if (item.unidad != "kg") throw ValidationException("Este item no se pesa (no es por kg).")
+
+        // Contrato: gramosReales = peso TOTAL del item (todas las bolsas pesadas
+        // juntas en bascula). El UI del picker muestra "cantidad * gramos / 1000 kg
+        // solicitados" y el picker pesa ese total. monto_final = precio_unitario
+        // (CLP/kg) * gramosReales / 1000. NO multiplicar de nuevo por cantidad —
+        // la cantidad ya esta absorbida en el peso total. Antes lo hacia y cobraba
+        // doble/triple en pedidos con cantidad > 1.
+        val montoFinal = (item.precioUnitario.toLong() * gramosReales / 1000L).toInt()
+        val updated = orderRepository.setItemPeso(orderId, pickerId, itemId, gramosReales, montoFinal)
+        if (updated == 0) throw ValidationException("Este pedido no está en picking o no es tuyo.")
+
+        events.logSafely(
+            eventType = "staff.item_peso_set",
+            userId = pickerId, entityType = "order", entityId = orderId,
+            context = context
+        )
+    }
+
+    /**
+     * El picker termina el picking. Recalcula el monto total con los `monto_final` que
+     * vino registrando (para items por kg pesados; para unidad usa monto_estimado).
+     * Si algun item por kg supero la tolerancia configurada → ESPERANDO_AJUSTE_CLIENTE
+     * (espera aprobacion). Si todos dentro de tolerancia → STOCK_CONFIRMADO directo.
+     */
     suspend fun complete(pickerId: UUID, orderId: UUID, context: EventContext) {
+        val items = orderRepository.listItemsPesoInfo(orderId)
+        // Validacion: todos los items por kg deben estar pesados antes de cerrar
+        // el picking. Sin esto, calcularTotalFinal del applyStep usa monto_estimado
+        // como fallback y el cliente paga el estimado en items que el picker
+        // marco como completados pero nunca peso (race del UI o del modo mock).
+        val sinPesar = items.filter { it.unidad == "kg" && it.gramos != null && it.pesoReal == null }
+        if (sinPesar.isNotEmpty()) {
+            throw ValidationException("Hay items por kg sin pesar: ${sinPesar.joinToString { it.nombre }}.")
+        }
+        val tolerancia = BusinessConfig.PESO_TOLERANCIA_PORC
+        val haySobreTolerancia = items.any { item ->
+            // Solo aplica a items por kg con peso pedido + peso real medido.
+            if (item.unidad != "kg" || item.gramos == null || item.pesoReal == null) return@any false
+            // pesoEsperadoTotal = gramos POR UNIDAD * cantidad (todas las bolsas juntas),
+            // pesoReal es el peso TOTAL pesado en bascula. Antes comparaba contra gramos
+            // sin multiplicar por cantidad y disparaba ESPERANDO_AJUSTE para pedidos
+            // con cantidad>1 aunque el desvio real era pequeno.
+            val pesoEsperadoTotal = item.gramos * item.cantidad
+            val delta = kotlin.math.abs(item.pesoReal - pesoEsperadoTotal).toDouble() / pesoEsperadoTotal
+            delta > tolerancia
+        }
+        val proximoStatus = if (haySobreTolerancia) STATUS_ESPERANDO_AJUSTE else STATUS_STOCK_CONFIRMADO
+
         val now = Clock.System.now()
         val ok = dbQuery {
             val updated = OrdersTable.update({
@@ -266,26 +342,39 @@ class StaffOrderService(
                 (OrdersTable.assignedPickerId eq pickerId) and
                 (OrdersTable.status eq STATUS_EN_PICKING)
             }) {
-                it[status] = STATUS_STOCK_CONFIRMADO
+                it[status] = proximoStatus
                 it[updatedAt] = now
             }
             if (updated > 0) {
-                recordHistory(orderId, fromStatus = STATUS_EN_PICKING, toStatus = STATUS_STOCK_CONFIRMADO, actorUserId = pickerId, nota = "picker_complete")
+                recordHistory(
+                    orderId,
+                    fromStatus = STATUS_EN_PICKING,
+                    toStatus = proximoStatus,
+                    actorUserId = pickerId,
+                    nota = if (haySobreTolerancia) "picker_complete_con_ajuste" else "picker_complete"
+                )
                 true
             } else false
         }
         if (!ok) throw ValidationException("Este pedido no está en picking o no es tuyo.")
 
-        events.logSafely(eventType = "staff.order_completed", userId = pickerId, entityType = "order", entityId = orderId, context = context)
-        // Push al cliente: "Pedido confirmado".
-        notifications?.onOrderTransition(orderId, OrderStatus.EN_PICKING, OrderStatus.STOCK_CONFIRMADO)
-        // Push a repartidores de la misma location: "despacho listo para retiro".
-        // Reusa el lookup de numero+location que ya hace el cliente-push si fuera necesario.
-        val nd = notifications
-        if (nd != null) {
-            val (numeroDb, locId) = pickerHomeLocationLookup(orderId) ?: return
-            if (locId != null) nd.onDispatchReadyForRepartidores(orderId, locId, numeroDb)
-        }
+        events.logSafely(
+            eventType = if (haySobreTolerancia) "staff.order_pending_ajuste" else "staff.order_completed",
+            userId = pickerId, entityType = "order", entityId = orderId,
+            context = context
+        )
+
+        // El dispatcher mismo se encarga de:
+        //  - push al cliente (mensaje segun el estado destino),
+        //  - push a repartidores SI el destino es STOCK_CONFIRMADO (lo dispara desde
+        //    onOrderTransition cuando ve esa transicion, independiente del origen).
+        // Asi tanto el complete() del picker como el aprobar/rechazar del cliente
+        // notifican a la cola de despacho sin duplicar codigo aca.
+        notifications?.onOrderTransition(
+            orderId,
+            OrderStatus.EN_PICKING,
+            if (haySobreTolerancia) OrderStatus.ESPERANDO_AJUSTE_CLIENTE else OrderStatus.STOCK_CONFIRMADO
+        )
     }
 
     /** Lookup minimo numero + pickup_location del pedido para hooks de push. */
@@ -596,6 +685,7 @@ class StaffOrderService(
         const val STATUS_PAGADO = "PAGADO"
         const val STATUS_EN_PICKING = "EN_PICKING"
         const val STATUS_STOCK_CONFIRMADO = "STOCK_CONFIRMADO"
+        const val STATUS_ESPERANDO_AJUSTE = "ESPERANDO_AJUSTE_CLIENTE"
         const val STATUS_EN_DESPACHO = "EN_DESPACHO"
         const val STATUS_ENTREGADO = "ENTREGADO"
         val COLA_LIBRE_STATUSES = listOf(STATUS_CREADO, STATUS_PAGADO)

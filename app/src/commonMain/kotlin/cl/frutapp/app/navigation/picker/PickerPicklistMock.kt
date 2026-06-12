@@ -33,7 +33,9 @@ data class ItemPicklist(
     val estante: String,
     val pesoVariable: Boolean,
     val emoji: String, // placeholder de foto del producto
-    val estado: EstadoItem = EstadoItem.PENDIENTE
+    val estado: EstadoItem = EstadoItem.PENDIENTE,
+    /** UUID del item en el backend (StaffOrderItemDto.id). Null en modo mock. */
+    val backendId: String? = null
 )
 
 data class PicklistData(
