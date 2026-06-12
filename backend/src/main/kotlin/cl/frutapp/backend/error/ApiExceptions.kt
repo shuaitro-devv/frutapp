@@ -23,3 +23,13 @@ class UnauthorizedException(message: String = "Credenciales inválidas") :
 
 class NotFoundException(message: String = "Recurso no encontrado") :
     ApiException(HttpStatusCode.NotFound, "not_found", message)
+
+/** 409 especifico para cuando el snapshot del config del cliente quedo desactualizado
+ *  respecto al cache del backend (alguien edito el pricing entre que el cliente abrio
+ *  el carrito y aprieta pagar). Lleva los nuevos valores para que la app re-pinte
+ *  el total y pida confirmacion sin tener que hacer otro round trip. */
+class PricingChangedException(
+    val nuevoCostoEnvio: Int,
+    val nuevoEnvioGratisDesde: Int,
+    message: String = "Los precios cambiaron mientras armabas tu pedido. Revisa el nuevo total antes de confirmar."
+) : ApiException(HttpStatusCode.Conflict, "pricing_changed", message)

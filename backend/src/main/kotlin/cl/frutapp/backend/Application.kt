@@ -2,6 +2,7 @@ package cl.frutapp.backend
 
 import cl.frutapp.backend.config.ConfigCache
 import cl.frutapp.backend.config.ConfigRepository
+import cl.frutapp.backend.config.ConfigService
 import cl.frutapp.backend.config.JwtConfig
 import cl.frutapp.backend.config.MailConfig
 import cl.frutapp.backend.modules.auth.AuthService
@@ -188,6 +189,7 @@ fun Application.module() {
     val adminUserService = AdminUserService(
         UserRepository(), rbacRepository, PasswordResetTokenRepository(), tokenService, emailSender
     )
+    val configService = ConfigService(configRepository)
     val userEventService = UserEventService()
     val staffOrderService = StaffOrderService(
         userEventService,
@@ -199,7 +201,8 @@ fun Application.module() {
     configureRouting(
         authService, catalogService, orderService,
         adminUserService, staffOrderService, userEventService,
-        deviceTokenRepository, notificationInboxRepository, avatarService
+        deviceTokenRepository, notificationInboxRepository, avatarService,
+        configService, configRepository
     )
 
     // Refresca la config de negocio cada 60s (cambios en app_config sin redeploy).

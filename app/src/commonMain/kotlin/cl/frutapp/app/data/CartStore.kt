@@ -30,8 +30,13 @@ data class CartItem(
  * [mutableStateListOf]: cualquier pantalla que lea [items] recompone al cambiar.
  */
 object CartStore {
-    const val ENVIO_GRATIS_DESDE = 15000
-    const val COSTO_ENVIO = 2990
+    // Los valores de envio vienen de [ConfigStore], que los lee del backend (tabla
+    // app_config) con cache local + TTL y fallback a defaults. Asi el back office
+    // puede cambiar el pricing sin redeploy de la app. Antes estaban hardcoded acá
+    // (15.000 / 2.990 = escenario Base del modelo financiero); migrado a config
+    // remoto el 2026-06-12.
+    val envioGratisDesde: Int get() = ConfigStore.intOrDefault("envio_gratis_desde", 15_000)
+    val costoEnvio: Int get() = ConfigStore.intOrDefault("costo_envio", 2_990)
 
     val items = mutableStateListOf<CartItem>()
 
@@ -40,7 +45,7 @@ object CartStore {
     val isEmpty: Boolean get() = items.isEmpty()
 
     /** Costo de envío: gratis si el carrito está vacío o supera el umbral. */
-    val envio: Int get() = if (subtotal == 0 || subtotal >= ENVIO_GRATIS_DESDE) 0 else COSTO_ENVIO
+    val envio: Int get() = if (subtotal == 0 || subtotal >= envioGratisDesde) 0 else costoEnvio
     val total: Int get() = subtotal + envio
 
     /** Agrega una línea; si ya existe el mismo producto+gramaje, suma la cantidad. */

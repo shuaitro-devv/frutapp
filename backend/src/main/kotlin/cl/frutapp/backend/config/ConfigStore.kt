@@ -1,9 +1,12 @@
 package cl.frutapp.backend.config
 
 import cl.frutapp.backend.db.dbQuery
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.kotlin.datetime.timestamp
 import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.update
 
 object ConfigTable : Table("app_config") {
     val key = text("key")
@@ -15,12 +18,38 @@ object ConfigTable : Table("app_config") {
     override val primaryKey = PrimaryKey(key)
 }
 
-data class ConfigEntry(val key: String, val value: String, val clientVisible: Boolean)
+/** Vista completa de una fila de app_config. Antes solo exponíamos lo que el cliente
+ *  necesitaba (key/value/clientVisible); el back office necesita además type y
+ *  description para validar inputs y armar la UI. */
+data class ConfigEntry(
+    val key: String,
+    val value: String,
+    val type: String,
+    val description: String?,
+    val clientVisible: Boolean,
+    val updatedAt: Instant
+)
 
 class ConfigRepository {
     suspend fun loadAll(): List<ConfigEntry> = dbQuery {
         ConfigTable.selectAll().map {
-            ConfigEntry(it[ConfigTable.key], it[ConfigTable.value], it[ConfigTable.clientVisible])
+            ConfigEntry(
+                key = it[ConfigTable.key],
+                value = it[ConfigTable.value],
+                type = it[ConfigTable.type],
+                description = it[ConfigTable.description],
+                clientVisible = it[ConfigTable.clientVisible],
+                updatedAt = it[ConfigTable.updatedAt]
+            )
+        }
+    }
+
+    /** Edita una key existente. Devuelve filas afectadas: 0 = la key no existe (404).
+     *  No creamos keys nuevas desde acá — esas vienen por migración. */
+    suspend fun update(key: String, value: String): Int = dbQuery {
+        ConfigTable.update({ ConfigTable.key eq key }) {
+            it[ConfigTable.value] = value
+            it[ConfigTable.updatedAt] = Clock.System.now()
         }
     }
 }
@@ -46,4 +75,12 @@ object ConfigCache {
     /** Subconjunto seguro para el cliente (GET /v1/config). */
     fun clientVisible(): Map<String, String> =
         entries.values.filter { it.clientVisible }.associate { it.key to it.value }
+
+    /** Vista completa para el back office (GET /v1/admin/config). Ordenado por key
+     *  para que la UI muestre las entradas en orden estable. */
+    fun all(): List<ConfigEntry> = entries.values.sortedBy { it.key }
+
+    /** Una key específica con metadata; null si no existe. Útil para validar antes de
+     *  hacer PUT (necesitamos saber el type esperado). */
+    fun entry(key: String): ConfigEntry? = entries[key]
 }

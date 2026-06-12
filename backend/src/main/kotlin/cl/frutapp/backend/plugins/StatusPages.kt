@@ -1,7 +1,9 @@
 package cl.frutapp.backend.plugins
 
 import cl.frutapp.backend.error.ApiException
+import cl.frutapp.backend.error.PricingChangedException
 import cl.frutapp.shared.dto.ApiError
+import cl.frutapp.shared.dto.PricingChangedDto
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.JsonConvertException
 import io.ktor.server.application.Application
@@ -18,6 +20,20 @@ fun Application.configureStatusPages() {
     val logger = LoggerFactory.getLogger("StatusPages")
 
     install(StatusPages) {
+        // 409 con payload tipado (nuevos valores de envio) para que la app pueda
+        // re-pintar el total y pedir confirmacion sin un round trip extra. Va
+        // ANTES del handler generico de ApiException porque la JVM despacha al
+        // mas especifico, pero ser explicito evita sorpresas si alguien refactoriza.
+        exception<PricingChangedException> { call, cause ->
+            call.respond(
+                cause.statusCode,
+                PricingChangedDto(
+                    mensaje = cause.message,
+                    nuevoCostoEnvio = cause.nuevoCostoEnvio,
+                    nuevoEnvioGratisDesde = cause.nuevoEnvioGratisDesde
+                )
+            )
+        }
         // Errores de dominio: cada uno define su status + código estable.
         exception<ApiException> { call, cause ->
             call.respond(cause.statusCode, ApiError(cause.errorCode, cause.message))

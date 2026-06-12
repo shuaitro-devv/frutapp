@@ -2,6 +2,7 @@ package cl.frutapp.backend.modules.orders
 
 import cl.frutapp.backend.config.BusinessConfig
 import cl.frutapp.backend.error.NotFoundException
+import cl.frutapp.backend.error.PricingChangedException
 import cl.frutapp.backend.error.ValidationException
 import cl.frutapp.backend.modules.catalog.CatalogRepository
 import cl.frutapp.shared.dto.CreateOrderRequest
@@ -31,6 +32,12 @@ class OrderService(
 
     suspend fun create(userId: UUID, req: CreateOrderRequest): OrderDto {
         if (req.items.isEmpty()) throw ValidationException("El carrito está vacío.")
+        // Snapshot del config tomado AHORA y reusado para validar Y precificar la
+        // orden. Sin esto habia un TOCTOU: si ConfigCache se refrescaba entre la
+        // validacion del snapshot y el calculo del envio, validabamos contra una
+        // version y cobrabamos otra.
+        val costoEnvioActual = BusinessConfig.COSTO_ENVIO
+        val envioGratisActual = BusinessConfig.ENVIO_GRATIS_DESDE
         val lines = req.items.map { item ->
             if (item.cantidad <= 0) throw ValidationException("Cantidad inválida.")
             val productId = parseUuid(item.productId, "Producto inválido.")
@@ -61,8 +68,26 @@ class OrderService(
         val sucursal = if (esRetiro) (req.sucursal?.takeIf { it.isNotBlank() } ?: SUCURSAL_DEMO) else null
         val envio = when {
             esRetiro -> 0
-            subtotal == 0 || subtotal >= BusinessConfig.ENVIO_GRATIS_DESDE -> 0
-            else -> BusinessConfig.COSTO_ENVIO
+            subtotal == 0 || subtotal >= envioGratisActual -> 0
+            else -> costoEnvioActual
+        }
+
+        // Validacion del snapshot AHORA (despues de saber subtotal + modalidad): comparamos
+        // el ENVIO EFECTIVO con el config del cliente vs el config actual. Asi NO rechazamos
+        // ordenes donde el cliente iba a pagar lo mismo igual (retiro, o subtotal sobre umbral),
+        // y SI rechazamos cuando la diferencia realmente cambia lo que se cobra.
+        req.configSnapshot?.let { snap ->
+            val costoSnap = snap["costo_envio"]?.toIntOrNull() ?: costoEnvioActual
+            val gratisSnap = snap["envio_gratis_desde"]?.toIntOrNull() ?: envioGratisActual
+            val envioConSnap = when {
+                esRetiro -> 0
+                subtotal == 0 || subtotal >= gratisSnap -> 0
+                else -> costoSnap
+            }
+            if (envioConSnap != envio) throw PricingChangedException(
+                nuevoCostoEnvio = costoEnvioActual,
+                nuevoEnvioGratisDesde = envioGratisActual
+            )
         }
         val total = subtotal + envio
         val frutcoins = BusinessConfig.frutcoinsPorCompra(total)

@@ -10,8 +10,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import cl.frutapp.app.data.BiometricAuth
+import cl.frutapp.app.data.ConfigStore
 import cl.frutapp.app.data.SessionStorage
 import cl.frutapp.app.data.TokenStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import cl.frutapp.app.fcm.FcmBridge
 import cl.frutapp.app.platform.AvatarDiskCache
 import cl.frutapp.app.ui.initToast
@@ -39,6 +43,11 @@ class MainActivity : FragmentActivity() {
         ActiveBrand.set(ActiveBrand.persistedOverride() ?: BuildConfig.BRAND_ID)
         AvatarDiskCache.init(applicationContext)
         TokenStore.restore()
+        // Config remota (envio, FrutCoins) cargada al instante desde cache; refresh
+        // dispara en background y las pantallas recomponen si el backend cambio algo.
+        // Estrategia stale-while-revalidate: la app se abre rapido aun sin red.
+        ConfigStore.restore()
+        CoroutineScope(Dispatchers.IO).launch { ConfigStore.refreshIfStale() }
         initToast(applicationContext)
         BiometricAuth.bind(this)
         enableEdgeToEdge()

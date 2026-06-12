@@ -1,5 +1,8 @@
 package cl.frutapp.backend.plugins
 
+import cl.frutapp.backend.config.ConfigRepository
+import cl.frutapp.backend.config.ConfigService
+import cl.frutapp.backend.config.adminConfigRoutes
 import cl.frutapp.backend.config.configRoutes
 import cl.frutapp.backend.modules.admin.AdminUserService
 import cl.frutapp.backend.modules.admin.adminUserRoutes
@@ -31,7 +34,9 @@ fun Application.configureRouting(
     userEventService: UserEventService,
     deviceTokenRepository: DeviceTokenRepository,
     notificationInboxRepository: NotificationInboxRepository,
-    avatarService: AvatarService?
+    avatarService: AvatarService?,
+    configService: ConfigService,
+    configRepository: ConfigRepository
 ) {
     routing {
         healthRoutes()
@@ -40,6 +45,7 @@ fun Application.configureRouting(
         orderRoutes(orderService)
         staffOrderRoutes(staffOrderService)
         configRoutes()
+        adminConfigRoutes(configService, configRepository)
         adminUserRoutes(adminUserService)
         deviceTokenRoutes(deviceTokenRepository)
         notificationInboxRoutes(notificationInboxRepository)

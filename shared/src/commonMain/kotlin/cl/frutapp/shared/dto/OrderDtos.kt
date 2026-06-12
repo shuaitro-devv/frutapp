@@ -18,7 +18,26 @@ data class CreateOrderRequest(
      */
     val payments: List<PaymentInput>? = null,
     /** Contexto del cliente (canal/dispositivo) para soporte y analítica. */
-    val context: ClientContextDto? = null
+    val context: ClientContextDto? = null,
+    /**
+     * Snapshot del config con el que la app calculó el total mostrado al usuario.
+     * El backend compara contra su cache: si difiere en una key relevante (envío,
+     * umbral de envío gratis), rechaza con 409 + [PricingChangedDto] para que la
+     * app re-pinte el total y pida confirmación. Nunca cobramos algo distinto a
+     * lo que el cliente vio. Opcional para retrocompatibilidad (clientes viejos
+     * pasan sin la red de seguridad, pero el resto del flujo funciona).
+     */
+    val configSnapshot: Map<String, String>? = null
+)
+
+/** Respuesta 409 cuando el snapshot del cliente difiere del cache del backend.
+ *  La app muestra `mensaje` en un diálogo, pinta el nuevo total y pide confirmación
+ *  para re-enviar con un snapshot fresco. */
+@Serializable
+data class PricingChangedDto(
+    val mensaje: String,
+    val nuevoCostoEnvio: Int,
+    val nuevoEnvioGratisDesde: Int
 )
 
 @Serializable

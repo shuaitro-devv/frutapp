@@ -241,8 +241,8 @@ private fun CartHeader(onBack: () -> Unit, canClear: Boolean, onClear: () -> Uni
 
 @Composable
 private fun FreeShippingBanner(subtotal: Int, modifier: Modifier = Modifier) {
-    val falta = (CartStore.ENVIO_GRATIS_DESDE - subtotal).coerceAtLeast(0)
-    val progreso = (subtotal.toFloat() / CartStore.ENVIO_GRATIS_DESDE).coerceIn(0f, 1f)
+    val falta = (CartStore.envioGratisDesde - subtotal).coerceAtLeast(0)
+    val progreso = (subtotal.toFloat() / CartStore.envioGratisDesde).coerceIn(0f, 1f)
     Column(
         modifier = modifier
             .fillMaxWidth()

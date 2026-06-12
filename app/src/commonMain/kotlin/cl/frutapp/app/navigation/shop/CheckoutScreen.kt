@@ -54,6 +54,8 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.CartStore
+import cl.frutapp.app.data.ConfigStore
+import cl.frutapp.app.data.remote.PricingChangedAppException
 import cl.frutapp.app.data.ClientInfo
 import cl.frutapp.app.data.RewardsStore
 import cl.frutapp.app.data.isUuidLike
@@ -111,10 +113,30 @@ class CheckoutScreen : Screen {
         // sea reactivo al toggle "Modo de tienda" en Perfil.
         val brandActualId = LocalBrand.current.id
         var demoModalAbierto by remember { mutableStateOf(false) }
+        // Cuando el backend devuelve 409 pricing_changed (alguien edito el envio
+        // mientras el cliente armaba el carrito), guardamos el delta para mostrar
+        // un AlertDialog amigable con "Continuar" / "Cancelar".
+        var cambioPrecio by remember { mutableStateOf<PricingChangedAppException?>(null) }
+        // El boton Pagar queda disabled mientras corre el refresh forzado del config
+        // al entrar al checkout. Sin esto, si el cliente toca Pagar antes de que
+        // termine el refresh, mandamos un snapshot viejo y el backend devuelve 409 —
+        // justo el caso que el refresh intentaba evitar.
+        var configRefreshing by remember { mutableStateOf(true) }
 
         // Saldo de FrutCoins (para ofrecer pagar con ellos). Fuente de verdad: backend.
         LaunchedEffect(Unit) {
             runCatching { OrderApi().frutCoins() }.onSuccess { RewardsStore.set(it.balance) }
+        }
+
+        // Refresh forzado del config (envio, FrutCoins) AL ENTRAR al checkout. El
+        // resto de pantallas usan stale-while-revalidate con TTL 30min, pero aca
+        // mostrar un total que despues el backend rechaza con 409 es UX rota. Si la
+        // red falla seguimos con cache + el snapshot del create-order como red de seguridad.
+        // Mientras corre, deshabilitamos el boton Pagar para evitar la carrera donde el
+        // cliente envia un snapshot viejo y recibe el 409 que el refresh queria evitar.
+        LaunchedEffect(Unit) {
+            ConfigStore.refreshNow()
+            configRefreshing = false
         }
 
         // Estimación local SOLO para mostrar (retiro = sin envío). El backend reprecia.
@@ -168,8 +190,12 @@ class CheckoutScreen : Screen {
                         Text(error!!, color = FrutAppColors.Error, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
                     }
                     FrutButtonPrimary(
-                        text = if (loading) "Procesando…" else "Pagar ${formatClp(totalLocal)}",
-                        enabled = !loading && !CartStore.isEmpty,
+                        text = when {
+                            configRefreshing -> "Validando precio…"
+                            loading -> "Procesando…"
+                            else -> "Pagar ${formatClp(totalLocal)}"
+                        },
+                        enabled = !loading && !configRefreshing && !CartStore.isEmpty,
                         onClick = {
                             // White-label demo: en modo Sofruco el checkout real no
                             // existe (el catalogo es hardcoded del scrape, no esta
@@ -218,7 +244,12 @@ class CheckoutScreen : Screen {
                                                         deviceModel = ClientInfo.deviceModel,
                                                         osVersion = ClientInfo.osVersion,
                                                         locale = ClientInfo.locale
-                                                    )
+                                                    ),
+                                                    // Snapshot del config con el que armamos el total que el
+                                                    // cliente ve en pantalla. El backend lo compara contra su
+                                                    // cache y devuelve 409 si difiere — nunca cobramos algo
+                                                    // distinto a lo mostrado.
+                                                    configSnapshot = ConfigStore.snapshot()
                                                 )
                                             )
                                         }
@@ -246,6 +277,20 @@ class CheckoutScreen : Screen {
                                             )
                                         )
                                     }.onFailure { e ->
+                                        // Caso especial: cambio de precio durante el armado del carrito.
+                                        // El backend nos devolvio los nuevos valores; refrescamos el
+                                        // ConfigStore para que el total local se re-pinte y abrimos un
+                                        // dialogo amigable explicando que paso, antes que un error tecnico.
+                                        if (e is PricingChangedAppException) {
+                                            // NO refrescar ConfigStore aca: si lo hicieramos,
+                                            // el diálogo recompondria con `envioLocal` ya
+                                            // actualizado al nuevo precio, y el "Antes: $X"
+                                            // mostraria el nuevo precio (mentira al cliente).
+                                            // El refresh corre al cerrar el dialogo.
+                                            cambioPrecio = e
+                                            loading = false
+                                            return@onFailure
+                                        }
                                         // Sesion expirada la maneja el LaunchedEffect global en App.kt
                                         // (replaceAll a Login + toast). Aqui solo nos preocupamos del
                                         // error visible al cliente: mensaje amigable in-screen sin
@@ -287,6 +332,57 @@ class CheckoutScreen : Screen {
                     }
                 }
             }
+        }
+
+        // Dialogo amigable cuando el envio cambio mientras armaban el carrito.
+        // Mostramos cuanto era antes vs cuanto es ahora para que la decision sea
+        // explicita. "Revisar" cierra el dialogo (el total ya se re-pinto al refrescar
+        // el ConfigStore en el catch); "Cancelar" deja el cliente decidir mas tarde.
+        cambioPrecio?.let { delta ->
+            val antesCosto = formatClp(envioLocal)
+            val ahoraCosto = formatClp(delta.nuevoCostoEnvio)
+            val mensajeDelta = if (CartStore.subtotal >= delta.nuevoEnvioGratisDesde) {
+                "Tu carrito ahora califica para envío gratis (sobre ${formatClp(delta.nuevoEnvioGratisDesde)})."
+            } else {
+                "Antes: $antesCosto. Ahora: $ahoraCosto. Envío gratis a partir de ${formatClp(delta.nuevoEnvioGratisDesde)}."
+            }
+            AlertDialog(
+                onDismissRequest = { cambioPrecio = null },
+                title = {
+                    Text(
+                        "Actualizamos el envío",
+                        color = FrutAppColors.Brand800,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column {
+                        Text(
+                            delta.mensaje,
+                            color = FrutAppColors.InkSoft,
+                            fontSize = 14.sp
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            mensajeDelta,
+                            color = FrutAppColors.InkMuted,
+                            fontSize = 13.sp
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        cambioPrecio = null
+                        // Recien ahora refrescamos: el dialogo ya cerro, el `envioLocal`
+                        // se recomputa con los nuevos valores y el total visible
+                        // en el checkout queda alineado con el backend para el proximo
+                        // intento de Pagar.
+                        scope.launch { ConfigStore.refreshNow() }
+                    }) {
+                        Text("Revisar mi pedido", color = FrutAppColors.Brand600, fontWeight = FontWeight.Bold)
+                    }
+                }
+            )
         }
 
         if (demoModalAbierto) {
