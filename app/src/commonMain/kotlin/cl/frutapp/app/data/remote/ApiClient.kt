@@ -28,6 +28,21 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 
+/**
+ * Resultado del intento de refrescar el access token. Distinguir entre los tres
+ * estados es crítico: tratar una falla transient (timeout, red caida, 5xx) como
+ * "sesion expirada" botaba al usuario al login cada vez que el backend tenia un
+ * cold start o el celu cambiaba de antena, aunque el refresh token siguiera valido.
+ */
+private sealed class RefreshOutcome {
+    /** El access token nuevo está en TokenStore y se devuelve para reintentos opcionales. */
+    data class Success(val accessToken: String) : RefreshOutcome()
+    /** El backend rechazó explicitamente el refresh (401 → token revocado/vencido). Limpiar sesion. */
+    object SessionExpired : RefreshOutcome()
+    /** Falla no determinista (timeout, IO, 5xx). El refresh sigue siendo valido. NO limpiar. */
+    object Transient : RefreshOutcome()
+}
+
 /** Cliente HTTP único de la app (motor Android via classpath) + JSON + auth. */
 object ApiClient {
     val baseUrl: String = apiBaseUrl()
@@ -38,56 +53,77 @@ object ApiClient {
     }
 
     // Cliente "desnudo" SOLO para refrescar el token (sin el interceptor → sin recursión).
+    // Retry de conexion para sobrevivir cold starts del backend en Contabo: si el SYN
+    // del primer attempt se pierde porque el container se acaba de levantar, el 2do
+    // reintento (2s despues) suele entrar. Sin esto, el primer hipo de red post-idle
+    // tiraba el refresh a Transient y la proxima request del usuario veia el access
+    // viejo otra vez. Reintentamos SOLO ConnectTimeout (TCP nunca se establecio →
+    // backend no recibio nada → seguro reintentar incluso para POST).
     private val refreshClient = HttpClient {
         install(ContentNegotiation) { json(json) }
         install(HttpTimeout) { requestTimeoutMillis = 15_000; connectTimeoutMillis = 10_000 }
+        install(HttpRequestRetry) {
+            retryOnExceptionIf(maxRetries = 2) { _, cause -> cause is ConnectTimeoutException }
+            exponentialDelay(base = 2.0, maxDelayMs = 4_000)
+        }
     }
     private val refreshMutex = Mutex()
 
     /**
-     * Intenta refrescar el access token con el refresh token. Devuelve el nuevo access o null.
+     * Intenta refrescar el access token con el refresh token. Distinguir entre los 3
+     * outcomes es lo que evita botar al usuario al login por fallas transient de red
+     * (timeout, IO, 5xx, cold start del backend) — el refresh token sigue siendo
+     * valido y la proxima request lo va a reintentar.
+     *
      * Usa try/catch en vez de runCatching para PROPAGAR CancellationException — sin esto,
      * un screen cancelado durante el refresh swallea la cancelación y el HTTP post puede
      * completar tras el logout, re-escribiendo tokens que el usuario acababa de borrar.
      */
-    private suspend fun tryRefresh(): String? = refreshMutex.withLock {
-        val rt = TokenStore.refreshToken ?: return@withLock null
+    private suspend fun tryRefresh(): RefreshOutcome = refreshMutex.withLock {
+        val rt = TokenStore.refreshToken ?: return@withLock RefreshOutcome.SessionExpired
         try {
             val resp = refreshClient.post("$baseUrl/v1/auth/refresh") {
                 contentType(ContentType.Application.Json)
                 setBody(RefreshRequest(rt))
             }
-            if (resp.status.isSuccess()) {
-                val auth: AuthResponse = resp.body()
-                TokenStore.updateTokens(auth.accessToken, auth.refreshToken)
-                auth.accessToken
-            } else {
-                // Loggear el motivo del refresh fallido — antes solo cleareabamos el
-                // TokenStore en silencio y el LaunchedEffect global pateaba al login,
-                // dejando al usuario sin contexto y a nosotros sin pistas de POR QUE
-                // (refresh token vencido, invalidado server-side, backend caido, etc.).
-                val body = runCatching { resp.body<String>() }.getOrNull().orEmpty().take(200)
-                ErrorReporter.report(
-                    screen = "ApiClient",
-                    action = "refresh_token_http_${resp.status.value}",
-                    error = RuntimeException("Refresh respondio ${resp.status.value} ${resp.status.description}: $body")
-                )
-                TokenStore.clear()
-                // Senal explicita para que App.kt patee a Login. Antes confiabamos en
-                // que el LaunchedEffect global detectara accessToken=null, pero ese
-                // patron dependia de un flag hadSession con timing fragil. Esto es
-                // determinista: ApiClient sabe que la expiracion es real (refresh
-                // respondio 401) y lo comunica directo.
-                TokenStore.markSessionExpired()
-                null
+            when {
+                resp.status.isSuccess() -> {
+                    val auth: AuthResponse = resp.body()
+                    TokenStore.updateTokens(auth.accessToken, auth.refreshToken)
+                    RefreshOutcome.Success(auth.accessToken)
+                }
+                resp.status == HttpStatusCode.Unauthorized -> {
+                    // 401 explicito: el refresh token fue revocado o vencio realmente.
+                    // Logueamos el motivo para tener traza y devolvemos SessionExpired
+                    // — el validator se encarga del clear + markSessionExpired.
+                    val body = runCatching { resp.body<String>() }.getOrNull().orEmpty().take(200)
+                    ErrorReporter.report(
+                        screen = "ApiClient",
+                        action = "refresh_token_unauthorized",
+                        error = RuntimeException("Refresh 401: $body")
+                    )
+                    RefreshOutcome.SessionExpired
+                }
+                else -> {
+                    // 5xx, 503, 502, etc.: backend con cold start o problema temporal.
+                    // El refresh token sigue siendo valido server-side; la proxima
+                    // request lo va a reintentar. NO botar al usuario.
+                    val body = runCatching { resp.body<String>() }.getOrNull().orEmpty().take(200)
+                    ErrorReporter.report(
+                        screen = "ApiClient",
+                        action = "refresh_token_transient_${resp.status.value}",
+                        error = RuntimeException("Refresh ${resp.status.value}: $body")
+                    )
+                    RefreshOutcome.Transient
+                }
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e // estructura de coroutines: re-tirar siempre.
         } catch (e: Throwable) {
-            // Excepcion no controlada durante el refresh (timeout, IO, etc.). NO limpiamos
-            // tokens: si fue red caida momentanea, el proximo intento puede funcionar.
+            // Timeout, IO, red caida, cambio de antena en el celu. Refresh sigue valido
+            // server-side; no botamos al usuario, dejamos que la proxima request reintente.
             ErrorReporter.report(screen = "ApiClient", action = "refresh_token_exception", error = e)
-            null
+            RefreshOutcome.Transient
         }
     }
 
@@ -101,31 +137,29 @@ object ApiClient {
         // cuyo .message contiene "401 Unauthorized" / "422 Unprocessable Entity" / etc.
         expectSuccess = true
 
-        // Limpieza de sesion cuando llega un 401 a un endpoint protegido. Esto se
-        // ejecuta DENTRO del response pipeline, antes de que la excepcion del
-        // ResponseValidator (con expectSuccess=true) llegue al caller — el lugar
-        // correcto en Ktor 2.x para manejar 401, porque HttpSend.intercept NO
-        // captura excepciones lanzadas por el ResponseValidator.
-        //
-        // Si el access token vencio y NO podemos refrescarlo (refresh tambien 401
-        // o refreshToken null), limpiamos TokenStore para que el LaunchedEffect de
-        // App.kt detecte accessToken=null y patee al Login. El refresh + reintento
-        // automatico del mismo request es complejo (requiere Auth plugin); por
-        // ahora solo manejamos la limpieza de sesion zombie. Cuando hagamos el
-        // refactor a Auth plugin, agregamos el auto-retry transparente.
+        // Manejo de 401 en endpoints protegidos. Llamamos a tryRefresh y SOLO
+        // limpiamos la sesion cuando el outcome es SessionExpired (refresh respondio
+        // 401 → token revocado/vencido). Si fue Transient (timeout, IO, 5xx,
+        // backend dormido), NO limpiamos: el refresh sigue valido server-side y la
+        // proxima request lo va a reintentar. Antes mezclabamos los dos casos y
+        // boteabamos al usuario a login por cualquier hipo de red.
         HttpResponseValidator {
             handleResponseExceptionWithRequest { exception, request ->
                 if (exception !is ClientRequestException) return@handleResponseExceptionWithRequest
                 if (exception.response.status != HttpStatusCode.Unauthorized) return@handleResponseExceptionWithRequest
                 val protectedEndpoint = !request.url.toString().contains("/auth/")
                 if (!protectedEndpoint) return@handleResponseExceptionWithRequest
+                if (TokenStore.refreshToken == null) return@handleResponseExceptionWithRequest
 
-                // Intentamos refresh una vez. Si funciono, el polling siguiente va
-                // con el token nuevo. Si no funciono, limpiamos TokenStore para
-                // disparar el guard global.
-                val newAccess = if (TokenStore.refreshToken != null) tryRefresh() else null
-                if (newAccess == null && TokenStore.accessToken != null) {
-                    TokenStore.clear()
+                when (tryRefresh()) {
+                    is RefreshOutcome.Success -> { /* nuevo access guardado; proximas requests van con el nuevo */ }
+                    RefreshOutcome.SessionExpired -> {
+                        if (TokenStore.accessToken != null) {
+                            TokenStore.clear()
+                            TokenStore.markSessionExpired()
+                        }
+                    }
+                    RefreshOutcome.Transient -> { /* dejamos la sesion, proxima request retira */ }
                 }
             }
         }
