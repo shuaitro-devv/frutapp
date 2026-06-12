@@ -37,15 +37,7 @@ jobs:
       - name: Run backend tests (Postgres efímero via Testcontainers)
         run: |
           chmod +x ./gradlew
-          ./gradlew :backend:test --no-daemon --console=plain --info
-
-      - name: Upload test report (debug)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-test-report
-          path: backend/build/reports/tests/test
-          if-no-files-found: ignore
+          ./gradlew :backend:test --no-daemon --console=plain
 
   build-and-deploy:
     needs: test          # no despliega si los tests fallan
