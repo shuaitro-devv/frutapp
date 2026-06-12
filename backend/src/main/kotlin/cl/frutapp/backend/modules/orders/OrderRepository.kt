@@ -3,7 +3,6 @@ package cl.frutapp.backend.modules.orders
 import cl.frutapp.backend.config.BusinessConfig
 import cl.frutapp.backend.db.dbQuery
 import cl.frutapp.backend.modules.auth.UsersTable
-import cl.frutapp.shared.dto.AdminOrderSummaryDto
 import cl.frutapp.shared.dto.OrderDto
 import cl.frutapp.shared.dto.OrderItemDto
 import cl.frutapp.shared.dto.OrderPaymentDto
@@ -205,55 +204,6 @@ class OrderRepository {
                     itemsCount = OrderItemsTable.selectAll().where { OrderItemsTable.orderId eq id }.count().toInt()
                 )
             }
-    }
-
-    /**
-     * Back office: lista TODOS los pedidos (no scopeados a un usuario) creados en
-     * el rango [startInclusive, endExclusive), opcionalmente filtrados por estado.
-     * Excluye soft-deleted. Prefetch de nombres e items_count para evitar N+1.
-     */
-    suspend fun listForAdmin(
-        startInclusive: Instant,
-        endExclusive: Instant,
-        status: String?
-    ): List<AdminOrderSummaryDto> = dbQuery {
-        var query = OrdersTable.selectAll().where {
-            OrdersTable.deletedAt.isNull() and
-                (OrdersTable.createdAt greaterEq startInclusive) and
-                (OrdersTable.createdAt less endExclusive)
-        }
-        if (!status.isNullOrBlank()) {
-            query = query.andWhere { OrdersTable.status eq status }
-        }
-        val rows = query.orderBy(OrdersTable.createdAt to SortOrder.DESC).toList()
-        if (rows.isEmpty()) return@dbQuery emptyList()
-
-        val userIds = rows.map { it[OrdersTable.userId] }.toSet()
-        val nombrePorUser = UsersTable
-            .selectAll().where { UsersTable.id inList userIds }
-            .associate { it[UsersTable.id] to it[UsersTable.name] }
-
-        val orderIds = rows.map { it[OrdersTable.id] }
-        val itemsCountPorOrder = OrderItemsTable
-            .selectAll().where { OrderItemsTable.orderId inList orderIds }
-            .groupBy { it[OrderItemsTable.orderId] }
-            .mapValues { it.value.size }
-
-        rows.map { row ->
-            val oid = row[OrdersTable.id]
-            AdminOrderSummaryDto(
-                id = oid.toString(),
-                numero = row[OrdersTable.numero],
-                status = row[OrdersTable.status],
-                paymentStatus = row[OrdersTable.paymentStatus],
-                total = row[OrdersTable.totalFinal] ?: row[OrdersTable.totalEstimado],
-                itemsCount = itemsCountPorOrder[oid] ?: 0,
-                createdAt = row[OrdersTable.createdAt].toString(),
-                clienteNombre = (nombrePorUser[row[OrdersTable.userId]] ?: "Cliente").substringBefore(' '),
-                sector = sectorFromAddress(row[OrdersTable.direccion]),
-                fulfillmentType = row[OrdersTable.fulfillmentType]
-            )
-        }
     }
 
     /** Back office: nombre/email/teléfono del cliente dueño de un pedido. */
