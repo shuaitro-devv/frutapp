@@ -9,6 +9,7 @@ import cl.frutapp.backend.db.DatabaseFactory
 import cl.frutapp.backend.error.ConflictException
 import cl.frutapp.backend.error.UnauthorizedException
 import cl.frutapp.backend.error.ValidationException
+import cl.frutapp.backend.modules.admin.AdminOrderService
 import cl.frutapp.backend.modules.admin.AdminUserService
 import cl.frutapp.backend.modules.audit.EventContext
 import cl.frutapp.backend.modules.audit.UserEventService
@@ -91,6 +92,7 @@ class BackendIntegrationTest {
     private val frutCoins = FrutCoinsRepository()
     private val orders = OrderService(OrderRepository(), catalog, frutCoins)
     private val adminUsers = AdminUserService(users, rbac, PasswordResetTokenRepository(), tokenService, emailSender)
+    private val adminOrders = AdminOrderService(OrderRepository())
     private val events = UserEventService()
     private val staff = StaffOrderService(events)
 
@@ -136,6 +138,12 @@ class BackendIntegrationTest {
 
     private suspend fun kgProductPriced(): cl.frutapp.shared.dto.ProductDto =
         catalog.listProducts(null, null).first { it.unit == "kg" && it.priceClp >= 1000 }
+
+    /** Producto por unidad (no kg) — pedidos creados con este NO requieren pesaje
+     *  antes del complete del picker. Usado por los tests de flujo picker/repartidor
+     *  que no testean especificamente peso variable. */
+    private suspend fun unidadProductPriced(): cl.frutapp.shared.dto.ProductDto =
+        catalog.listProducts(null, null).first { it.unit != "kg" && it.priceClp >= 500 }
 
     // --- tests ---
 
@@ -352,6 +360,66 @@ class BackendIntegrationTest {
         assertTrue(PermissionCache.has(listOf("picker"), "order:transition"))
     }
 
+    // --- Tests del back office: lectura global de pedidos (V17 order:read_all) ---
+
+    @Test
+    fun `order read_all solo para staff (admin y soporte), no cliente`() {
+        // Valida que la migración V17 sembró el permiso y lo asignó bien.
+        assertTrue(PermissionCache.has(listOf("admin"), "order:read_all"))
+        assertTrue(PermissionCache.has(listOf("soporte"), "order:read_all"))
+        assertFalse(PermissionCache.has(listOf("cliente"), "order:read_all"))
+    }
+
+    @Test
+    fun `admin lista pedidos del dia con ticket promedio coherente`() = runBlocking {
+        val u = registerVerified()
+        val p = kgProductPriced()
+        val o1 = orders.create(u.id, CreateOrderRequest(items = listOf(OrderItemRequest(p.id, 1, 1000))))
+        val o2 = orders.create(u.id, CreateOrderRequest(items = listOf(OrderItemRequest(p.id, 2, 1000))))
+
+        val page = adminOrders.list(null, null)
+        val ids = page.orders.map { it.id }.toSet()
+        assertTrue(o1.id in ids && o2.id in ids, "mis pedidos del día deben aparecer en la lista global")
+        // Invariantes de la página (robusto ante otros pedidos del mismo día en la BD compartida).
+        assertEquals(page.orders.size, page.count)
+        assertEquals(page.orders.sumOf { it.total }, page.totalDia)
+        assertEquals(page.totalDia / page.count, page.ticketPromedio)
+        val mine = page.orders.first { it.id == o1.id }
+        assertEquals("Test", mine.clienteNombre)   // solo el primer nombre
+        assertTrue(mine.itemsCount >= 1)
+    }
+
+    @Test
+    fun `admin detalle trae el pedido completo + datos del cliente`() = runBlocking {
+        val u = registerVerified()
+        val p = kgProductPriced()
+        val o = orders.create(u.id, CreateOrderRequest(items = listOf(OrderItemRequest(p.id, 1, 1000))))
+
+        val detail = adminOrders.detail(o.id)
+        assertEquals(o.numero, detail.order.numero)
+        assertEquals("Test", detail.clienteNombre)
+        assertTrue(detail.clienteEmail.isNotBlank())
+        assertTrue(detail.order.items.isNotEmpty())
+    }
+
+    @Test
+    fun `admin lista filtra por estado y por fecha`() = runBlocking {
+        val u = registerVerified()
+        val p = kgProductPriced()
+        val o = orders.create(u.id, CreateOrderRequest(items = listOf(OrderItemRequest(p.id, 1, 1000))))
+        orders.transition(o.id, TransitionRequest("EN_PICKING"))
+
+        val enPicking = adminOrders.list(null, "EN_PICKING")
+        assertTrue(enPicking.orders.all { it.status == "EN_PICKING" }, "el filtro de estado debe acotar")
+        assertTrue(enPicking.orders.any { it.id == o.id })
+        // un estado que el mío no tiene -> no aparece
+        assertFalse(adminOrders.list(null, "ENTREGADO").orders.any { it.id == o.id })
+        // una fecha pasada -> no aparece (fue creado hoy)
+        val viejo = adminOrders.list("2020-01-01", null)
+        assertFalse(viejo.orders.any { it.id == o.id })
+        assertEquals("2020-01-01", viejo.fecha)
+    }
+
     // --- Tests del flujo staff (V11 user_event + V12 cola del picker) ---
 
     private suspend fun createPickerWithDefaultLocation(): UUID {
@@ -374,8 +442,11 @@ class BackendIntegrationTest {
 
     private suspend fun createOrderForCliente(): UUID {
         val cliente = registerVerified()
-        val p = kgProductPriced()
-        val dto = orders.create(cliente.id, CreateOrderRequest(items = listOf(OrderItemRequest(p.id, 1, 1000))))
+        // Producto por unidad: no requiere pesaje, asi el picker puede completar
+        // sin tener que llamar a setItemPeso primero. Para tests especificos de
+        // peso variable, crear el order con kgProductPriced + setItemPeso explicito.
+        val p = unidadProductPriced()
+        val dto = orders.create(cliente.id, CreateOrderRequest(items = listOf(OrderItemRequest(p.id, 1))))
         return UUID.fromString(dto.id)
     }
 
