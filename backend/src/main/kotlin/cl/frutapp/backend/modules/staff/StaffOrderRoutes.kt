@@ -40,6 +40,7 @@ fun Route.staffOrderRoutes(staffOrders: StaffOrderService) {
                 val result = when (statusFilter) {
                     "cola" -> staffOrders.colaPicker(pickerId)
                     "en_curso" -> staffOrders.enCursoPicker(pickerId)
+                    "completados_hoy" -> staffOrders.completadosHoyPicker(pickerId)
                     else -> staffOrders.colaPicker(pickerId)
                 }
                 call.respond(result)
@@ -125,6 +126,7 @@ fun Route.staffOrderRoutes(staffOrders: StaffOrderService) {
                 val result = when (statusFilter) {
                     "cola" -> staffOrders.colaDispatch(repartidorId)
                     "en_ruta" -> staffOrders.enRutaDispatch(repartidorId)
+                    "entregados_hoy" -> staffOrders.entregadosHoyDispatch(repartidorId)
                     else -> staffOrders.colaDispatch(repartidorId)
                 }
                 call.respond(result)

@@ -27,7 +27,9 @@ import org.jetbrains.exposed.sql.or
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import java.util.UUID
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
+import org.jetbrains.exposed.sql.SortOrder
 
 /**
  * Logica de la cola del staff (picker / repartidor) bajo el "Modelo C hibrido":
@@ -162,6 +164,25 @@ class StaffOrderService(
             .orderBy(OrdersTable.assignedAt)
             .toList()
 
+        materializeSummaries(rows, pickerId)
+    }
+
+    /** Tab "Listos hoy" del picker: pedidos que el picker logueado completo
+     *  (status >= STOCK_CONFIRMADO, EN_DESPACHO, ENTREGADO, FACTURADO) en las
+     *  ultimas 24h. Excluye CANCELADO/DEVOLUCION para no contaminar el conteo
+     *  de productividad. Ordenado del mas reciente al mas antiguo. */
+    suspend fun completadosHoyPicker(pickerId: UUID): List<StaffOrderSummaryDto> = dbQuery {
+        val ayer = Clock.System.now().minus(24.hours)
+        val rows = OrdersTable
+            .selectAll()
+            .where {
+                (OrdersTable.assignedPickerId eq pickerId) and
+                (OrdersTable.status inList COMPLETADOS_PICKER_STATUSES) and
+                (OrdersTable.updatedAt greater ayer)
+            }
+            .orderBy(OrdersTable.updatedAt, SortOrder.DESC)
+            .limit(50)
+            .toList()
         materializeSummaries(rows, pickerId)
     }
 
@@ -444,6 +465,26 @@ class StaffOrderService(
         return materializeDispatchSummaries(rows, repartidorId)
     }
 
+    /** Tab "Entregados hoy" del repartidor: despachos que el repartidor logueado
+     *  llevo a destino (status=ENTREGADO) en las ultimas 24h. Ordenado del mas
+     *  reciente al mas antiguo. Limite 50 — turno tipico no llega ni de cerca. */
+    suspend fun entregadosHoyDispatch(repartidorId: UUID): List<StaffDispatchSummaryDto> {
+        val ayer = Clock.System.now().minus(24.hours)
+        val rows = dbQuery {
+            OrdersTable
+                .selectAll()
+                .where {
+                    (OrdersTable.assignedRepartidorId eq repartidorId) and
+                    (OrdersTable.status inList ENTREGADOS_REPARTIDOR_STATUSES) and
+                    (OrdersTable.updatedAt greater ayer)
+                }
+                .orderBy(OrdersTable.updatedAt, SortOrder.DESC)
+                .limit(50)
+                .toList()
+        }
+        return materializeDispatchSummaries(rows, repartidorId)
+    }
+
     /** Detalle del despacho: cabecera + items + datos de contacto del cliente.
      *  A diferencia del detalle del picker, aqui SI incluimos direccion y
      *  telefono porque el repartidor los necesita para entregar. */
@@ -700,6 +741,16 @@ class StaffOrderService(
         const val STATUS_EN_DESPACHO = "EN_DESPACHO"
         const val STATUS_ENTREGADO = "ENTREGADO"
         val COLA_LIBRE_STATUSES = listOf(STATUS_CREADO, STATUS_PAGADO)
+        // Estados >= STOCK_CONFIRMADO que cuentan como "completados" para el tab
+        // "Listos hoy" del picker. ESPERANDO_AJUSTE no esta acá porque todavia
+        // espera resolucion del cliente; FACTURADO no esta hoy en el flujo demo
+        // pero queda anotado por si se prende. CANCELADO/DEVOLUCION excluidos
+        // para no contaminar el conteo de productividad del turno.
+        val COMPLETADOS_PICKER_STATUSES = listOf(
+            STATUS_STOCK_CONFIRMADO, STATUS_EN_DESPACHO, STATUS_ENTREGADO
+        )
+        // Estados terminales del repartidor: el despacho llego al cliente.
+        val ENTREGADOS_REPARTIDOR_STATUSES = listOf(STATUS_ENTREGADO)
         val STUCK_THRESHOLD = 30.minutes
         // Mas tiempo que el picker porque una entrega lleva mas (calle, trafico, esperar
         // que el cliente baje). Si el repartidor se desconecta, otro puede tomar despues de 60min.

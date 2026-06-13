@@ -34,6 +34,12 @@ class StaffDispatchApi(
             parameter("status", "en_ruta")
         }.body()
 
+    /** Tab "Entregados hoy": despachos que YO lleve a destino en las ultimas 24h. */
+    suspend fun entregadosHoy(): List<StaffDispatchSummaryDto> =
+        client.get("$baseUrl/v1/staff/orders/dispatch") {
+            parameter("status", "entregados_hoy")
+        }.body()
+
     /** Detalle del despacho con direccion + telefono del cliente + items. */
     suspend fun detalle(orderId: String): StaffDispatchDetailDto =
         client.get("$baseUrl/v1/staff/orders/dispatch/$orderId").body()

@@ -27,7 +27,11 @@ import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,6 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.remote.StaffOrderApi
+import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.theme.FrutAppColors
 
 /**
@@ -50,7 +56,16 @@ import cl.frutapp.app.ui.theme.FrutAppColors
 @Composable
 fun PickerListosContent(modifier: Modifier = Modifier) {
     val navigator = LocalNavigator.currentOrThrow
-    val pedidos = remember { emptyList<PedidoListo>() }
+    val api = remember { StaffOrderApi() }
+    var pedidos by remember { mutableStateOf<List<PedidoListo>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        runCatching { api.completadosHoy() }
+            .onSuccess { dtos -> pedidos = dtos.map { it.toPedidoListo() } }
+            .onFailure { e ->
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                ErrorReporter.report(screen = "PickerListos", action = "completados_hoy", error = e)
+            }
+    }
     Column(modifier = modifier.fillMaxSize()) {
         Header(total = pedidos.size, hoyEntregados = pedidos.size)
         // OJO: NUNCA usar `return@Column` dentro de un Composable; Compose construye

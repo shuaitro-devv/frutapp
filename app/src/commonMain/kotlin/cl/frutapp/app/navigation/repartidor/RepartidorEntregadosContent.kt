@@ -26,13 +26,19 @@ import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cl.frutapp.app.data.remote.StaffDispatchApi
+import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.theme.FrutAppColors
 
 /**
@@ -42,7 +48,16 @@ import cl.frutapp.app.ui.theme.FrutAppColors
  */
 @Composable
 fun RepartidorEntregadosContent(modifier: Modifier = Modifier) {
-    val despachos = remember { despachosEntregadosMock() }
+    val api = remember { StaffDispatchApi() }
+    var despachos by remember { mutableStateOf<List<DespachoEntregado>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        runCatching { api.entregadosHoy() }
+            .onSuccess { dtos -> despachos = dtos.map { it.toDespachoEntregado() } }
+            .onFailure { e ->
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                ErrorReporter.report(screen = "RepartidorEntregados", action = "entregados_hoy", error = e)
+            }
+    }
     val totalGanado = remember(despachos) { despachos.sumOf { it.gananciaCLP } }
     Column(modifier = modifier.fillMaxSize()) {
         Header(totalEntregas = despachos.size, totalGanado = totalGanado)

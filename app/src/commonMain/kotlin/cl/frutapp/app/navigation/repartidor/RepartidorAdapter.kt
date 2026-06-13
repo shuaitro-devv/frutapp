@@ -16,6 +16,26 @@ import kotlinx.datetime.Instant
  *  - prioridad: derivada del tiempo desde que el pedido se creo
  *    (mientras mas viejo, mas prioritario para no acumular SLA).
  */
+/** Adapta el DTO al modelo del tab "Entregados hoy" del repartidor. Calcula
+ *  "hace X min" desde el assignedAt (cuando tomo el despacho). El backend
+ *  no devuelve completedAt en el summary; assignedAt es proxy razonable
+ *  porque las entregas tipicas son ~30-60 min. La ganancia y las incidencias
+ *  no estan en el summary: ganancia se podria derivar del total (% de
+ *  comision configurable) cuando se cablee real; por ahora 0 para no inventar. */
+internal fun StaffDispatchSummaryDto.toDespachoEntregado(): DespachoEntregado {
+    val ref = runCatching { assignedAt?.let { Instant.parse(it) } }.getOrNull() ?: Clock.System.now()
+    val minutos = ((Clock.System.now() - ref).inWholeMinutes).toInt().coerceAtLeast(0)
+    return DespachoEntregado(
+        id = numero,
+        cliente = clienteNombre,
+        sector = sector,
+        direccion = direccion,
+        entregadoHaceMin = minutos,
+        gananciaCLP = 0,
+        incidencias = 0
+    )
+}
+
 internal fun StaffDispatchSummaryDto.toDespachoItem(): DespachoItem {
     val creado = runCatching { Instant.parse(createdAt) }.getOrNull() ?: Clock.System.now()
     val minutosDesdeCreado = ((Clock.System.now() - creado).inWholeMinutes).toInt().coerceAtLeast(0)

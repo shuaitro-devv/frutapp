@@ -43,6 +43,26 @@ internal fun StaffOrderSummaryDto.toPedidoColaItem(): PedidoColaItem {
  *  El progreso de items resueltos hoy no viene del backend (el estado per-item es
  *  Nivel 2) — devolvemos 0 de N para que la UI muestre "0/N en proceso"; cuando
  *  cableemos items individuales, este valor reflejara el avance real. */
+/** Adapta el DTO al modelo del tab "Listos hoy" del picker. Calcula "hace X min"
+ *  desde el assignedAt (cuando lo tomo). El backend del summary NO trae el
+ *  updatedAt cuando se completo; usamos assignedAt como proxy razonable porque
+ *  son normalmente pocos minutos. Cuando ampliemos el DTO con completedAt, lo
+ *  enchufamos aca. Incidencias = 0 hasta que tengamos su seguimiento; el campo
+ *  queda para el cableado futuro. */
+internal fun StaffOrderSummaryDto.toPedidoListo(): PedidoListo {
+    val ref = runCatching { assignedAt?.let { Instant.parse(it) } }.getOrNull() ?: Clock.System.now()
+    val minutos = ((Clock.System.now() - ref).inWholeMinutes).toInt().coerceAtLeast(0)
+    return PedidoListo(
+        id = numero,
+        items = itemsCount,
+        sector = sector,
+        destino = "Pedido de $clienteNombre",
+        terminadoHaceMin = minutos,
+        picker = clienteNombre,
+        incidencias = 0
+    )
+}
+
 internal fun StaffOrderSummaryDto.toPedidoEnCurso(): PedidoEnCurso {
     val tomadoEn = runCatching { assignedAt?.let { Instant.parse(it) } }.getOrNull() ?: Clock.System.now()
     val minutosEnPrep = ((Clock.System.now() - tomadoEn).inWholeMinutes).toInt().coerceAtLeast(0)

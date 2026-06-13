@@ -39,6 +39,13 @@ class StaffOrderApi(
             parameter("status", "en_curso")
         }.body()
 
+    /** Tab "Listos hoy": pedidos que YO complete (>= STOCK_CONFIRMADO) en las
+     *  ultimas 24h. Excluye cancelados. */
+    suspend fun completadosHoy(): List<StaffOrderSummaryDto> =
+        client.get("$baseUrl/v1/staff/orders") {
+            parameter("status", "completados_hoy")
+        }.body()
+
     /** Detalle del pedido para el picker: cabecera + items reales (lo que pidio el
      *  cliente con sus pesos/cantidades, no el mockup). */
     suspend fun detalle(orderId: String): StaffOrderDetailDto =
