@@ -17,13 +17,19 @@ object BusinessConfig {
     private const val DEF_PESO_TOLERANCIA_PORC = 0.10
 
     // --- Envío ---
-    val ENVIO_GRATIS_DESDE: Int get() = ConfigCache.int("envio_gratis_desde", DEF_ENVIO_GRATIS_DESDE)
-    val COSTO_ENVIO: Int get() = ConfigCache.int("costo_envio", DEF_COSTO_ENVIO)
+    // coerceAtLeast(0): si un admin compromised setea negativo, el costo se clampa
+    // a 0 ("gratis") en lugar de regalar plata (cobrar negativo). El umbral de envio
+    // gratis con negativo significaria "todo es gratis" — tambien clampamos.
+    val ENVIO_GRATIS_DESDE: Int get() = ConfigCache.int("envio_gratis_desde", DEF_ENVIO_GRATIS_DESDE).coerceAtLeast(0)
+    val COSTO_ENVIO: Int get() = ConfigCache.int("costo_envio", DEF_COSTO_ENVIO).coerceAtLeast(0)
 
     // --- FrutCoins --- (coerceAtLeast(1): nunca dividir por cero aunque la BD traiga 0)
     val FRUTCOINS_GANA_CADA_CLP: Int get() = ConfigCache.int("frutcoins_gana_cada_clp", DEF_FRUTCOINS_GANA_CADA_CLP).coerceAtLeast(1)
     val FRUTCOIN_VALOR_CLP: Int get() = ConfigCache.int("frutcoin_valor_clp", DEF_FRUTCOIN_VALOR_CLP).coerceAtLeast(1)
-    val FRUTCOINS_MAX_PORC_PAGO: Double get() = ConfigCache.double("frutcoins_max_porc_pago", DEF_FRUTCOINS_MAX_PORC_PAGO)
+    // coerceIn(0, 0.5): tope absoluto al 50% del total pagable con coins, asi un admin
+    // compromised no puede setear 1.5 ("paga 150% con coins") ni negativo. Por encima
+    // de 0.5 el incentivo de retornar al ecosistema se rompe (mejor cobrar dinero real).
+    val FRUTCOINS_MAX_PORC_PAGO: Double get() = ConfigCache.double("frutcoins_max_porc_pago", DEF_FRUTCOINS_MAX_PORC_PAGO).coerceIn(0.0, 0.5)
 
     // --- Peso variable (kg) --- (delta tolerado antes de pedir aprobacion al cliente)
     // coerceIn(0, 1): si el operador setea un valor fuera de rango (ej. "5" interpretado

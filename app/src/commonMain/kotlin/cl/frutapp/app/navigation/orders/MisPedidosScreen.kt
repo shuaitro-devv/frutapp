@@ -152,7 +152,7 @@ class MisPedidosScreen : Screen {
 }
 
 private fun matchesTab(tabIndex: Int, status: String): Boolean = when (tabIndex) {
-    1 -> status in setOf("CREADO", "PAGADO", "EN_PICKING", "STOCK_CONFIRMADO", "FACTURADO", "EN_DESPACHO")
+    1 -> status in setOf("CREADO", "PAGADO", "EN_PICKING", "ESPERANDO_AJUSTE_CLIENTE", "STOCK_CONFIRMADO", "FACTURADO", "EN_DESPACHO")
     2 -> status == "ENTREGADO"
     3 -> status in setOf("CANCELADO", "DEVOLUCION")
     else -> true
@@ -162,6 +162,7 @@ private fun statusLabel(status: String): String = when (status) {
     "CREADO" -> "Creado"
     "PAGADO" -> "Pagado"
     "EN_PICKING" -> "En preparación"
+    "ESPERANDO_AJUSTE_CLIENTE" -> "Esperando tu confirmación"
     "STOCK_CONFIRMADO" -> "Stock confirmado"
     "FACTURADO" -> "Facturado"
     "EN_DESPACHO" -> "En camino"

@@ -434,21 +434,30 @@ class CheckoutScreen : Screen {
                 },
                 confirmButton = {
                     TextButton(onClick = {
-                        // Descarte parcial: si el cliente tiene 2 lineas del mismo nombre
-                        // (ej. mismo producto en 2 gramajes), no asumimos que TODAS
-                        // estan agotadas — el backend solo nos dio una lista de nombres.
-                        // Quitamos UNA linea por nombre agotado y dejamos las demas para
-                        // que el cliente reintente; el backend va a re-validar al pagar
-                        // y si todavia faltan, vuelve a aparecer el dialogo.
-                        val pendientes = err.agotados.toMutableList()
-                        val iter = CartStore.items.listIterator()
-                        while (iter.hasNext() && pendientes.isNotEmpty()) {
-                            val item = iter.next()
-                            if (pendientes.remove(item.producto.nombre)) iter.remove()
-                        }
+                        // Borrar TODAS las lineas con un nombre listado por el backend.
+                        // El producto esta agotado a nivel SKU (no por gramaje), asi
+                        // que si el cliente tenia "Palta Hass 500g" y "Palta Hass 1kg",
+                        // ambas se descartan. Antes borrabamos solo una y el cliente
+                        // entraba en loop: reintentaba, el backend devolvia el mismo
+                        // agotados, se borraba otra, etc., hasta que volvia al carrito
+                        // a mano.
+                        val nombresAgotados = err.agotados.toSet()
+                        CartStore.items.removeAll { it.producto.nombre in nombresAgotados }
                         agotadosError = null
                     }) {
-                        Text("Entendido", color = FrutAppColors.Brand600, fontWeight = FontWeight.Bold)
+                        Text("Quitar y continuar", color = FrutAppColors.Brand600, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    // Segundo CTA explicito: vuelve al carrito si el cliente quiere
+                    // revisar/reemplazar los agotados antes de pagar. Antes era
+                    // descarte sin opcion de cancelar — trampa UX cuando muchos
+                    // items se agotaban.
+                    TextButton(onClick = {
+                        agotadosError = null
+                        navigator.pop()
+                    }) {
+                        Text("Volver al carrito", color = FrutAppColors.InkSoft)
                     }
                 }
             )

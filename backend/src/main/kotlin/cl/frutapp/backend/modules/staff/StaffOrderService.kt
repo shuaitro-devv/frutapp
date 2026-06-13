@@ -286,8 +286,14 @@ class StaffOrderService(
         // devolvemos error (no quedamos en estado inconsistente).
         val items = orderRepository.listItemsPesoInfo(orderId)
         val item = items.firstOrNull { it.id == itemId }
-            ?: throw NotFoundException("Item no encontrado en este pedido.")
-        if (item.unidad != "kg") throw ValidationException("Este item no se pesa (no es por kg).")
+        // Mensaje generico para no filtrar metadata de pedidos ajenos al picker:
+        // antes, los strings "Item no encontrado" vs "Este item no se pesa" vs
+        // "Pedido no en picking o no tuyo" permitian enumerar si el item existe,
+        // su unidad y el ownership del pedido. Devolvemos siempre el mismo error
+        // hasta que el UPDATE atomico del repo confirme la operacion.
+        if (item == null || item.unidad != "kg") {
+            throw ValidationException("No se puede registrar el peso para este item.")
+        }
 
         // Contrato: gramosReales = peso TOTAL del item (todas las bolsas pesadas
         // juntas en bascula). El UI del picker muestra "cantidad * gramos / 1000 kg
@@ -331,6 +337,10 @@ class StaffOrderService(
             // sin multiplicar por cantidad y disparaba ESPERANDO_AJUSTE para pedidos
             // con cantidad>1 aunque el desvio real era pequeno.
             val pesoEsperadoTotal = item.gramos * item.cantidad
+            // Defensa contra division por cero: si por algun motivo pesoEsperadoTotal
+            // quedo en 0 (no deberia, OrderService.create valida gramos>0), tratamos
+            // como dentro de tolerancia para no disparar Infinity en el delta.
+            if (pesoEsperadoTotal <= 0) return@any false
             val delta = kotlin.math.abs(item.pesoReal - pesoEsperadoTotal).toDouble() / pesoEsperadoTotal
             delta > tolerancia
         }

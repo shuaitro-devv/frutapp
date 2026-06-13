@@ -114,7 +114,9 @@ data class OrderItemDto(
     val cantidad: Int,
     val montoEstimado: Int,
     val montoFinal: Int? = null,
-    val itemStatus: String,
+    // Default para retrocompat: backends sin V19 y APKs viejos asumen PENDIENTE.
+    // Consistente con StaffOrderItemDto que ya tenia default.
+    val itemStatus: String = "PENDIENTE",
     /** Identificador del item dentro del pedido. La app cliente lo necesita para
      *  identificar items con ajuste; la app picker lo necesita para el endpoint
      *  PUT /v1/staff/orders/{id}/items/{itemId}/peso. */

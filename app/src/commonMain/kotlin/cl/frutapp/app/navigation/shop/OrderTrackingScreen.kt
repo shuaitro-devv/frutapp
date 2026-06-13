@@ -435,6 +435,7 @@ private fun statusLabel(status: String): String = when (status) {
     "CREADO" -> "Creado"
     "PAGADO" -> "Pagado"
     "EN_PICKING" -> "En preparación"
+    "ESPERANDO_AJUSTE_CLIENTE" -> "Esperando tu confirmación"
     "STOCK_CONFIRMADO" -> "Stock confirmado"
     "FACTURADO" -> "Facturado"
     "EN_DESPACHO" -> "En camino"

@@ -71,7 +71,15 @@ class OrderService(
             // bucket de agotados — el caller va a re-tirar la excepcion al final.
             if (!p.disponible) throw ProductosAgotadosException(agotados = listOf(p.name))
             val esKg = p.unit == "kg"
-            val gramos = if (esKg) (item.gramos ?: 1000) else null
+            val gramos: Int? = if (esKg) {
+                val g = item.gramos ?: 1000
+                // Validacion: gramos debe ser positivo. Sin esto el cliente podia mandar
+                // gramos=0 y romper toda la cadena: monto_estimado = 0, delta=NaN al
+                // pesar (NaN > tolerancia = false → ajuste NUNCA dispara), y el
+                // endpoint de resumen serializaba Infinity rompiendo la respuesta.
+                if (g <= 0) throw ValidationException("El gramaje del item debe ser mayor a 0.")
+                g
+            } else null
             val montoEstimado =
                 if (esKg) (p.priceClp * gramos!! / 1000) * item.cantidad
                 else p.priceClp * item.cantidad
@@ -229,10 +237,15 @@ class OrderService(
         val tolerancia = BusinessConfig.PESO_TOLERANCIA_PORC
 
         val (sobre, dentro) = items
-            .filter { it.unidad == "kg" && it.gramos != null && it.pesoReal != null && it.montoFinal != null }
+            .filter {
+                it.unidad == "kg" && it.gramos != null && it.gramos > 0 &&
+                    it.pesoReal != null && it.montoFinal != null
+            }
             .map { item ->
                 // Comparamos contra el peso esperado TOTAL (gramos por unidad * cantidad).
-                // pesoReal es el peso total pesado en bascula.
+                // pesoReal es el peso total pesado en bascula. El filtro de arriba ya
+                // garantiza pesoEsperadoTotal > 0; sin esto el delta seria Infinity y
+                // rompia la serializacion JSON del endpoint.
                 val pesoEsperadoTotal = item.gramos!! * item.cantidad
                 val delta = (item.pesoReal!! - pesoEsperadoTotal).toDouble() / pesoEsperadoTotal
                 ItemAjusteDto(
@@ -287,16 +300,19 @@ class OrderService(
             throw ValidationException("Este pedido no tiene un ajuste pendiente.")
         }
 
-        // Rechazo basado en LO QUE EL CLIENTE VIO: marcamos SIN_STOCK los items por kg
-        // donde el peso real difiere del pedido (delta != 0). NO usamos la tolerancia
-        // actual porque pudo haberse editado entre que el cliente abrio la pantalla
-        // y aprobo — el cliente decide sobre el snapshot que tenia en pantalla, no
-        // sobre la regla actual del operador.
+        // Rechazo basado en LO QUE EL CLIENTE VIO: la pantalla muestra como items
+        // "rechazables" solo los que pasaron la tolerancia (delta > tolerancia).
+        // Los items dentro de tolerancia son informativos — el cliente NUNCA los
+        // vio como rechazables, asi que no podemos descartarlos. Antes filtrabamos
+        // por `!= esperado` (igualdad estricta), lo que descartaba tambien items
+        // con delta del 5% (informativos) cuando el cliente rechazaba uno con 15%.
+        val tolerancia = BusinessConfig.PESO_TOLERANCIA_PORC
         val items = orders.listItemsPesoInfo(orderId)
         val itemsARechazar = items.filter { item ->
-            item.unidad == "kg" && item.gramos != null && item.pesoReal != null && run {
+            item.unidad == "kg" && item.gramos != null && item.gramos > 0 && item.pesoReal != null && run {
                 val pesoEsperadoTotal = item.gramos * item.cantidad
-                item.pesoReal != pesoEsperadoTotal
+                val delta = kotlin.math.abs(item.pesoReal - pesoEsperadoTotal).toDouble() / pesoEsperadoTotal
+                delta > tolerancia
             }
         }
         itemsARechazar.forEach { orders.marcarItemSinStock(orderId, it.id) }
@@ -318,13 +334,33 @@ class OrderService(
         // fallback a monto_estimado) + envio. Antes usabamos solo el estimado, lo que
         // ignoraba ajustes de peso dentro de tolerancia (1kg -> 1.05kg cobraba el
         // estimado, no el real). Y captura el pago.
-        val totalFinal = if (to == OrderStatus.STOCK_CONFIRMADO) orders.calcularTotalFinal(id) else null
+        // CANCELADO: tambien escribimos totalFinal=0 para que "Mis pedidos" no muestre
+        // el estimado original como si fuera el cobro real (era confuso).
+        val totalFinal = when (to) {
+            OrderStatus.STOCK_CONFIRMADO -> orders.calcularTotalFinal(id)
+            OrderStatus.CANCELADO -> 0
+            else -> null
+        }
+        // PaymentStatus distingue REVERSADO (cancelacion pre-captura, void del hold de
+        // la pasarela; el dinero nunca cambio de cuenta) de REEMBOLSADO (cancelacion
+        // post-captura, requiere refund real). El threshold es STOCK_CONFIRMADO: a
+        // partir de ahi el pago ya fue CAPTURADO. Sin esta distincion, integrar Webpay
+        // o MP seria imposible de reconciliar (reembolsar algo nunca capturado tira
+        // error en la pasarela).
         val payment = when (to) {
             OrderStatus.STOCK_CONFIRMADO -> PaymentStatus.CAPTURADO
-            OrderStatus.CANCELADO -> PaymentStatus.REEMBOLSADO
+            OrderStatus.CANCELADO -> if (from < OrderStatus.STOCK_CONFIRMADO) PaymentStatus.REVERSADO else PaymentStatus.REEMBOLSADO
             else -> null
         }
         orders.applyTransition(id, from, to, actor, actorUserId, nota, totalFinal, payment)
+        // Reintegro de FrutCoins canjeados al cancelar: si el cliente pago parte con
+        // coins y el pedido se cancela, los coins vuelven al ledger como
+        // REINTEGRO_CANCELACION. Sin esto el saldo del cliente quedaba mermado
+        // permanentemente. Fire DESPUES de la transicion para que el guard del
+        // CRITICAL (status eq from) garantice que solo UN call reintegra.
+        if (to == OrderStatus.CANCELADO) {
+            runCatching { orders.reintegrarFrutCoinsCanjeados(id) }
+        }
         // Hook FCM al final: el push se dispara DESPUES de que la transicion esta
         // persistida (no antes), asi un push nunca se entrega sin que la BD lo refleje.
         // onTransitionFired es fire-and-forget; cualquier excepcion adentro la traga

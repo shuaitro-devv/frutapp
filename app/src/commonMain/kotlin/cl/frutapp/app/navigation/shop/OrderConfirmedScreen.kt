@@ -80,7 +80,7 @@ class OrderConfirmedScreen(
         // sponsors: el cliente paga, queda en confirmacion unos segundos, y cuando el
         // picker toma el pedido en el otro celular, la pantalla del cliente cambia sola.
         LaunchedEffect(orderId) {
-            val estadosPostPago = setOf("EN_PICKING", "STOCK_CONFIRMADO", "FACTURADO", "EN_DESPACHO", "ENTREGADO")
+            val estadosPostPago = setOf("EN_PICKING", "ESPERANDO_AJUSTE_CLIENTE", "STOCK_CONFIRMADO", "FACTURADO", "EN_DESPACHO", "ENTREGADO")
             while (true) {
                 kotlinx.coroutines.delay(5000)
                 val st = runCatching { cl.frutapp.app.data.remote.OrderApi().get(orderId).status }.getOrNull()

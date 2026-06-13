@@ -314,11 +314,30 @@ class OrderRepository {
 
     /** Calcula el total final real basandose en los monto_final que dejo el picker
      *  (fallback a monto_estimado si el item no fue pesado, ej. unidad o atado). Le
-     *  agrega el envio del pedido. Items en SIN_STOCK suman 0 (no se cobran). */
+     *  agrega el envio del pedido. Items en SIN_STOCK suman 0 (no se cobran).
+     *
+     *  Defensa: si un item por kg llega sin pesar (peso_real null) y NO esta
+     *  SIN_STOCK, tira ValidationException. Sin esto, rutas como autoAdvanceAll
+     *  (cron de demo), transition (back office) y aprobarAjuste podian capturar
+     *  pago al monto_estimado en items por kg que el picker olvido pesar.
+     *  StaffOrderService.complete ya valida este invariante pero las otras
+     *  rutas no — esta es la red de seguridad final. */
     suspend fun calcularTotalFinal(orderId: UUID): Int = dbQuery {
         val items = OrderItemsTable.selectAll()
             .where { OrderItemsTable.orderId eq orderId }
             .toList()
+        val sinPesar = items.filter {
+            val st = it[OrderItemsTable.itemStatus]
+            it[OrderItemsTable.unidad] == "kg" &&
+                it[OrderItemsTable.pesoReal] == null &&
+                st != ITEM_STATUS_SIN_STOCK
+        }
+        if (sinPesar.isNotEmpty()) {
+            val nombres = sinPesar.joinToString { it[OrderItemsTable.nombre] }
+            throw cl.frutapp.backend.error.ValidationException(
+                "Hay items por kg sin pesar: $nombres. No se puede confirmar el total."
+            )
+        }
         val subtotalReal = items.sumOf { row ->
             val status = row[OrderItemsTable.itemStatus]
             if (status == ITEM_STATUS_SIN_STOCK) 0
@@ -329,6 +348,37 @@ class OrderRepository {
             .singleOrNull()
             ?.get(OrdersTable.envio) ?: 0
         subtotalReal + envio
+    }
+
+    /** Reintegra al ledger FrutCoins los coins canjeados en este pedido cuando se
+     *  cancela. Inserta un asiento positivo (delta = +frutcoinsCanjeadas) con
+     *  motivo='REINTEGRO_CANCELACION'. Idempotente: no chequea duplicados (el caller
+     *  solo debe llamarlo UNA vez por cancelacion, y la transicion ya esta guarded
+     *  por el status del CRITICAL fix). Si no habia coins canjeados, no-op. */
+    suspend fun reintegrarFrutCoinsCanjeados(orderId: UUID) = dbQuery {
+        val row = OrdersTable
+            .selectAll().where { OrdersTable.id eq orderId }
+            .singleOrNull() ?: return@dbQuery
+        val canjeados = row[OrdersTable.frutcoinsCanjeadas]
+        if (canjeados <= 0) return@dbQuery
+        val userId = row[OrdersTable.userId]
+        // Saldo actual del ledger para mantener balance_after coherente con el resto
+        // de filas (no nos confiamos del cache).
+        val saldoActual = FrutCoinsLedgerTable
+            .selectAll().where { FrutCoinsLedgerTable.userId eq userId }
+            .orderBy(FrutCoinsLedgerTable.createdAt to org.jetbrains.exposed.sql.SortOrder.DESC)
+            .firstOrNull()?.get(FrutCoinsLedgerTable.balanceAfter) ?: 0
+        val nuevoSaldo = saldoActual + canjeados
+        FrutCoinsLedgerTable.insert {
+            it[id] = UUID.randomUUID()
+            it[FrutCoinsLedgerTable.userId] = userId
+            it[FrutCoinsLedgerTable.orderId] = orderId
+            it[delta] = canjeados
+            it[motivo] = "REINTEGRO_CANCELACION"
+            it[balanceAfter] = nuevoSaldo
+            it[createdAt] = Clock.System.now()
+        }
+        Unit
     }
 
     /** Picker asignado al pedido + numero. Null si el pedido no esta asignado o no existe.
@@ -393,11 +443,25 @@ class OrderRepository {
         totalFinal: Int?,
         paymentStatus: PaymentStatus?
     ) = dbQuery {
-        OrdersTable.update({ OrdersTable.id eq id }) {
+        // CRITICAL: el WHERE INCLUYE el status esperado para cerrar el TOCTOU entre
+        // currentStatus() y este UPDATE. Si dos requests simultaneos pasan
+        // canTransition() en memoria, solo UNA va a encontrar la fila en el `from`
+        // y persistir; la otra recibe 0 rows y lanza ConflictException para que el
+        // caller decida (cliente reintenta con el estado actual; staff ve "ya
+        // procesado"). Antes este UPDATE filtraba solo por id → ambos pasaban,
+        // duplicando historial y notificaciones.
+        val updated = OrdersTable.update({
+            (OrdersTable.id eq id) and (OrdersTable.status eq from.name)
+        }) {
             it[status] = to.name
             it[updatedAt] = Clock.System.now()
             if (totalFinal != null) it[OrdersTable.totalFinal] = totalFinal
             if (paymentStatus != null) it[OrdersTable.paymentStatus] = paymentStatus.name
+        }
+        if (updated == 0) {
+            throw cl.frutapp.backend.error.ConflictException(
+                "Este pedido ya cambió de estado. Refrescá para ver el actual."
+            )
         }
         insertHistory(id, from, to, actor, actorUserId, nota)
         Unit

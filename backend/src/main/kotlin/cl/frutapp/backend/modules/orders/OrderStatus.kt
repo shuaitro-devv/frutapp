@@ -78,7 +78,15 @@ enum class OrderStatus {
     }
 }
 
-enum class PaymentStatus { PREAUTORIZADO, CAPTURADO, REEMBOLSADO }
+/** Estado del pago en relacion al ciclo de captura de la pasarela.
+ *  - PREAUTORIZADO: hold del monto, sin debito real (Webpay/MP held).
+ *  - CAPTURADO: el cobro fue efectivo (lo movio del cliente al merchant).
+ *  - REVERSADO: cancelacion ANTES de captura (void del hold). En contabilidad
+ *    no genera asiento de reembolso porque el dinero nunca cambio de cuenta;
+ *    el hold se libera. Es el path para cancelar EN_PICKING / ESPERANDO_AJUSTE.
+ *  - REEMBOLSADO: cancelacion DESPUES de captura, requiere refund real via
+ *    la pasarela. Path para devoluciones post-entrega. */
+enum class PaymentStatus { PREAUTORIZADO, CAPTURADO, REVERSADO, REEMBOLSADO }
 
 enum class OrderActor { CLIENTE, SISTEMA, OPERADOR, REPARTIDOR }
 
