@@ -2,6 +2,7 @@ package cl.frutapp.app.navigation.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import cl.frutapp.app.data.PendingNotification
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -121,7 +122,23 @@ class NotificacionesScreen : Screen {
                         EmptyNotis()
                     }
                     else -> Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-                        items.forEach { NotiRow(it) }
+                        items.forEach { noti ->
+                            // Si la noti es de tipo PEDIDO y tiene orderId en data,
+                            // hacerla clickeable: publicamos en PendingNotification y
+                            // dejamos que el LaunchedEffect global de App.kt navegue al
+                            // pedido/ajuste/picker/repartidor segun el contexto.
+                            // Mismo comportamiento que tocar el push en la barra del
+                            // sistema → el inbox in-app es la otra puerta a la misma
+                            // pantalla.
+                            val triple = parseNotiData(noti.data)
+                            val onClick: (() -> Unit)? = triple?.let { (orderId, type, status) ->
+                                {
+                                    PendingNotification.set(orderId, type, status)
+                                    navigator.pop()
+                                }
+                            }
+                            NotiRow(noti, onClick)
+                        }
                     }
                 }
             }
@@ -130,13 +147,13 @@ class NotificacionesScreen : Screen {
 }
 
 @Composable
-private fun NotiRow(n: NotificationDto) {
+private fun NotiRow(n: NotificationDto, onClick: (() -> Unit)? = null) {
     val emoji = emojiFor(n.type)
     val cuandoHumano = humanizeIsoToRelative(n.createdAt)
+    val baseModifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)
+        .background(if (n.leida) FrutAppColors.Brand50 else FrutAppColors.AmberSoft.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)
-            .background(if (n.leida) FrutAppColors.Brand50 else FrutAppColors.AmberSoft.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
-            .padding(14.dp),
+        modifier = if (onClick != null) baseModifier.clickable { onClick() }.padding(14.dp) else baseModifier.padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -184,6 +201,43 @@ private fun humanizeIsoToRelative(iso: String): String {
         mins < 60 * 24 -> "hace ${mins / 60} h"
         else -> "hace ${mins / (60 * 24)} días"
     }
+}
+
+/**
+ * Parsea el `data` JSON de la notificacion del inbox (lo guarda el backend al
+ * persistirla con `NotificationInboxRepository.create`). Devuelve un Triple con
+ * (orderId, type, status) listo para [PendingNotification.set]. Null si no hay
+ * orderId — esa noti no es clickeable (ej. una de COINS o RACHA sin pedido).
+ *
+ * El `data` que guarda el backend tiene shapes distintos segun el origen:
+ *  - order_status (cliente): {"orderId":"...","orderNumero":"...","status":"..."}
+ *  - picker_new_order: {"orderId":"...","orderNumero":"...","scope":"picker"}
+ *  - picker_ajuste_resuelto: idem + "ajuste":"aprobado|rechazado"
+ *  - repartidor_new_dispatch: {"orderId":"...","orderNumero":"...","scope":"repartidor"}
+ *
+ * Mapeamos scope/ajuste al `type` que entiende el routing de App.kt para que el
+ * tap del inbox dispare la misma navegacion que el tap del push de la barra.
+ */
+private val notiDataJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; isLenient = true }
+
+private fun parseNotiData(data: String?): Triple<String, String?, String?>? {
+    if (data.isNullOrBlank()) return null
+    return runCatching {
+        val obj = notiDataJson.parseToJsonElement(data) as? kotlinx.serialization.json.JsonObject
+            ?: return@runCatching null
+        val orderId = (obj["orderId"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+            ?: return@runCatching null
+        val scope = (obj["scope"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+        val ajuste = (obj["ajuste"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+        val status = (obj["status"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+        val type = when {
+            scope == "picker" && ajuste != null -> "picker_ajuste_resuelto"
+            scope == "picker" -> "picker_new_order"
+            scope == "repartidor" -> "repartidor_new_dispatch"
+            else -> "order_status"
+        }
+        Triple(orderId, type, status)
+    }.getOrNull()
 }
 
 @Composable
