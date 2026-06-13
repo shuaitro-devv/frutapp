@@ -59,7 +59,13 @@ fun App() {
                 // en una pantalla de auth (en ese caso queda en cola hasta que
                 // termine el login). Sin esto, el push abria la app en home y el
                 // usuario tenia que buscar manualmente el pedido.
-                LaunchedEffect(PendingNotification.orderId, TokenStore.accessToken) {
+                // CRITICAL: navigator.lastItem es la 3ra key. Sin esto, en cold start
+                // el effect se ejecuta una vez en SplashScreen (sale por enAuth=true),
+                // y cuando Splash navega a Home las keys orderId/accessToken NO cambian
+                // → el effect NUNCA se vuelve a triggear y el deep link se pierde.
+                // Con lastItem como key, se re-ejecuta en cada cambio de pantalla y
+                // hace el push apenas el usuario sale del auth.
+                LaunchedEffect(PendingNotification.orderId, TokenStore.accessToken, navigator.lastItem) {
                     val pendingOrderId = PendingNotification.orderId ?: return@LaunchedEffect
                     if (TokenStore.accessToken == null) return@LaunchedEffect
                     val lastItem = navigator.lastItem
