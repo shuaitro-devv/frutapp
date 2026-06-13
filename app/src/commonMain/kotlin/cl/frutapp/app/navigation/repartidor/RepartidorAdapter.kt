@@ -19,9 +19,9 @@ import kotlinx.datetime.Instant
 /** Adapta el DTO al modelo del tab "Entregados hoy" del repartidor. Calcula
  *  "hace X min" desde el assignedAt (cuando tomo el despacho). El backend
  *  no devuelve completedAt en el summary; assignedAt es proxy razonable
- *  porque las entregas tipicas son ~30-60 min. La ganancia y las incidencias
- *  no estan en el summary: ganancia se podria derivar del total (% de
- *  comision configurable) cuando se cablee real; por ahora 0 para no inventar. */
+ *  porque las entregas tipicas son ~30-60 min. [montoCLP] usa el total del
+ *  pedido (la app no expone comision personal todavia — ver doc del data
+ *  class). Incidencias = 0 hasta que se cablee su seguimiento. */
 internal fun StaffDispatchSummaryDto.toDespachoEntregado(): DespachoEntregado {
     val ref = runCatching { assignedAt?.let { Instant.parse(it) } }.getOrNull() ?: Clock.System.now()
     val minutos = ((Clock.System.now() - ref).inWholeMinutes).toInt().coerceAtLeast(0)
@@ -31,7 +31,7 @@ internal fun StaffDispatchSummaryDto.toDespachoEntregado(): DespachoEntregado {
         sector = sector,
         direccion = direccion,
         entregadoHaceMin = minutos,
-        gananciaCLP = 0,
+        montoCLP = total,
         incidencias = 0
     )
 }

@@ -58,9 +58,9 @@ fun RepartidorEntregadosContent(modifier: Modifier = Modifier) {
                 ErrorReporter.report(screen = "RepartidorEntregados", action = "entregados_hoy", error = e)
             }
     }
-    val totalGanado = remember(despachos) { despachos.sumOf { it.gananciaCLP } }
+    val totalEntregado = remember(despachos) { despachos.sumOf { it.montoCLP } }
     Column(modifier = modifier.fillMaxSize()) {
-        Header(totalEntregas = despachos.size, totalGanado = totalGanado)
+        Header(totalEntregas = despachos.size, totalEntregado = totalEntregado)
         // OJO: NUNCA usar `return@Column` dentro de un Composable; Compose construye
         // un arbol de grupos y el salto deja grupos sin cerrar → IndexOutOfBoundsException
         // en Stack.pop del Composer al recomponer. Siempre usar if/else.
@@ -83,7 +83,7 @@ fun RepartidorEntregadosContent(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun Header(totalEntregas: Int, totalGanado: Int) {
+private fun Header(totalEntregas: Int, totalEntregado: Int) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -98,7 +98,7 @@ private fun Header(totalEntregas: Int, totalGanado: Int) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text("$totalEntregas", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Text(formatoClp(totalGanado), color = Color.White.copy(alpha = 0.9f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Text(formatoClp(totalEntregado), color = Color.White.copy(alpha = 0.9f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -140,7 +140,7 @@ private fun Card(item: DespachoEntregado, onClick: () -> Unit) {
             }
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("+${formatoClp(item.gananciaCLP)}", color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text(formatoClp(item.montoCLP), color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 if (item.incidencias > 0) {
                     Spacer(Modifier.width(10.dp))
                     Row(

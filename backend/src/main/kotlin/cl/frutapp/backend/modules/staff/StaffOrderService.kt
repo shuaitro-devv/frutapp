@@ -20,6 +20,9 @@ import cl.frutapp.shared.dto.StaffOrderItemDto
 import cl.frutapp.shared.dto.StaffOrderSummaryDto
 import cl.frutapp.shared.dto.StaffTakeResult
 import kotlinx.datetime.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -171,17 +174,18 @@ class StaffOrderService(
     }
 
     /** Tab "Listos hoy" del picker: pedidos que el picker logueado completo
-     *  (status >= STOCK_CONFIRMADO, EN_DESPACHO, ENTREGADO, FACTURADO) en las
-     *  ultimas 24h. Excluye CANCELADO/DEVOLUCION para no contaminar el conteo
-     *  de productividad. Ordenado del mas reciente al mas antiguo. */
+     *  (status >= STOCK_CONFIRMADO, EN_DESPACHO, ENTREGADO, FACTURADO) HOY
+     *  segun calendario chileno (desde medianoche America/Santiago, no las
+     *  ultimas 24h deslizantes). Excluye CANCELADO/DEVOLUCION para no contaminar
+     *  el conteo de productividad del turno. Ordenado mas reciente primero. */
     suspend fun completadosHoyPicker(pickerId: UUID): List<StaffOrderSummaryDto> = dbQuery {
-        val ayer = Clock.System.now().minus(24.hours)
+        val inicioDeHoy = inicioDeHoyChile()
         val rows = OrdersTable
             .selectAll()
             .where {
                 (OrdersTable.assignedPickerId eq pickerId) and
                 (OrdersTable.status inList COMPLETADOS_PICKER_STATUSES) and
-                (OrdersTable.updatedAt greater ayer)
+                (OrdersTable.updatedAt greaterEq inicioDeHoy)
             }
             .orderBy(OrdersTable.updatedAt, SortOrder.DESC)
             .limit(50)
@@ -601,20 +605,30 @@ class StaffOrderService(
      *  llevo a destino (status=ENTREGADO) en las ultimas 24h. Ordenado del mas
      *  reciente al mas antiguo. Limite 50 — turno tipico no llega ni de cerca. */
     suspend fun entregadosHoyDispatch(repartidorId: UUID): List<StaffDispatchSummaryDto> {
-        val ayer = Clock.System.now().minus(24.hours)
+        val inicioDeHoy = inicioDeHoyChile()
         val rows = dbQuery {
             OrdersTable
                 .selectAll()
                 .where {
                     (OrdersTable.assignedRepartidorId eq repartidorId) and
                     (OrdersTable.status inList ENTREGADOS_REPARTIDOR_STATUSES) and
-                    (OrdersTable.updatedAt greater ayer)
+                    (OrdersTable.updatedAt greaterEq inicioDeHoy)
                 }
                 .orderBy(OrdersTable.updatedAt, SortOrder.DESC)
                 .limit(50)
                 .toList()
         }
         return materializeDispatchSummaries(rows, repartidorId)
+    }
+
+    /** Instante (UTC) de la medianoche del dia actual segun calendario chileno
+     *  (America/Santiago). Lo usan los filtros "hoy" del staff: el turno arranca
+     *  a las 00:00 hora local, asi un pedido entregado anoche a las 23:00 NO
+     *  cuenta para el "hoy" del turno de la manana. La zona maneja correctamente
+     *  DST (en sept Chile cambia a verano: 23h en vez de 24h). */
+    private fun inicioDeHoyChile(): kotlinx.datetime.Instant {
+        val tz = TimeZone.of("America/Santiago")
+        return Clock.System.now().toLocalDateTime(tz).date.atStartOfDayIn(tz)
     }
 
     /** Detalle del despacho: cabecera + items + datos de contacto del cliente.
