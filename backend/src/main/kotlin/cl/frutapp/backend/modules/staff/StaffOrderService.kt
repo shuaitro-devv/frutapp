@@ -341,14 +341,19 @@ class StaffOrderService(
      */
     suspend fun complete(pickerId: UUID, orderId: UUID, context: EventContext) {
         val items = orderRepository.listItemsPesoInfo(orderId)
-        // Validacion: todos los items por kg deben estar pesados antes de cerrar
-        // el picking. Sin esto, calcularTotalFinal del applyStep usa monto_estimado
-        // como fallback y el cliente paga el estimado en items que el picker
-        // marco como completados pero nunca peso (race del UI o del modo mock).
-        val sinPesar = items.filter { it.unidad == "kg" && it.gramos != null && it.pesoReal == null }
-        if (sinPesar.isNotEmpty()) {
-            throw ValidationException("Hay items por kg sin pesar: ${sinPesar.joinToString { it.nombre }}.")
-        }
+        // NOTA: Antes acá validabamos "todos los items por kg deben estar pesados",
+        // pero ese check rompia el flow real del picker que SUSTITUYE o REPORTA
+        // FALTANTE un item — esos estados son resoluciones validas sin peso real.
+        // El UI del picker exige que NO haya PENDIENTES locales antes de habilitar
+        // este boton (PickerPicklistScreen valida pendientes en el cliente), asi
+        // que confiar en eso es suficiente para el flow demo.
+        //
+        // GAP PENDIENTE: el cliente NO propaga al backend cuando sustituye/marca
+        // faltante un item. Hoy esos items quedan en PENDIENTE con monto_final
+        // null, y calcularTotalFinal cae al monto_estimado (el cliente paga
+        // como si recibiera el item original). Para piloto real hay que agregar
+        // POST /v1/staff/orders/{id}/items/{itemId}/sustituir y
+        // POST /v1/staff/orders/{id}/items/{itemId}/faltante.
         val tolerancia = BusinessConfig.PESO_TOLERANCIA_PORC
         val haySobreTolerancia = items.any { item ->
             // Solo aplica a items por kg con peso pedido + peso real medido.

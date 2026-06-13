@@ -313,31 +313,19 @@ class OrderRepository {
     }
 
     /** Calcula el total final real basandose en los monto_final que dejo el picker
-     *  (fallback a monto_estimado si el item no fue pesado, ej. unidad o atado). Le
-     *  agrega el envio del pedido. Items en SIN_STOCK suman 0 (no se cobran).
+     *  (fallback a monto_estimado si el item no fue pesado: items por unidad/atado, o
+     *  items por kg SUSTITUIDOS/FALTANTES por el picker). Le agrega el envio del
+     *  pedido. Items en SIN_STOCK suman 0 (no se cobran).
      *
-     *  Defensa: si un item por kg llega sin pesar (peso_real null) y NO esta
-     *  SIN_STOCK, tira ValidationException. Sin esto, rutas como autoAdvanceAll
-     *  (cron de demo), transition (back office) y aprobarAjuste podian capturar
-     *  pago al monto_estimado en items por kg que el picker olvido pesar.
-     *  StaffOrderService.complete ya valida este invariante pero las otras
-     *  rutas no — esta es la red de seguridad final. */
+     *  GAP CONOCIDO: el cliente del picker NO propaga al backend cuando sustituye
+     *  o marca faltante un item — esos quedan en PENDIENTE con peso_real null
+     *  y caen al fallback monto_estimado. El cliente termina pagando como si
+     *  recibiera el item original. Para piloto real agregar endpoints
+     *  POST /v1/staff/orders/{id}/items/{itemId}/sustituir y .../faltante. */
     suspend fun calcularTotalFinal(orderId: UUID): Int = dbQuery {
         val items = OrderItemsTable.selectAll()
             .where { OrderItemsTable.orderId eq orderId }
             .toList()
-        val sinPesar = items.filter {
-            val st = it[OrderItemsTable.itemStatus]
-            it[OrderItemsTable.unidad] == "kg" &&
-                it[OrderItemsTable.pesoReal] == null &&
-                st != ITEM_STATUS_SIN_STOCK
-        }
-        if (sinPesar.isNotEmpty()) {
-            val nombres = sinPesar.joinToString { it[OrderItemsTable.nombre] }
-            throw cl.frutapp.backend.error.ValidationException(
-                "Hay items por kg sin pesar: $nombres. No se puede confirmar el total."
-            )
-        }
         val subtotalReal = items.sumOf { row ->
             val status = row[OrderItemsTable.itemStatus]
             if (status == ITEM_STATUS_SIN_STOCK) 0
