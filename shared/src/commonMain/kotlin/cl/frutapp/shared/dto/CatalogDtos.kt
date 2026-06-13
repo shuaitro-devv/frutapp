@@ -21,5 +21,15 @@ data class ProductDto(
     val description: String,
     val priceClp: Int,
     val unit: String,
-    val imageKey: String
+    val imageKey: String,
+    /** Disponibilidad operacional. false = agotado: card en gris con badge
+     *  "Agotado" y boton "Agregar" disabled. Default true para retrocompat
+     *  con clientes viejos. */
+    val disponible: Boolean = true
+)
+
+/** Request del back office para flipear disponibilidad de un producto. */
+@Serializable
+data class SetProductAvailabilityRequest(
+    val disponible: Boolean
 )

@@ -2,8 +2,10 @@ package cl.frutapp.backend.plugins
 
 import cl.frutapp.backend.error.ApiException
 import cl.frutapp.backend.error.PricingChangedException
+import cl.frutapp.backend.error.ProductosAgotadosException
 import cl.frutapp.shared.dto.ApiError
 import cl.frutapp.shared.dto.PricingChangedDto
+import cl.frutapp.shared.dto.ProductosAgotadosDto
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.JsonConvertException
 import io.ktor.server.application.Application
@@ -32,6 +34,12 @@ fun Application.configureStatusPages() {
                     nuevoCostoEnvio = cause.nuevoCostoEnvio,
                     nuevoEnvioGratisDesde = cause.nuevoEnvioGratisDesde
                 )
+            )
+        }
+        exception<ProductosAgotadosException> { call, cause ->
+            call.respond(
+                cause.statusCode,
+                ProductosAgotadosDto(mensaje = cause.message, agotados = cause.agotados)
             )
         }
         // Errores de dominio: cada uno define su status + código estable.

@@ -49,7 +49,10 @@ data class Producto(
      *  alternativo, [categoria] queda forzada a FRUTAS por compatibilidad con el
      *  enum, y la categoria real (jugos/aguas/fruta/cajas/secos/vinos) vive aca
      *  para que los filtros de catalogo brand puedan match. */
-    val brandCategoryId: String? = null
+    val brandCategoryId: String? = null,
+    /** Disponibilidad operacional del backend (false = agotado). Default true
+     *  para que el DemoCatalog mock siga mostrando todo agregable. */
+    val disponible: Boolean = true
 )
 
 object DemoCatalog {

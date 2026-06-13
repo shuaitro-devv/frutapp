@@ -40,6 +40,15 @@ data class PricingChangedDto(
     val nuevoEnvioGratisDesde: Int
 )
 
+/** Respuesta 409 cuando algun producto del carrito se agoto entre medio. La app
+ *  muestra `mensaje` en un dialogo + lista cuales y los descarta del carrito
+ *  para que el cliente vuelva a confirmar con lo que quede disponible. */
+@Serializable
+data class ProductosAgotadosDto(
+    val mensaje: String,
+    val agotados: List<String>
+)
+
 @Serializable
 data class OrderItemRequest(
     val productId: String,

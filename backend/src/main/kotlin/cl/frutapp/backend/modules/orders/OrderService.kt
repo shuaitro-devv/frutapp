@@ -3,6 +3,7 @@ package cl.frutapp.backend.modules.orders
 import cl.frutapp.backend.config.BusinessConfig
 import cl.frutapp.backend.error.NotFoundException
 import cl.frutapp.backend.error.PricingChangedException
+import cl.frutapp.backend.error.ProductosAgotadosException
 import cl.frutapp.backend.error.ValidationException
 import cl.frutapp.backend.modules.catalog.CatalogRepository
 import cl.frutapp.shared.dto.AjusteResumenDto
@@ -40,6 +41,17 @@ class OrderService(
         // version y cobrabamos otra.
         val costoEnvioActual = BusinessConfig.COSTO_ENVIO
         val envioGratisActual = BusinessConfig.ENVIO_GRATIS_DESDE
+        // Pre-pasada: recolectamos productos agotados de TODO el carrito antes de
+        // armar las lineas, para devolver UNA lista con todos los nombres en un solo
+        // 409 (mejor UX que tirar al primer agotado y ocultar el resto).
+        val agotados = mutableListOf<String>()
+        req.items.forEach { item ->
+            val pid = runCatching { java.util.UUID.fromString(item.productId) }.getOrNull() ?: return@forEach
+            val p = catalog.findProduct(pid) ?: return@forEach
+            if (!p.disponible) agotados.add(p.name)
+        }
+        if (agotados.isNotEmpty()) throw ProductosAgotadosException(agotados = agotados.distinct())
+
         val lines = req.items.map { item ->
             if (item.cantidad <= 0) throw ValidationException("Cantidad inválida.")
             val productId = parseUuid(item.productId, "Producto inválido.")

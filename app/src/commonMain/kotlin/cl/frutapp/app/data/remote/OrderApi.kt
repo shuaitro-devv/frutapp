@@ -6,6 +6,7 @@ import cl.frutapp.shared.dto.FrutCoinsBalanceDto
 import cl.frutapp.shared.dto.OrderDto
 import cl.frutapp.shared.dto.OrderSummaryDto
 import cl.frutapp.shared.dto.PricingChangedDto
+import cl.frutapp.shared.dto.ProductosAgotadosDto
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ClientRequestException
@@ -15,6 +16,8 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 
 /** El backend rechazó la orden porque el precio del envío cambió mientras el cliente
  *  armaba el carrito. Lleva los nuevos valores para que la UI pueda mostrar al
@@ -24,6 +27,19 @@ class PricingChangedAppException(
     val nuevoCostoEnvio: Int,
     val nuevoEnvioGratisDesde: Int
 ) : RuntimeException(mensaje)
+
+/** El backend rechazó la orden porque algun producto se agoto entre que se armo el
+ *  carrito y se mando a pagar. Lleva la lista de nombres para que la UI muestre
+ *  cuales y los descarte. */
+class ProductosAgotadosAppException(
+    val mensaje: String,
+    val agotados: List<String>
+) : RuntimeException(mensaje)
+
+/** Json compartido para parsear conflictos del create-order. Reusa la config del
+ *  cliente HTTP (ignoreUnknownKeys + isLenient) para que ambos DTOs (pricing y
+ *  agotados) parseen sin romperse aunque el shape evolucione. */
+private val conflictJson = Json { ignoreUnknownKeys = true; isLenient = true }
 
 /** Endpoints de pedidos y FrutCoins (protegidos por JWT; el Bearer lo pone ApiClient). */
 class OrderApi(
@@ -40,12 +56,24 @@ class OrderApi(
         }.body()
     } catch (e: ClientRequestException) {
         if (e.response.status == HttpStatusCode.Conflict) {
-            val dto = runCatching { e.response.body<PricingChangedDto>() }.getOrNull()
-            if (dto != null) throw PricingChangedAppException(
-                mensaje = dto.mensaje,
-                nuevoCostoEnvio = dto.nuevoCostoEnvio,
-                nuevoEnvioGratisDesde = dto.nuevoEnvioGratisDesde
-            )
+            // Hay 2 sabores de 409 en create-order: pricing_changed y products_unavailable.
+            // El backend no incluye el codigo en el payload (cada DTO solo tiene sus
+            // campos), asi que distinguimos por presencia de keys: `agotados` esta solo
+            // en ProductosAgotadosDto; `nuevoCostoEnvio` solo en PricingChangedDto.
+            val rawBody = runCatching { e.response.body<String>() }.getOrNull().orEmpty()
+            val asJson = runCatching { conflictJson.parseToJsonElement(rawBody) as? JsonObject }.getOrNull()
+            if (asJson?.containsKey("agotados") == true) {
+                val dto = runCatching { conflictJson.decodeFromString(ProductosAgotadosDto.serializer(), rawBody) }.getOrNull()
+                if (dto != null) throw ProductosAgotadosAppException(mensaje = dto.mensaje, agotados = dto.agotados)
+            }
+            if (asJson?.containsKey("nuevoCostoEnvio") == true) {
+                val dto = runCatching { conflictJson.decodeFromString(PricingChangedDto.serializer(), rawBody) }.getOrNull()
+                if (dto != null) throw PricingChangedAppException(
+                    mensaje = dto.mensaje,
+                    nuevoCostoEnvio = dto.nuevoCostoEnvio,
+                    nuevoEnvioGratisDesde = dto.nuevoEnvioGratisDesde
+                )
+            }
         }
         throw e
     }

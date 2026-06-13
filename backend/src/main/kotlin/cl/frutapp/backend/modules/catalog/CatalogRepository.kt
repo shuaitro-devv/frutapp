@@ -9,6 +9,7 @@ import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.lowerCase
 import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.update
 import java.util.UUID
 
 class CatalogRepository {
@@ -60,6 +61,18 @@ class CatalogRepository {
         description = row[ProductTable.description],
         priceClp = row[ProductTable.priceClp],
         unit = row[ProductTable.unit],
-        imageKey = row[ProductTable.imageKey]
+        imageKey = row[ProductTable.imageKey],
+        disponible = row[ProductTable.disponible]
     )
+
+    /** Cambia disponibilidad operacional del producto. Devuelve filas afectadas:
+     *  0 = no existe o esta soft-deleted. Endpoint admin lo traduce a 404 si 0. */
+    suspend fun setDisponible(id: UUID, disponible: Boolean): Int = dbQuery {
+        ProductTable.update({
+            (ProductTable.id eq id) and ProductTable.deletedAt.isNull()
+        }) {
+            it[ProductTable.disponible] = disponible
+            it[ProductTable.updatedAt] = kotlinx.datetime.Clock.System.now()
+        }
+    }
 }

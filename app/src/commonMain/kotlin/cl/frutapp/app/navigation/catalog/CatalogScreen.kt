@@ -234,6 +234,7 @@ class CatalogScreen : Screen {
                                     quantity = linea?.cantidad ?: 0,
                                     onIncrement = { CartStore.add(p, 1, defGramos) },
                                     onDecrement = { linea?.let { CartStore.setCantidad(it, it.cantidad - 1) } },
+                                    disponible = p.disponible,
                                     modifier = Modifier.weight(1f)
                                 )
                             }

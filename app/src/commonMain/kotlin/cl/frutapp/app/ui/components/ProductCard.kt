@@ -72,13 +72,16 @@ fun ProductCard(
     /** Cantidad de este producto (línea por defecto) ya en el carrito. 0 = muestra "+". */
     quantity: Int = 0,
     onIncrement: () -> Unit = onAdd,
-    onDecrement: () -> Unit = {}
+    onDecrement: () -> Unit = {},
+    /** false = producto agotado operacionalmente: la card sale en gris, no se puede
+     *  agregar, badge "Agotado" sobre la imagen. */
+    disponible: Boolean = true
 ) {
     Card(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier.clickable(enabled = disponible, onClick = onClick),
         shape = FrutAppShapes.large,
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        colors = CardDefaults.cardColors(containerColor = if (disponible) Color.White else FrutAppColors.Brand50.copy(alpha = 0.4f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (disponible) 2.dp else 0.dp)
     ) {
         Column {
             Box(
@@ -92,9 +95,28 @@ fun ProductCard(
                 Image(
                     painter = painterResource(image),
                     contentDescription = name,
-                    modifier = Modifier.fillMaxWidth().padding(10.dp).height(100.dp),
-                    contentScale = ContentScale.Fit
+                    modifier = Modifier.fillMaxWidth().padding(10.dp).height(100.dp)
+                        .scale(if (disponible) 1f else 0.9f),
+                    contentScale = ContentScale.Fit,
+                    alpha = if (disponible) 1f else 0.35f
                 )
+                if (!disponible) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .background(FrutAppColors.Ink.copy(alpha = 0.75f))
+                            .padding(vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Agotado",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
@@ -104,7 +126,7 @@ fun ProductCard(
                 Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                     Text(
                         text = name,
-                        color = FrutAppColors.Ink,
+                        color = if (disponible) FrutAppColors.Ink else FrutAppColors.InkMuted,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1
@@ -112,7 +134,7 @@ fun ProductCard(
                     // Precio + unidad en UNA sola línea (sin envolver: si no cabe, elipsis).
                     Text(
                         text = buildAnnotatedString {
-                            withStyle(SpanStyle(color = FrutAppColors.Brand600, fontWeight = FontWeight.Bold, fontSize = 16.sp)) {
+                            withStyle(SpanStyle(color = if (disponible) FrutAppColors.Brand600 else FrutAppColors.InkMuted, fontWeight = FontWeight.Bold, fontSize = 16.sp)) {
                                 append(price)
                             }
                             withStyle(SpanStyle(color = FrutAppColors.InkMuted, fontWeight = FontWeight.Medium, fontSize = 12.sp)) {
@@ -123,12 +145,17 @@ fun ProductCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                QuantityStepper(
-                    quantity = quantity,
-                    onAdd = onAdd,
-                    onIncrement = onIncrement,
-                    onDecrement = onDecrement
-                )
+                // El stepper queda invisible (no clickeable, sin "+") si esta agotado:
+                // el cliente entiende que no puede agregar sin tener que adivinar que
+                // pasaria al tocar el boton.
+                if (disponible) {
+                    QuantityStepper(
+                        quantity = quantity,
+                        onAdd = onAdd,
+                        onIncrement = onIncrement,
+                        onDecrement = onDecrement
+                    )
+                }
             }
         }
     }

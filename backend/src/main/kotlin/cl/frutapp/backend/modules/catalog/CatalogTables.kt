@@ -21,6 +21,9 @@ object ProductTable : Table("product") {
     val unit = text("unit")
     val imageKey = text("image_key")
     val active = bool("active")
+    /** Disponibilidad operacional (stock del dia). Distinto de [active] (soft-delete).
+     *  El operador la flipea desde el back office segun lo que llega del proveedor. */
+    val disponible = bool("disponible")
     val createdAt = timestamp("created_at")
     val updatedAt = timestamp("updated_at")
     val deletedAt = timestamp("deleted_at").nullable()

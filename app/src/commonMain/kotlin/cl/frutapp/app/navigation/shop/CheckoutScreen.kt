@@ -56,6 +56,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.CartStore
 import cl.frutapp.app.data.ConfigStore
 import cl.frutapp.app.data.remote.PricingChangedAppException
+import cl.frutapp.app.data.remote.ProductosAgotadosAppException
 import cl.frutapp.app.data.ClientInfo
 import cl.frutapp.app.data.RewardsStore
 import cl.frutapp.app.data.isUuidLike
@@ -117,6 +118,10 @@ class CheckoutScreen : Screen {
         // mientras el cliente armaba el carrito), guardamos el delta para mostrar
         // un AlertDialog amigable con "Continuar" / "Cancelar".
         var cambioPrecio by remember { mutableStateOf<PricingChangedAppException?>(null) }
+        // 409 products_unavailable: algun producto se agoto entre que armo el carrito
+        // y aprieta pagar. Mostramos AlertDialog con los nombres y removemos del carrito
+        // para que pueda re-confirmar con lo disponible.
+        var agotadosError by remember { mutableStateOf<ProductosAgotadosAppException?>(null) }
         // El boton Pagar queda disabled mientras corre el refresh forzado del config
         // al entrar al checkout. Sin esto, si el cliente toca Pagar antes de que
         // termine el refresh, mandamos un snapshot viejo y el backend devuelve 409 —
@@ -291,6 +296,11 @@ class CheckoutScreen : Screen {
                                             loading = false
                                             return@onFailure
                                         }
+                                        if (e is ProductosAgotadosAppException) {
+                                            agotadosError = e
+                                            loading = false
+                                            return@onFailure
+                                        }
                                         // Sesion expirada la maneja el LaunchedEffect global en App.kt
                                         // (replaceAll a Login + toast). Aqui solo nos preocupamos del
                                         // error visible al cliente: mensaje amigable in-screen sin
@@ -380,6 +390,57 @@ class CheckoutScreen : Screen {
                         scope.launch { ConfigStore.refreshNow() }
                     }) {
                         Text("Revisar mi pedido", color = FrutAppColors.Brand600, fontWeight = FontWeight.Bold)
+                    }
+                }
+            )
+        }
+
+        // Diálogo amigable cuando algún producto se agotó durante el armado.
+        // Lista los nombres y los descarta del carrito al cerrar, asi el cliente
+        // puede re-confirmar con lo que quede disponible sin más fricción.
+        agotadosError?.let { err ->
+            AlertDialog(
+                onDismissRequest = { agotadosError = null },
+                title = {
+                    Text(
+                        "Algunos productos se agotaron",
+                        color = FrutAppColors.Brand800,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column {
+                        Text(
+                            err.mensaje,
+                            color = FrutAppColors.InkSoft,
+                            fontSize = 14.sp
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        err.agotados.forEach { nombre ->
+                            Text(
+                                "• $nombre",
+                                color = FrutAppColors.Brand800,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Los quitamos del carrito. Podés seguir con el resto.",
+                            color = FrutAppColors.InkMuted,
+                            fontSize = 12.sp
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        // Descartar los items agotados del carrito local antes de cerrar.
+                        // Matching por nombre exacto (mismo nombre que envió el backend).
+                        val nombresAgotados = err.agotados.toSet()
+                        CartStore.items.removeAll { it.producto.nombre in nombresAgotados }
+                        agotadosError = null
+                    }) {
+                        Text("Entendido", color = FrutAppColors.Brand600, fontWeight = FontWeight.Bold)
                     }
                 }
             )

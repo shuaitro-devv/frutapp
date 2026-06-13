@@ -33,3 +33,11 @@ class PricingChangedException(
     val nuevoEnvioGratisDesde: Int,
     message: String = "Los precios cambiaron mientras armabas tu pedido. Revisa el nuevo total antes de confirmar."
 ) : ApiException(HttpStatusCode.Conflict, "pricing_changed", message)
+
+/** 409 cuando el cliente arma carrito + entre medio el operador marca algun producto
+ *  como agotado en el back office. Lleva los nombres para que la app muestre cuales
+ *  son y los descarte sin un round trip extra. */
+class ProductosAgotadosException(
+    val agotados: List<String>,
+    message: String = "Algunos productos se agotaron mientras armabas tu pedido."
+) : ApiException(HttpStatusCode.Conflict, "products_unavailable", message)
