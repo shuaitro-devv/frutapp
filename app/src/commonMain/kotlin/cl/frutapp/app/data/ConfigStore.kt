@@ -103,6 +103,11 @@ object ConfigStore {
     fun doubleOrDefault(key: String, default: Double): Double =
         values[key]?.toDoubleOrNull() ?: default
 
+    /** Tolerancia de peso variable (kg) antes de pedir aprobacion del cliente.
+     *  Default 0.10 (10%). Usado en checkout (cliente) y pantalla de pesar
+     *  (picker) para mostrar transparencia sobre el rango aceptado. */
+    fun pesoToleranciaPorc(): Double = doubleOrDefault("peso_tolerancia_porc", 0.10)
+
     /** Snapshot inmutable de los valores actuales para enviar al backend con la orden.
      *  El backend compara contra su cache y rechaza con 409 si difiere — asi nunca
      *  cobramos algo distinto a lo que el cliente vio. */

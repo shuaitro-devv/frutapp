@@ -147,20 +147,31 @@ fun PesoVariableModal(
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
             Spacer(Modifier.height(14.dp))
+            val toleranciaPorc = (cl.frutapp.app.data.ConfigStore.pesoToleranciaPorc() * 100).toInt()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(FrutAppColors.Brand50, RoundedCornerShape(10.dp))
                     .padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
                 Icon(Icons.Filled.Info, null, tint = FrutAppColors.Brand600, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "Se actualizará el total del pedido",
-                    color = FrutAppColors.Brand800,
-                    fontSize = 12.sp
-                )
+                Column {
+                    Text(
+                        text = "Se actualizará el total del pedido.",
+                        color = FrutAppColors.Brand800,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "Si el peso real difiere más de ±$toleranciaPorc% del solicitado, se pide aprobación al cliente antes de cobrar.",
+                        color = FrutAppColors.InkSoft,
+                        fontSize = 11.sp,
+                        lineHeight = 14.sp
+                    )
+                }
             }
             Spacer(Modifier.height(20.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

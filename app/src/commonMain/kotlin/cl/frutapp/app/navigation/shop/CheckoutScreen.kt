@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -614,6 +616,8 @@ private fun AddressCard(
 
 @Composable
 private fun OrderSummary(envio: Int, total: Int, modifier: Modifier = Modifier) {
+    val hayPesoVariable = CartStore.items.any { it.gramos != null }
+    val toleranciaPorc = (ConfigStore.pesoToleranciaPorc() * 100).toInt()
     Column(
         modifier = modifier.fillMaxWidth().background(FrutAppColors.Cream, RoundedCornerShape(16.dp)).padding(16.dp)
     ) {
@@ -631,6 +635,24 @@ private fun OrderSummary(envio: Int, total: Int, modifier: Modifier = Modifier) 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Total", color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Text(formatClp(total), color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        }
+        if (hayPesoVariable) {
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth()
+                    .background(Color.White, RoundedCornerShape(10.dp))
+                    .border(1.dp, FrutAppColors.Brand100, RoundedCornerShape(10.dp))
+                    .padding(10.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Icon(Icons.Filled.Scale, null, tint = FrutAppColors.Brand600, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Peso variable: los productos por kg se pesan al armar el pedido. " +
+                    "Si el peso real varía más de ±$toleranciaPorc%, te consultamos antes de cobrar el ajuste.",
+                    color = FrutAppColors.InkSoft, fontSize = 11.sp, lineHeight = 14.sp
+                )
+            }
         }
     }
 }
