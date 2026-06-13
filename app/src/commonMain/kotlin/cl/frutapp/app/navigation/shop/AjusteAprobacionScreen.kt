@@ -78,6 +78,19 @@ class AjusteAprobacionScreen(private val orderId: String) : Screen {
                 .onSuccess { resumen = it }
                 .onFailure { e ->
                     if (e is kotlinx.coroutines.CancellationException) throw e
+                    // Edge case: el cliente toca una notificacion VIEJA de ajuste
+                    // (la del inbox o un push que quedo en la barra) pero ya
+                    // aprobo/rechazo desde otra sesion. El backend devuelve 422
+                    // "Este pedido no tiene un ajuste pendiente". En lugar de
+                    // mostrar error tecnico, redirigimos al tracking que muestra
+                    // el estado actual del pedido (ENTREGADO, EN_DESPACHO, lo que
+                    // corresponda).
+                    val esAjusteYaResuelto = e is io.ktor.client.plugins.ClientRequestException &&
+                        e.response.status == io.ktor.http.HttpStatusCode.UnprocessableEntity
+                    if (esAjusteYaResuelto) {
+                        navigator.replace(OrderTrackingScreen(orderId))
+                        return@onFailure
+                    }
                     ErrorReporter.report(screen = "AjusteAprobacion", action = "get_ajuste", error = e)
                     error = mensajeAmigable(e, "cargar el ajuste")
                 }
