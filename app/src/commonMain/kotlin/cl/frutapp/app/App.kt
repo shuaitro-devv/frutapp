@@ -12,6 +12,9 @@ import cl.frutapp.app.data.PendingNotification
 import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.navigation.SplashScreen
 import cl.frutapp.app.navigation.auth.LoginScreen
+import cl.frutapp.app.navigation.picker.PickerHomeScreen
+import cl.frutapp.app.navigation.picker.PickerPicklistScreen
+import cl.frutapp.app.navigation.repartidor.RepartidorDetalleScreen
 import cl.frutapp.app.navigation.shop.AjusteAprobacionScreen
 import cl.frutapp.app.navigation.shop.OrderTrackingScreen
 import cl.frutapp.app.ui.showToast
@@ -66,18 +69,31 @@ fun App() {
                         lastItem::class.qualifiedName?.contains("SplashScreen") == true
                     if (enAuth) return@LaunchedEffect
                     val data = PendingNotification.consume() ?: return@LaunchedEffect
-                    val (orderId, _, status) = data
-                    // Routing minimo por status: si el cliente tiene un ajuste de peso
-                    // pendiente, va DIRECTO al diálogo de aprobacion (1 tap menos).
-                    // Para cualquier otro estado, vamos al tracking que ya sabe pintar
-                    // los banners y timelines correctos. Para pushes de staff
-                    // (picker_new_order / repartidor_new_dispatch) el routing actual
-                    // tambien lleva al tracking — esa cuenta es del cliente, y los
-                    // staff abren la app y van a su home; no aplica.
-                    val destino: Screen = if (status == "ESPERANDO_AJUSTE_CLIENTE") {
-                        AjusteAprobacionScreen(orderId)
-                    } else {
-                        OrderTrackingScreen(orderId)
+                    val (orderId, type, status) = data
+                    val roles = TokenStore.user?.roles ?: emptyList()
+                    val esPicker = "picker" in roles
+                    val esRepartidor = "repartidor" in roles
+                    // Routing por tipo de push + rol del usuario logueado.
+                    // - Cliente (order_status): si hay ajuste pendiente va DIRECTO a
+                    //   AjusteAprobacionScreen; cualquier otro estado (EN_PICKING,
+                    //   STOCK_CONFIRMADO, EN_DESPACHO, ENTREGADO, CANCELADO) va a
+                    //   OrderTrackingScreen que ya pinta timeline, banner de ajuste,
+                    //   productos del pedido y CTAs (calificar, volver a pedir).
+                    // - Picker (picker_new_order): va al picklist del pedido para que
+                    //   pueda tomarlo y arrancar. picker_ajuste_resuelto va al home
+                    //   del picker (su trabajo en ese pedido ya termino, solo recibe
+                    //   el aviso del destino).
+                    // - Repartidor (repartidor_new_dispatch): va al detalle del
+                    //   despacho para poder tomarlo.
+                    // Si el push es para un rol que el usuario NO tiene (ej. cliente
+                    // recibe picker_new_order — no deberia, pero defensivo), va al
+                    // tracking generico que va a 404 server-side y mostrar mensaje.
+                    val destino: Screen = when (type) {
+                        "picker_new_order" -> if (esPicker) PickerPicklistScreen(orderId) else OrderTrackingScreen(orderId)
+                        "picker_ajuste_resuelto" -> if (esPicker) PickerHomeScreen() else OrderTrackingScreen(orderId)
+                        "repartidor_new_dispatch" -> if (esRepartidor) RepartidorDetalleScreen(orderId) else OrderTrackingScreen(orderId)
+                        "order_status" -> if (status == "ESPERANDO_AJUSTE_CLIENTE") AjusteAprobacionScreen(orderId) else OrderTrackingScreen(orderId)
+                        else -> OrderTrackingScreen(orderId)
                     }
                     navigator.push(destino)
                 }
