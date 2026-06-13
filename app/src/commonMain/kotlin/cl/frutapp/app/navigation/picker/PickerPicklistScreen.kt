@@ -302,6 +302,8 @@ class PickerPicklistScreen(
         if (modalAbierto == ModalPicklist.SUSTITUCION && itemModal != null) {
             SustitucionModal(
                 item = itemModal!!,
+                pedidoId = pedidoId,
+                esBackendReal = esBackendReal,
                 onCerrar = { modalAbierto = null; itemModal = null },
                 onConfirmar = { nuevoEstado ->
                     estados = estados + (itemModal!!.numero to nuevoEstado)

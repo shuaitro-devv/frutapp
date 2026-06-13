@@ -58,6 +58,11 @@ object OrderItemsTable : Table("order_item") {
     val pesoReal = integer("peso_real").nullable()
     val montoFinal = integer("monto_final").nullable()
     val itemStatus = text("item_status")
+    /** Nombre del producto sustituto cuando el picker sustituye (V22). Null si no
+     *  hubo sustitucion — el item se entrego tal cual lo pidio el cliente. */
+    val sustitutoNombre = text("sustituto_nombre").nullable()
+    val sustitutoImageKey = text("sustituto_image_key").nullable()
+    val sustitutoProductId = uuid("sustituto_product_id").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

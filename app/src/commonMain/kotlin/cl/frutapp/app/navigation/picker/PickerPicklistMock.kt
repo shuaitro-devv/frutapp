@@ -38,7 +38,11 @@ data class ItemPicklist(
     val backendId: String? = null,
     /** Slug de la imagen del producto. Si tiene drawable mapeado, el picker
      *  lo renderiza con [brandProductDrawable]; si no, cae al [emoji]. */
-    val imageKey: String? = null
+    val imageKey: String? = null,
+    /** UUID del PRODUCTO en el backend (StaffOrderItemDto.productId). Lo usa el
+     *  SustitucionModal para pedir alternativas similares al backend. Null en
+     *  modo mock. */
+    val backendProductId: String? = null
 )
 
 data class PicklistData(

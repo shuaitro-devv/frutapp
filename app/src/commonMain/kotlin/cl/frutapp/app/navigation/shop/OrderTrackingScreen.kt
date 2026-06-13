@@ -343,9 +343,10 @@ private fun ProductosResumen(items: List<cl.frutapp.shared.dto.OrderItemDto>, mo
         )
         items.forEach { item ->
             val sinStock = item.itemStatus == "SIN_STOCK"
+            val sustituido = item.itemStatus == "SUSTITUIDO" && item.sustitutoNombre != null
             val gramosLocal = item.gramos
             val pesoRealLocal = item.pesoReal
-            val pesoAjustado = pesoRealLocal != null && gramosLocal != null &&
+            val pesoAjustado = !sustituido && pesoRealLocal != null && gramosLocal != null &&
                 pesoRealLocal != gramosLocal * item.cantidad
             Row(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
@@ -374,6 +375,20 @@ private fun ProductosResumen(items: List<cl.frutapp.shared.dto.OrderItemDto>, mo
                         ) {
                             Text(
                                 "No disponible",
+                                color = FrutAppColors.Brand600,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    } else if (sustituido) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .background(FrutAppColors.Brand50, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                "Sustituido por ${item.sustitutoNombre}",
                                 color = FrutAppColors.Brand600,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold

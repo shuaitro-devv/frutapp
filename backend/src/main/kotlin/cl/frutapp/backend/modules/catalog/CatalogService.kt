@@ -18,6 +18,15 @@ class CatalogService(private val repo: CatalogRepository) {
         return repo.findProduct(uuid)
     }
 
+    /** Productos similares al dado para el SustitucionModal del picker. Si el
+     *  productId es invalido o no existe, devuelve lista vacia (el picker vera
+     *  "Sin alternativas") en lugar de error — el modal sigue siendo usable para
+     *  marcar FALTANTE. */
+    suspend fun similares(productIdRaw: String, limit: Int): List<ProductDto> {
+        val uuid = runCatching { UUID.fromString(productIdRaw) }.getOrNull() ?: return emptyList()
+        return repo.listSimilares(uuid, limit)
+    }
+
     /** El back office flipea disponibilidad operacional. 404 si el producto no
      *  existe o esta soft-deleted (active=false sigue siendo flipeable: un producto
      *  pausado del catalogo igual puede tener stock que entra cuando se reactive). */

@@ -42,5 +42,16 @@ fun Route.catalogRoutes(service: CatalogService) {
             val body = call.receive<SetProductAvailabilityRequest>()
             call.respond(service.setAvailability(id, body.disponible))
         }
+
+        // Picker pide productos similares para mostrar alternativas reales en el
+        // SustitucionModal. Gated por `order:pick` (no necesita catalog:write).
+        get("/v1/staff/products/similar") {
+            if (!call.hasPermission("order:pick")) {
+                call.respond(HttpStatusCode.Forbidden); return@get
+            }
+            val productIdRaw = call.request.queryParameters["productId"].orEmpty()
+            val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 25) ?: 10
+            call.respond(service.similares(productIdRaw, limit))
+        }
     }
 }

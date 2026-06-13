@@ -117,6 +117,11 @@ data class OrderItemDto(
     // Default para retrocompat: backends sin V19 y APKs viejos asumen PENDIENTE.
     // Consistente con StaffOrderItemDto que ya tenia default.
     val itemStatus: String = "PENDIENTE",
+    /** Nombre del producto sustituto cuando el picker sustituyo (V22). Null si el
+     *  item se entrego tal cual lo pidio el cliente. La app cliente muestra
+     *  "Pediste X · Sustituido por Y" si este campo es no-null. */
+    val sustitutoNombre: String? = null,
+    val sustitutoImageKey: String? = null,
     /** Identificador del item dentro del pedido. La app cliente lo necesita para
      *  identificar items con ajuste; la app picker lo necesita para el endpoint
      *  PUT /v1/staff/orders/{id}/items/{itemId}/peso. */
@@ -130,6 +135,27 @@ data class OrderItemDto(
 data class SetItemPesoRequest(
     /** Peso real en gramos (no en kg). Ej. 1200 = 1.2 kg. Debe ser > 0. */
     val gramosReales: Int
+)
+
+/** Request del picker para sustituir un item por un producto similar. El backend
+ *  recalcula monto_final con el precio del sustituto y marca el item como
+ *  SUSTITUIDO. Preserva nombre/imageKey original para que el cliente vea
+ *  "pediste X, recibiste Y". */
+@Serializable
+data class SustituirItemRequest(
+    /** UUID del producto sustituto. Debe estar disponible (catálogo). */
+    val nuevoProductId: String,
+    /** Solo si el sustituto es por kg: peso real medido. Si null y el sustituto
+     *  es kg, asume gramos pedidos originales. */
+    val gramosReales: Int? = null
+)
+
+/** Request del picker para reducir la cantidad entregada (mismo producto, menos
+ *  unidades). El backend recalcula monto_final. */
+@Serializable
+data class ReducirItemRequest(
+    /** Cantidad nueva, debe ser > 0 y < cantidad original. */
+    val nuevaCantidad: Int
 )
 
 /** Resumen del ajuste pendiente: items que excedieron la tolerancia + delta del total.

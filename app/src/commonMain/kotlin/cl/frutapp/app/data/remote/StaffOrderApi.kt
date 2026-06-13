@@ -71,6 +71,37 @@ class StaffOrderApi(
         }
     }
 
+    /** Productos similares (misma categoría, disponibles) para el SustitucionModal. */
+    suspend fun similares(productId: String, limit: Int = 10): List<cl.frutapp.shared.dto.ProductDto> =
+        client.get("$baseUrl/v1/staff/products/similar") {
+            parameter("productId", productId)
+            parameter("limit", limit.toString())
+        }.body()
+
+    /** Sustituye un item por otro producto del catálogo. */
+    suspend fun sustituirItem(orderId: String, itemId: String, nuevoProductId: String, gramosReales: Int? = null) {
+        client.post("$baseUrl/v1/staff/orders/$orderId/items/$itemId/sustituir") {
+            contentType(ContentType.Application.Json)
+            setBody(cl.frutapp.shared.dto.SustituirItemRequest(
+                nuevoProductId = nuevoProductId,
+                gramosReales = gramosReales
+            ))
+        }
+    }
+
+    /** Reduce la cantidad entregada (mismo producto). */
+    suspend fun reducirItem(orderId: String, itemId: String, nuevaCantidad: Int) {
+        client.post("$baseUrl/v1/staff/orders/$orderId/items/$itemId/reducir") {
+            contentType(ContentType.Application.Json)
+            setBody(cl.frutapp.shared.dto.ReducirItemRequest(nuevaCantidad = nuevaCantidad))
+        }
+    }
+
+    /** Reporta que no había stock — marca SIN_STOCK + monto 0. */
+    suspend fun reportarFaltante(orderId: String, itemId: String) {
+        client.post("$baseUrl/v1/staff/orders/$orderId/items/$itemId/faltante")
+    }
+
     /** Marcar como STOCK_CONFIRMADO — listo para que el repartidor lo retire. */
     suspend fun complete(orderId: String) {
         client.post("$baseUrl/v1/staff/orders/$orderId/complete")

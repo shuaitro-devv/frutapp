@@ -4,7 +4,9 @@ import cl.frutapp.backend.config.ConfigRepository
 import cl.frutapp.backend.config.ConfigService
 import cl.frutapp.backend.config.adminConfigRoutes
 import cl.frutapp.backend.config.configRoutes
+import cl.frutapp.backend.modules.admin.AdminOrderService
 import cl.frutapp.backend.modules.admin.AdminUserService
+import cl.frutapp.backend.modules.admin.adminOrderRoutes
 import cl.frutapp.backend.modules.admin.adminUserRoutes
 import cl.frutapp.backend.modules.auth.AuthService
 import cl.frutapp.backend.modules.auth.authRoutes
@@ -36,17 +38,19 @@ fun Application.configureRouting(
     notificationInboxRepository: NotificationInboxRepository,
     avatarService: AvatarService?,
     configService: ConfigService,
-    configRepository: ConfigRepository
+    configRepository: ConfigRepository,
+    adminOrderService: AdminOrderService
 ) {
     routing {
         healthRoutes()
         authRoutes(authService, userEventService)
         catalogRoutes(catalogService)
         orderRoutes(orderService)
-        staffOrderRoutes(staffOrderService)
+        staffOrderRoutes(staffOrderService, catalogService)
         configRoutes()
         adminConfigRoutes(configService, configRepository)
         adminUserRoutes(adminUserService)
+        adminOrderRoutes(adminOrderService)
         deviceTokenRoutes(deviceTokenRepository)
         notificationInboxRoutes(notificationInboxRepository)
         if (avatarService != null) avatarRoutes(avatarService)

@@ -46,6 +46,29 @@ class CatalogRepository {
             .singleOrNull()
     }
 
+    /** Productos similares al dado (misma categoria, disponibles, distintos del original).
+     *  Usado por el SustitucionModal del picker cuando ofrece alternativas reales. */
+    suspend fun listSimilares(productId: UUID, limit: Int = 10): List<ProductDto> = dbQuery {
+        // Sub-select de la category_id del producto original.
+        val categoriaId = ProductTable
+            .selectAll().where { ProductTable.id eq productId }
+            .singleOrNull()
+            ?.get(ProductTable.categoryId)
+            ?: return@dbQuery emptyList()
+        ProductTable
+            .selectAll()
+            .where {
+                (ProductTable.categoryId eq categoriaId) and
+                    (ProductTable.id neq productId) and
+                    (ProductTable.disponible eq true) and  // Exposed: 'neq' es operator infix builtin
+                    (ProductTable.active eq true) and
+                    ProductTable.deletedAt.isNull()
+            }
+            .orderBy(ProductTable.name)
+            .limit(limit)
+            .map(::toProduct)
+    }
+
     /** Busca por id (UUID) o por slug. Usado en la pre-pasa de validacion de
      *  disponibilidad del create-order para no asumir que la app siempre manda UUID. */
     suspend fun findProductByRef(ref: String): ProductDto? {

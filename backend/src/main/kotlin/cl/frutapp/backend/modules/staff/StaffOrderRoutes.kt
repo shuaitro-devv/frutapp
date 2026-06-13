@@ -5,7 +5,10 @@ import cl.frutapp.backend.modules.audit.eventContext
 import cl.frutapp.backend.modules.audit.userId
 import cl.frutapp.backend.modules.rbac.hasPermission
 import cl.frutapp.backend.plugins.JWT_AUTH
+import cl.frutapp.backend.modules.catalog.CatalogService
+import cl.frutapp.shared.dto.ReducirItemRequest
 import cl.frutapp.shared.dto.SetItemPesoRequest
+import cl.frutapp.shared.dto.SustituirItemRequest
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
@@ -24,7 +27,7 @@ import java.util.UUID
  * completar. Todas requieren el permiso `order:pick` (picker) y aplican RBAC
  * antes de la accion. La auditoria queda en user_event vía StaffOrderService.
  */
-fun Route.staffOrderRoutes(staffOrders: StaffOrderService) {
+fun Route.staffOrderRoutes(staffOrders: StaffOrderService, catalogService: CatalogService) {
     authenticate(JWT_AUTH) {
         route("/v1/staff/orders") {
 
@@ -98,6 +101,56 @@ fun Route.staffOrderRoutes(staffOrders: StaffOrderService) {
                 val itemId = call.itemIdParam()
                 val body = call.receive<SetItemPesoRequest>()
                 staffOrders.setItemPeso(pickerId, orderId, itemId, body.gramosReales, call.eventContext())
+                call.respond(HttpStatusCode.NoContent)
+            }
+
+            // POST /v1/staff/orders/{id}/items/{itemId}/sustituir
+            post("/{id}/items/{itemId}/sustituir") {
+                if (!call.hasPermission("order:pick")) {
+                    call.respond(HttpStatusCode.Forbidden); return@post
+                }
+                val body = call.receive<SustituirItemRequest>()
+                val nuevoProductId = runCatching { UUID.fromString(body.nuevoProductId) }.getOrNull()
+                    ?: throw ValidationException("nuevoProductId inválido")
+                staffOrders.sustituirItem(
+                    pickerId = call.userId(),
+                    orderId = call.orderIdParam(),
+                    itemId = call.itemIdParam(),
+                    nuevoProductId = nuevoProductId,
+                    gramosReales = body.gramosReales,
+                    catalogService = catalogService,
+                    context = call.eventContext()
+                )
+                call.respond(HttpStatusCode.NoContent)
+            }
+
+            // POST /v1/staff/orders/{id}/items/{itemId}/reducir
+            post("/{id}/items/{itemId}/reducir") {
+                if (!call.hasPermission("order:pick")) {
+                    call.respond(HttpStatusCode.Forbidden); return@post
+                }
+                val body = call.receive<ReducirItemRequest>()
+                staffOrders.reducirItem(
+                    pickerId = call.userId(),
+                    orderId = call.orderIdParam(),
+                    itemId = call.itemIdParam(),
+                    nuevaCantidad = body.nuevaCantidad,
+                    context = call.eventContext()
+                )
+                call.respond(HttpStatusCode.NoContent)
+            }
+
+            // POST /v1/staff/orders/{id}/items/{itemId}/faltante
+            post("/{id}/items/{itemId}/faltante") {
+                if (!call.hasPermission("order:pick")) {
+                    call.respond(HttpStatusCode.Forbidden); return@post
+                }
+                staffOrders.reportarFaltante(
+                    pickerId = call.userId(),
+                    orderId = call.orderIdParam(),
+                    itemId = call.itemIdParam(),
+                    context = call.eventContext()
+                )
                 call.respond(HttpStatusCode.NoContent)
             }
 

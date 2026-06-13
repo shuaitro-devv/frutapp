@@ -333,6 +333,78 @@ class StaffOrderService(
         )
     }
 
+    /** Picker sustituye un item por un producto similar disponible. Valida que
+     *  el item y el sustituto existan, y que el pedido este EN_PICKING asignado
+     *  a este picker. Recalcula monto_final con el precio del sustituto. */
+    suspend fun sustituirItem(
+        pickerId: UUID,
+        orderId: UUID,
+        itemId: UUID,
+        nuevoProductId: UUID,
+        gramosReales: Int?,
+        catalogService: cl.frutapp.backend.modules.catalog.CatalogService,
+        context: EventContext
+    ) {
+        val sustituto = catalogService.product(nuevoProductId.toString())
+            ?: throw NotFoundException("Producto sustituto no encontrado.")
+        if (!sustituto.disponible) throw ValidationException("El producto sustituto no está disponible.")
+        // Ownership atomico: requiere pedido EN_PICKING y assignedPickerId = pickerId.
+        val ownerEnPicking = dbQuery {
+            OrdersTable.selectAll().where {
+                (OrdersTable.id eq orderId) and
+                (OrdersTable.assignedPickerId eq pickerId) and
+                (OrdersTable.status eq STATUS_EN_PICKING)
+            }.any()
+        }
+        if (!ownerEnPicking) throw ValidationException("Este pedido no está en picking o no es tuyo.")
+        val updated = orderRepository.sustituirItem(orderId, itemId, sustituto, gramosReales)
+        if (updated == 0) throw NotFoundException("Item no encontrado en este pedido.")
+        events.logSafely(eventType = "staff.item_sustituido", userId = pickerId, entityType = "order", entityId = orderId, context = context)
+    }
+
+    /** Picker reduce la cantidad entregada (mismo producto, menos unidades). */
+    suspend fun reducirItem(
+        pickerId: UUID,
+        orderId: UUID,
+        itemId: UUID,
+        nuevaCantidad: Int,
+        context: EventContext
+    ) {
+        if (nuevaCantidad <= 0) throw ValidationException("La cantidad debe ser mayor a 0.")
+        val ownerEnPicking = dbQuery {
+            OrdersTable.selectAll().where {
+                (OrdersTable.id eq orderId) and
+                (OrdersTable.assignedPickerId eq pickerId) and
+                (OrdersTable.status eq STATUS_EN_PICKING)
+            }.any()
+        }
+        if (!ownerEnPicking) throw ValidationException("Este pedido no está en picking o no es tuyo.")
+        val updated = orderRepository.reducirItem(orderId, itemId, nuevaCantidad)
+        if (updated == 0) throw NotFoundException("Item no encontrado en este pedido.")
+        events.logSafely(eventType = "staff.item_reducido", userId = pickerId, entityType = "order", entityId = orderId, context = context)
+    }
+
+    /** Picker reporta que no tuvo el item — marca SIN_STOCK, monto 0. El total
+     *  final del pedido cae en consecuencia. */
+    suspend fun reportarFaltante(
+        pickerId: UUID,
+        orderId: UUID,
+        itemId: UUID,
+        context: EventContext
+    ) {
+        val ownerEnPicking = dbQuery {
+            OrdersTable.selectAll().where {
+                (OrdersTable.id eq orderId) and
+                (OrdersTable.assignedPickerId eq pickerId) and
+                (OrdersTable.status eq STATUS_EN_PICKING)
+            }.any()
+        }
+        if (!ownerEnPicking) throw ValidationException("Este pedido no está en picking o no es tuyo.")
+        val updated = orderRepository.marcarItemSinStock(orderId, itemId)
+        if (updated == 0) throw NotFoundException("Item no encontrado en este pedido.")
+        events.logSafely(eventType = "staff.item_faltante", userId = pickerId, entityType = "order", entityId = orderId, context = context)
+    }
+
     /**
      * El picker termina el picking. Recalcula el monto total con los `monto_final` que
      * vino registrando (para items por kg pesados; para unidad usa monto_estimado).
