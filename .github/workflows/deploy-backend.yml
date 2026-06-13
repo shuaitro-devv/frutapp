@@ -39,14 +39,6 @@ jobs:
           chmod +x ./gradlew
           ./gradlew :backend:test --no-daemon --console=plain
 
-      - name: Upload test report (debug)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-test-report
-          path: backend/build/reports/tests/test
-          if-no-files-found: ignore
-
   build-and-deploy:
     needs: test          # no despliega si los tests fallan
     runs-on: ubuntu-latest
