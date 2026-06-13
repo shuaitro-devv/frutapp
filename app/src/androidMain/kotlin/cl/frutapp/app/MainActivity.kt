@@ -1,6 +1,7 @@
 package cl.frutapp.app
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -11,6 +12,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import cl.frutapp.app.data.BiometricAuth
 import cl.frutapp.app.data.ConfigStore
+import cl.frutapp.app.data.PendingNotification
 import cl.frutapp.app.data.SessionStorage
 import cl.frutapp.app.data.TokenStore
 import kotlinx.coroutines.CoroutineScope
@@ -53,9 +55,31 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         requestNotificationsPermissionIfNeeded()
+        // Si la app arrancó porque el usuario tocó un push, el Intent trae extras
+        // (orderId, type, status) que el FrutAppMessagingService meté ahí. Los
+        // pasamos al singleton PendingNotification para que App.kt navegue al
+        // pedido correcto cuando el Navigator este montado.
+        handleNotificationIntent(intent)
         setContent {
             App()
         }
+    }
+
+    /** Warm tap del push: la app ya estaba viva en background, tocar el push
+     *  trae MainActivity al frente con un nuevo Intent. Sin esto el LaunchedEffect
+     *  de App.kt nunca veria el orderId nuevo (queda con el viejo de onCreate). */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNotificationIntent(intent)
+    }
+
+    private fun handleNotificationIntent(intent: Intent?) {
+        if (intent == null) return
+        val orderId = intent.getStringExtra("orderId")
+        val type = intent.getStringExtra("type")
+        val status = intent.getStringExtra("status")
+        PendingNotification.set(orderId, type, status)
     }
 
     /** En Android 13+ (API 33) la app debe pedir POST_NOTIFICATIONS para que el

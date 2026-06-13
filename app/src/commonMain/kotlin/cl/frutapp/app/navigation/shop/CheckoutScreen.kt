@@ -426,7 +426,7 @@ class CheckoutScreen : Screen {
                         }
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "Los quitamos del carrito. Podés seguir con el resto.",
+                            "Los quitamos del carrito. Puedes seguir con el resto.",
                             color = FrutAppColors.InkMuted,
                             fontSize = 12.sp
                         )
@@ -477,7 +477,7 @@ class CheckoutScreen : Screen {
                     Text(
                         "Estás navegando una edición demo de la app con el catálogo de Sofruco. " +
                             "El checkout real estará disponible cuando integremos su catálogo al backend de pedidos. " +
-                            "Por ahora podés explorar el flujo completo (productos, carrito, despacho) sin generar un pedido.",
+                            "Por ahora puedes explorar el flujo completo (productos, carrito, despacho) sin generar un pedido.",
                         color = FrutAppColors.InkMuted,
                         fontSize = 13.sp
                     )

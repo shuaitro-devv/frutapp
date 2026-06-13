@@ -250,7 +250,7 @@ class NotificationDispatcher(
         )
         OrderStatus.ESPERANDO_AJUSTE_CLIENTE -> ClientMessage(
             title = "Tu pedido tiene un ajuste de peso",
-            body = "Pedido {numero}: hay items con peso diferente al pedido. Revísalo y aprobá el nuevo total."
+            body = "Pedido {numero}: hay items con peso diferente al pedido. Revísalo y aprueba el nuevo total."
         )
         OrderStatus.EN_DESPACHO -> ClientMessage(
             title = "Tu Repartidor va camino",

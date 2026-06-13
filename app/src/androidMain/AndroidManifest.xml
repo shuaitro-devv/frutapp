@@ -18,6 +18,7 @@
             android:name="cl.frutapp.app.MainActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|uiMode"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.FrutApp">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

@@ -45,7 +45,12 @@ class FrutAppMessagingService : FirebaseMessagingService() {
         val title = message.notification?.title ?: message.data["title"] ?: "FrutApp"
         val body = message.notification?.body ?: message.data["body"] ?: ""
         val orderId = message.data["orderId"]
-        showNotification(applicationContext, title, body, orderId)
+        // Tambien propagamos type (order_status, picker_ajuste_resuelto, ...) y
+        // status (ESPERANDO_AJUSTE_CLIENTE, EN_DESPACHO, ...) para que el deep
+        // link sepa si llevarte al ajuste, al tracking, o a la cola del rol.
+        val type = message.data["type"]
+        val status = message.data["status"]
+        showNotification(applicationContext, title, body, orderId, type, status)
         // Persiste tambien en el inbox in-app: la pantalla Notificaciones lee de
         // NotificacionesStore. Mapea el data["type"] del dispatcher al enum local
         // para que el icono de cada notif tenga sentido (caja para pedido, regalo
@@ -80,10 +85,19 @@ internal fun ensureChannel(context: Context) {
     nm.createNotificationChannel(channel)
 }
 
-internal fun showNotification(context: Context, title: String, body: String, orderId: String?) {
+internal fun showNotification(
+    context: Context,
+    title: String,
+    body: String,
+    orderId: String?,
+    type: String? = null,
+    status: String? = null
+) {
     val intent = Intent(context, MainActivity::class.java).apply {
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         if (orderId != null) putExtra("orderId", orderId)
+        if (type != null) putExtra("type", type)
+        if (status != null) putExtra("status", status)
     }
     val pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     val pending = PendingIntent.getActivity(

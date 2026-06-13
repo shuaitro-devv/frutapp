@@ -101,7 +101,7 @@ fun Application.configureStatusPages() {
         status(HttpStatusCode.TooManyRequests) { call, _ ->
             call.respond(
                 HttpStatusCode.TooManyRequests,
-                ApiError("rate_limited", "Demasiados intentos. Esperá un momento e intentá de nuevo.")
+                ApiError("rate_limited", "Demasiados intentos. Espera un momento e intenta de nuevo.")
             )
         }
     }
