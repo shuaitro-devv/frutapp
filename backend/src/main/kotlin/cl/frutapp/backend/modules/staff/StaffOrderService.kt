@@ -20,6 +20,9 @@ import cl.frutapp.shared.dto.StaffOrderItemDto
 import cl.frutapp.shared.dto.StaffOrderSummaryDto
 import cl.frutapp.shared.dto.StaffTakeResult
 import kotlinx.datetime.Clock
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
@@ -333,9 +336,14 @@ class StaffOrderService(
         )
     }
 
-    /** Picker sustituye un item por un producto similar disponible. Valida que
-     *  el item y el sustituto existan, y que el pedido este EN_PICKING asignado
-     *  a este picker. Recalcula monto_final con el precio del sustituto. */
+    /** Picker sustituye un item por un producto similar disponible.
+     *
+     *  Anti-fraude:
+     *  - El sustituto debe pertenecer a la MISMA categoria del producto original
+     *    (asi el picker no puede sustituir 'Ajo $500' por 'Trufa $20.000').
+     *  - El sustituto no puede ser el mismo producto (no-op).
+     *
+     *  Ownership: pedido EN_PICKING y assignedPickerId = pickerId. */
     suspend fun sustituirItem(
         pickerId: UUID,
         orderId: UUID,
@@ -345,10 +353,19 @@ class StaffOrderService(
         catalogService: cl.frutapp.backend.modules.catalog.CatalogService,
         context: EventContext
     ) {
+        val productIdOriginal = orderRepository.findItemProductId(orderId, itemId)
+            ?: throw NotFoundException("Item no encontrado en este pedido.")
+        if (productIdOriginal == nuevoProductId) {
+            throw ValidationException("El sustituto debe ser un producto distinto al original.")
+        }
+        val productoOriginal = catalogService.product(productIdOriginal.toString())
+            ?: throw NotFoundException("Producto original no encontrado.")
         val sustituto = catalogService.product(nuevoProductId.toString())
             ?: throw NotFoundException("Producto sustituto no encontrado.")
         if (!sustituto.disponible) throw ValidationException("El producto sustituto no está disponible.")
-        // Ownership atomico: requiere pedido EN_PICKING y assignedPickerId = pickerId.
+        if (sustituto.categoryId != productoOriginal.categoryId) {
+            throw ValidationException("El sustituto debe ser de la misma categoría que el original.")
+        }
         val ownerEnPicking = dbQuery {
             OrdersTable.selectAll().where {
                 (OrdersTable.id eq orderId) and
@@ -359,10 +376,27 @@ class StaffOrderService(
         if (!ownerEnPicking) throw ValidationException("Este pedido no está en picking o no es tuyo.")
         val updated = orderRepository.sustituirItem(orderId, itemId, sustituto, gramosReales)
         if (updated == 0) throw NotFoundException("Item no encontrado en este pedido.")
-        events.logSafely(eventType = "staff.item_sustituido", userId = pickerId, entityType = "order", entityId = orderId, context = context)
+        events.logSafely(
+            eventType = "staff.item_sustituido",
+            userId = pickerId,
+            entityType = "order_item",
+            entityId = itemId,
+            payload = buildJsonObject {
+                put("orderId", JsonPrimitive(orderId.toString()))
+                put("productIdOriginal", JsonPrimitive(productIdOriginal.toString()))
+                put("productIdSustituto", JsonPrimitive(nuevoProductId.toString()))
+                put("sustitutoNombre", JsonPrimitive(sustituto.name))
+                put("sustitutoPriceClp", JsonPrimitive(sustituto.priceClp))
+                if (gramosReales != null) put("gramosReales", JsonPrimitive(gramosReales))
+            },
+            context = context
+        )
     }
 
-    /** Picker reduce la cantidad entregada (mismo producto, menos unidades). */
+    /** Picker reduce la cantidad entregada (mismo producto, menos unidades).
+     *
+     *  Anti-fraude: la nueva cantidad debe ser ESTRICTAMENTE menor a la original.
+     *  Si quiere mantener o subir, no es "reducir". */
     suspend fun reducirItem(
         pickerId: UUID,
         orderId: UUID,
@@ -380,8 +414,20 @@ class StaffOrderService(
         }
         if (!ownerEnPicking) throw ValidationException("Este pedido no está en picking o no es tuyo.")
         val updated = orderRepository.reducirItem(orderId, itemId, nuevaCantidad)
-        if (updated == 0) throw NotFoundException("Item no encontrado en este pedido.")
-        events.logSafely(eventType = "staff.item_reducido", userId = pickerId, entityType = "order", entityId = orderId, context = context)
+        if (updated == 0) {
+            throw ValidationException("La nueva cantidad debe ser menor a la cantidad original (o el item no existe).")
+        }
+        events.logSafely(
+            eventType = "staff.item_reducido",
+            userId = pickerId,
+            entityType = "order_item",
+            entityId = itemId,
+            payload = buildJsonObject {
+                put("orderId", JsonPrimitive(orderId.toString()))
+                put("nuevaCantidad", JsonPrimitive(nuevaCantidad))
+            },
+            context = context
+        )
     }
 
     /** Picker reporta que no tuvo el item — marca SIN_STOCK, monto 0. El total
@@ -402,7 +448,16 @@ class StaffOrderService(
         if (!ownerEnPicking) throw ValidationException("Este pedido no está en picking o no es tuyo.")
         val updated = orderRepository.marcarItemSinStock(orderId, itemId)
         if (updated == 0) throw NotFoundException("Item no encontrado en este pedido.")
-        events.logSafely(eventType = "staff.item_faltante", userId = pickerId, entityType = "order", entityId = orderId, context = context)
+        events.logSafely(
+            eventType = "staff.item_faltante",
+            userId = pickerId,
+            entityType = "order_item",
+            entityId = itemId,
+            payload = buildJsonObject {
+                put("orderId", JsonPrimitive(orderId.toString()))
+            },
+            context = context
+        )
     }
 
     /**

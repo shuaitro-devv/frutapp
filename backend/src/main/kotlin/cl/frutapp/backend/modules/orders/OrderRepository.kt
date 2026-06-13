@@ -248,6 +248,14 @@ class OrderRepository {
         val itemStatus: String
     )
 
+    /** Devuelve el product_id del item para validaciones del service (categoria
+     *  del sustituto, no-op check). Null si el item no pertenece al pedido. */
+    suspend fun findItemProductId(orderId: UUID, itemId: UUID): UUID? = dbQuery {
+        OrderItemsTable
+            .selectAll().where { (OrderItemsTable.id eq itemId) and (OrderItemsTable.orderId eq orderId) }
+            .singleOrNull()?.get(OrderItemsTable.productId)
+    }
+
     suspend fun listItemsPesoInfo(orderId: UUID): List<ItemPesoRow> = dbQuery {
         OrderItemsTable.selectAll().where { OrderItemsTable.orderId eq orderId }.map {
             ItemPesoRow(
@@ -291,30 +299,37 @@ class OrderRepository {
         }
     }
 
-    /** Sustituye un item por un producto similar. Preserva nombre/imageKey/
-     *  precio_unitario originales; agrega columnas sustituto_* con el dato del
-     *  reemplazo y recalcula monto_final con el precio del sustituto. Si el
-     *  sustituto es por kg, requiere [gramosReales] para calcular monto; si
-     *  es por unidad, se cobra precio_unitario * cantidad_original.
-     *  Marca item_status=SUSTITUIDO. */
+    /** Sustituye un item por un producto similar. Preserva precio_unitario original
+     *  y nombre/imageKey originales; agrega columnas sustituto_* con el dato del
+     *  reemplazo. Marca item_status=SUSTITUIDO.
+     *
+     *  Convencion de la BD (igual que setItemPeso/complete):
+     *  - OrderItemsTable.gramos = peso POR UNIDAD del producto (catalogo).
+     *  - OrderItemsTable.pesoReal = peso TOTAL pesado en bascula (suma de bolsas).
+     *  - pesoEsperadoTotal = gramos * cantidad.
+     *
+     *  Por eso el monto kg se calcula con el TOTAL, NO con el per-unit:
+     *  - gramosReales != null (picker ya pesa el sustituto): es el TOTAL real.
+     *  - gramosReales == null (sustituye antes de pesar): TOTAL = gramosPerUnit * cantidad.
+     *
+     *  Antes del fix se usaba gramos sin multiplicar por cantidad → el cliente
+     *  pagaba 1kg cuando habia pedido 3kg, perdiendo plata el negocio. */
     suspend fun sustituirItem(
         orderId: UUID,
         itemId: UUID,
         sustituto: cl.frutapp.shared.dto.ProductDto,
         gramosReales: Int?
     ): Int = dbQuery {
-        // Buscar el item original para conocer su cantidad (multiplicador).
         val itemRow = OrderItemsTable
             .selectAll().where { (OrderItemsTable.id eq itemId) and (OrderItemsTable.orderId eq orderId) }
             .singleOrNull() ?: return@dbQuery 0
         val cantidad = itemRow[OrderItemsTable.cantidad]
         val esKg = sustituto.unit == "kg"
-        // monto_final = precio_unitario * (peso_real_g / 1000) si es kg, o
-        // precio_unitario * cantidad si es por unidad. Para kg sin gramosReales
-        // usamos los gramos pedidos originales (el sustituto debe pesarse despues).
-        val gramos = if (esKg) (gramosReales ?: itemRow[OrderItemsTable.gramos] ?: 1000) else null
-        val nuevoMontoFinal = if (esKg && gramos != null) {
-            (sustituto.priceClp.toLong() * gramos / 1000L).toInt()
+        val gramosTotalKg: Int? = if (esKg) {
+            gramosReales ?: ((itemRow[OrderItemsTable.gramos] ?: 1000) * cantidad)
+        } else null
+        val nuevoMontoFinal = if (esKg && gramosTotalKg != null) {
+            (sustituto.priceClp.toLong() * gramosTotalKg / 1000L).toInt()
         } else {
             sustituto.priceClp * cantidad
         }
@@ -326,31 +341,41 @@ class OrderRepository {
             it[sustitutoNombre] = sustituto.name
             it[sustitutoImageKey] = sustituto.imageKey
             it[sustitutoProductId] = UUID.fromString(sustituto.id)
-            if (esKg && gramos != null) it[pesoReal] = gramos
+            if (esKg && gramosTotalKg != null) it[pesoReal] = gramosTotalKg
         }
     }
 
     /** Reduce la cantidad entregada (mismo producto, menos unidades). Recalcula
-     *  monto_final con la nueva cantidad. Para items por kg ajusta peso_real
-     *  proporcionalmente al ratio nuevo/original (asume que el picker dividio
-     *  el gramaje pedido por la cantidad nueva). */
+     *  monto_final con la nueva cantidad y ajusta peso_real proporcionalmente
+     *  para items por kg.
+     *
+     *  Devuelve 0 si nuevaCantidad >= cantidad original o si el item no existe.
+     *  El service ya valida nuevaCantidad > 0; aca chequeamos < cantidad original
+     *  para que no se use para SUBIR cobrando de mas al cliente. */
     suspend fun reducirItem(orderId: UUID, itemId: UUID, nuevaCantidad: Int): Int = dbQuery {
         val itemRow = OrderItemsTable
             .selectAll().where { (OrderItemsTable.id eq itemId) and (OrderItemsTable.orderId eq orderId) }
             .singleOrNull() ?: return@dbQuery 0
+        val cantidadOriginal = itemRow[OrderItemsTable.cantidad]
+        if (nuevaCantidad >= cantidadOriginal) return@dbQuery 0
         val precioUnitario = itemRow[OrderItemsTable.precioUnitario]
         val gramos = itemRow[OrderItemsTable.gramos]
+        val pesoRealOriginal = itemRow[OrderItemsTable.pesoReal]
         val nuevoMonto = if (gramos != null) {
             (precioUnitario.toLong() * gramos / 1000L * nuevaCantidad).toInt()
         } else {
             precioUnitario * nuevaCantidad
         }
+        val nuevoPesoReal: Int? = if (gramos != null && pesoRealOriginal != null) {
+            (pesoRealOriginal.toLong() * nuevaCantidad / cantidadOriginal).toInt()
+        } else null
         OrderItemsTable.update({
             (OrderItemsTable.id eq itemId) and (OrderItemsTable.orderId eq orderId)
         }) {
             it[cantidad] = nuevaCantidad
             it[montoFinal] = nuevoMonto
-            it[itemStatus] = ITEM_STATUS_CONFIRMADO  // sigue "confirmado" pero con cantidad ajustada
+            it[itemStatus] = ITEM_STATUS_CONFIRMADO
+            if (nuevoPesoReal != null) it[pesoReal] = nuevoPesoReal
         }
     }
 
