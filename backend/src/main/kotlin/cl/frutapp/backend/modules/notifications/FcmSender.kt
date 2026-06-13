@@ -85,33 +85,33 @@ class FcmSender(
     }
 
     private fun buildBody(message: FcmMessage): String {
+        // DATA-ONLY MESSAGE: NO incluimos `notification` payload, solo `data`.
+        //
+        // Why: cuando el push viene con `notification` payload Y la app esta en
+        // background, Android maneja la notificacion automaticamente (system
+        // tray), NO invoca a FrutAppMessagingService.onMessageReceived, y al
+        // tocar abre la launcher activity SIN los extras que el deep link espera.
+        //
+        // Con data-only el SDK SIEMPRE llama onMessageReceived (foreground y
+        // background), NUESTRO codigo construye la notificacion con el PendingIntent
+        // que lleva orderId/type/status como extras, y el tap navega a la pantalla
+        // correcta. title/body los meto adentro de data; el cliente ya los lee de
+        // ahi como fallback (FrutAppMessagingService:45-46).
         val messageObj = buildJsonObject {
             put("token", JsonPrimitive(message.token))
-            if (message.title != null || message.body != null) {
-                putJsonObject("notification") {
-                    if (message.title != null) put("title", JsonPrimitive(message.title))
-                    if (message.body != null) put("body", JsonPrimitive(message.body))
-                }
+            putJsonObject("data") {
+                if (message.title != null) put("title", JsonPrimitive(message.title))
+                if (message.body != null) put("body", JsonPrimitive(message.body))
+                message.data.forEach { (k, v) -> put(k, JsonPrimitive(v)) }
             }
-            if (message.data.isNotEmpty()) {
-                putJsonObject("data") {
-                    message.data.forEach { (k, v) -> put(k, JsonPrimitive(v)) }
-                }
-            }
-            // Android-specific: high priority entrega aunque el celu este en doze;
-            // collapse_key agrupa pushes redundantes (ej. 3 cambios de estado rapidos
-            // del mismo pedido → solo se muestra el ultimo).
-            if (message.androidCollapseKey != null || message.androidChannelId != null) {
-                putJsonObject("android") {
-                    put("priority", JsonPrimitive("HIGH"))
-                    if (message.androidCollapseKey != null) {
-                        put("collapse_key", JsonPrimitive(message.androidCollapseKey))
-                    }
-                    if (message.androidChannelId != null) {
-                        putJsonObject("notification") {
-                            put("channel_id", JsonPrimitive(message.androidChannelId))
-                        }
-                    }
+            // Android-specific: HIGH priority para que data-only NO sea suprimido por
+            // doze mode (data-only de NORMAL priority puede ser delayed indefinidamente
+            // si el celu esta dormido). collapse_key agrupa pushes redundantes del
+            // mismo pedido (ej. 3 cambios de estado rapidos → solo el ultimo se ve).
+            putJsonObject("android") {
+                put("priority", JsonPrimitive("HIGH"))
+                if (message.androidCollapseKey != null) {
+                    put("collapse_key", JsonPrimitive(message.androidCollapseKey))
                 }
             }
         }
