@@ -44,10 +44,13 @@ class OrderService(
         // Pre-pasada: recolectamos productos agotados de TODO el carrito antes de
         // armar las lineas, para devolver UNA lista con todos los nombres en un solo
         // 409 (mejor UX que tirar al primer agotado y ocultar el resto).
+        // Usa findProductByRef para soportar UUID y slug: la app cliente normalmente
+        // resuelve slug->UUID antes de mandar (Mappers.kt), pero algun caller puede
+        // mandar slug directo y antes la pre-pasa los skipeaba en silencio (bypass
+        // del check de agotado).
         val agotados = mutableListOf<String>()
         req.items.forEach { item ->
-            val pid = runCatching { java.util.UUID.fromString(item.productId) }.getOrNull() ?: return@forEach
-            val p = catalog.findProduct(pid) ?: return@forEach
+            val p = catalog.findProductByRef(item.productId) ?: return@forEach
             if (!p.disponible) agotados.add(p.name)
         }
         if (agotados.isNotEmpty()) throw ProductosAgotadosException(agotados = agotados.distinct())
@@ -57,6 +60,12 @@ class OrderService(
             val productId = parseUuid(item.productId, "Producto inválido.")
             val p = catalog.findProduct(productId)
                 ?: throw NotFoundException("Producto no encontrado: ${item.productId}")
+            // Re-chequeo de disponible dentro del loop: cierra el TOCTOU entre la
+            // pre-pasa y el armado de lines (cada findProduct es su propia tx; si el
+            // operador flipea entre medio, la pre-pasa pasa pero el armado seguiria
+            // sin saberlo). Si llegamos aca con disponible=false, lo agregamos al
+            // bucket de agotados — el caller va a re-tirar la excepcion al final.
+            if (!p.disponible) throw ProductosAgotadosException(agotados = listOf(p.name))
             val esKg = p.unit == "kg"
             val gramos = if (esKg) (item.gramos ?: 1000) else null
             val montoEstimado =

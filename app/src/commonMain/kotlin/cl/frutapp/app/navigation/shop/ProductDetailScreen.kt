@@ -218,7 +218,12 @@ class ProductDetailScreen(
                     .padding(horizontal = 20.dp, vertical = 14.dp)
             ) {
                 FrutButtonPrimary(
-                    text = (if (editing != null) "Actualizar carrito · " else "Agregar al carrito · ") + formatClp(totalSel),
+                    text = when {
+                        !producto.disponible -> "Agotado"
+                        editing != null -> "Actualizar carrito · " + formatClp(totalSel)
+                        else -> "Agregar al carrito · " + formatClp(totalSel)
+                    },
+                    enabled = producto.disponible,
                     onClick = {
                         if (editing != null) {
                             // Editar = reemplazar la línea (maneja cambio de gramaje) y volver al carrito.

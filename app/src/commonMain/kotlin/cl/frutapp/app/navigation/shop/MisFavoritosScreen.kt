@@ -112,6 +112,7 @@ class MisFavoritosScreen : Screen {
                                         quantity = linea?.cantidad ?: 0,
                                         onIncrement = { CartStore.add(producto, 1, defGramos) },
                                         onDecrement = { linea?.let { CartStore.setCantidad(it, it.cantidad - 1) } },
+                                        disponible = producto.disponible,
                                         modifier = Modifier.weight(1f)
                                     )
                                 }

@@ -5,7 +5,7 @@ package cl.frutapp.app.navigation.picker
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.ui.layout.ContentScale
-import cl.frutapp.app.ui.theme.brandProductDrawable
+import cl.frutapp.app.data.drawableForImageKey
 import org.jetbrains.compose.resources.painterResource
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -530,12 +530,14 @@ private fun ItemCard(item: ItemPicklist, estado: EstadoItem, onToggle: () -> Uni
             modifier = Modifier.size(48.dp).background(FrutAppColors.Brand50, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center
         ) {
-            // Imagen real del producto (mismos drawables bundleados que usa el cliente)
-            // con fallback al emoji si el slug no tiene drawable mapeado o es null.
-            val drawable = brandProductDrawable(item.imageKey)
-            if (drawable != null) {
+            // Imagen real del producto (mismos drawables bundleados que usa el cliente
+            // via drawableForImageKey: si el slug no esta mapeado, cae al default
+            // canasta_frutas, que sigue siendo mas claro que el emoji). El emoji queda
+            // de respaldo si imageKey es null (item con DTO viejo).
+            val key = item.imageKey
+            if (key != null) {
                 Image(
-                    painter = painterResource(drawable),
+                    painter = painterResource(drawableForImageKey(key)),
                     contentDescription = item.nombre,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.size(40.dp)

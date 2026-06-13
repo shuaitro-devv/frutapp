@@ -434,10 +434,18 @@ class CheckoutScreen : Screen {
                 },
                 confirmButton = {
                     TextButton(onClick = {
-                        // Descartar los items agotados del carrito local antes de cerrar.
-                        // Matching por nombre exacto (mismo nombre que envió el backend).
-                        val nombresAgotados = err.agotados.toSet()
-                        CartStore.items.removeAll { it.producto.nombre in nombresAgotados }
+                        // Descarte parcial: si el cliente tiene 2 lineas del mismo nombre
+                        // (ej. mismo producto en 2 gramajes), no asumimos que TODAS
+                        // estan agotadas — el backend solo nos dio una lista de nombres.
+                        // Quitamos UNA linea por nombre agotado y dejamos las demas para
+                        // que el cliente reintente; el backend va a re-validar al pagar
+                        // y si todavia faltan, vuelve a aparecer el dialogo.
+                        val pendientes = err.agotados.toMutableList()
+                        val iter = CartStore.items.listIterator()
+                        while (iter.hasNext() && pendientes.isNotEmpty()) {
+                            val item = iter.next()
+                            if (pendientes.remove(item.producto.nombre)) iter.remove()
+                        }
                         agotadosError = null
                     }) {
                         Text("Entendido", color = FrutAppColors.Brand600, fontWeight = FontWeight.Bold)

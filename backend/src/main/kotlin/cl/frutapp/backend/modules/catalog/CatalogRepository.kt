@@ -46,6 +46,19 @@ class CatalogRepository {
             .singleOrNull()
     }
 
+    /** Busca por id (UUID) o por slug. Usado en la pre-pasa de validacion de
+     *  disponibilidad del create-order para no asumir que la app siempre manda UUID. */
+    suspend fun findProductByRef(ref: String): ProductDto? {
+        val asUuid = runCatching { UUID.fromString(ref) }.getOrNull()
+        if (asUuid != null) return findProduct(asUuid)
+        return dbQuery {
+            ProductTable
+                .selectAll().where { (ProductTable.slug eq ref) and ProductTable.deletedAt.isNull() }
+                .map(::toProduct)
+                .singleOrNull()
+        }
+    }
+
     private fun toCategory(row: ResultRow) = CategoryDto(
         id = row[CategoryTable.id].toString(),
         name = row[CategoryTable.name],
