@@ -77,7 +77,8 @@ internal fun StaffOrderDetailDto.toPicklistData(): PicklistData = PicklistData(
             pesoVariable = item.pesoVariable,
             emoji = item.emoji,
             estado = EstadoItem.PENDIENTE,
-            backendId = item.id
+            backendId = item.id,
+            imageKey = item.imageKey
         )
     },
     tomadoEnIso = assignedAt

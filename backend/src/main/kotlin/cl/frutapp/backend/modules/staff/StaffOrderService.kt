@@ -130,6 +130,7 @@ class StaffOrderService(
                 montoEstimado = row[OrderItemsTable.montoEstimado],
                 pesoVariable = esKg && gramos != null,
                 emoji = emojiForProduct(row[OrderItemsTable.nombre]),
+                imageKey = row[OrderItemsTable.imageKey],
                 id = row[OrderItemsTable.id].toString(),
                 pesoReal = row[OrderItemsTable.pesoReal],
                 itemStatus = row[OrderItemsTable.itemStatus]

@@ -227,7 +227,11 @@ data class StaffOrderItemDto(
     val precioUnitario: Int,
     val montoEstimado: Int,
     val pesoVariable: Boolean,       // true si requiere balanza al armar
-    val emoji: String,               // placeholder visual mientras no haya fotos
+    val emoji: String,               // fallback visual si no hay drawable bundleado
+    /** Slug de la imagen bundleada del producto. La app picker hace lookup local
+     *  con [brandProductDrawable] (mismo patron que la app cliente) y cae al
+     *  emoji si el slug no tiene drawable mapeado. */
+    val imageKey: String? = null,
     /** UUID del item — el picker lo necesita para el endpoint PUT .../items/{id}/peso. */
     val id: String? = null,
     /** Peso real medido por el picker (null hasta confirmar en bascula). */

@@ -32,10 +32,13 @@ data class ItemPicklist(
     val pasillo: String,
     val estante: String,
     val pesoVariable: Boolean,
-    val emoji: String, // placeholder de foto del producto
+    val emoji: String, // fallback si no hay drawable bundleado
     val estado: EstadoItem = EstadoItem.PENDIENTE,
     /** UUID del item en el backend (StaffOrderItemDto.id). Null en modo mock. */
-    val backendId: String? = null
+    val backendId: String? = null,
+    /** Slug de la imagen del producto. Si tiene drawable mapeado, el picker
+     *  lo renderiza con [brandProductDrawable]; si no, cae al [emoji]. */
+    val imageKey: String? = null
 )
 
 data class PicklistData(
