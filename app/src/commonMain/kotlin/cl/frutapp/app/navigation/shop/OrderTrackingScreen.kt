@@ -248,6 +248,12 @@ private fun Detail(o: OrderDto, modifier: Modifier, onReorder: () -> Unit, onCal
         Text("Estado del pedido", color = FrutAppColors.Brand800, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
         pasos.forEachIndexed { i, paso -> TimelineStep(paso, isLast = i == pasos.lastIndex) }
 
+        // Lista de items del pedido. Muestra items rechazados (SIN_STOCK) tachados
+        // con badge "No disponible" para que el cliente recuerde por que el total
+        // cambio respecto a lo que pedio. Y items con peso ajustado del picker
+        // muestran el peso real para que sea claro lo que llega.
+        ProductosResumen(o.items, modifier = Modifier.padding(top = 16.dp))
+
         val esRetiro = o.fulfillmentType == "RETIRO"
         Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(36.dp).background(FrutAppColors.Brand50, CircleShape), contentAlignment = Alignment.Center) {
@@ -310,6 +316,119 @@ private fun Centered(text: String) {
     Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
         Text(text, color = FrutAppColors.InkMuted, fontSize = 14.sp)
     }
+}
+
+/**
+ * Card "Productos del pedido" con la lista de items. Items en SIN_STOCK
+ * (rechazados por el cliente en el ajuste de peso) salen tachados con badge
+ * "No disponible" y monto $0 — el cliente entiende por que el total final
+ * difiere del estimado. Items con peso ajustado por el picker muestran el
+ * peso real al lado del pedido.
+ */
+@Composable
+private fun ProductosResumen(items: List<cl.frutapp.shared.dto.OrderItemDto>, modifier: Modifier = Modifier) {
+    if (items.isEmpty()) return
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(FrutAppColors.Cream, RoundedCornerShape(14.dp))
+            .padding(14.dp)
+    ) {
+        Text(
+            "Productos del pedido",
+            color = FrutAppColors.Brand800,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        items.forEach { item ->
+            val sinStock = item.itemStatus == "SIN_STOCK"
+            val gramosLocal = item.gramos
+            val pesoRealLocal = item.pesoReal
+            val pesoAjustado = pesoRealLocal != null && gramosLocal != null &&
+                pesoRealLocal != gramosLocal * item.cantidad
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        item.nombre,
+                        color = if (sinStock) FrutAppColors.InkMuted else FrutAppColors.Ink,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        textDecoration = if (sinStock) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
+                    )
+                    Text(
+                        text = detalleItem(item),
+                        color = FrutAppColors.InkMuted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                    if (sinStock) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .background(FrutAppColors.Brand50, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                "No disponible",
+                                color = FrutAppColors.Brand600,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    } else if (pesoAjustado) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .background(FrutAppColors.Brand50, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                "Peso ajustado",
+                                color = FrutAppColors.Brand600,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = formatClp(if (sinStock) 0 else (item.montoFinal ?: item.montoEstimado)),
+                    color = if (sinStock) FrutAppColors.InkMuted else FrutAppColors.Ink,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    textDecoration = if (sinStock) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
+                )
+            }
+        }
+    }
+}
+
+private fun detalleItem(item: cl.frutapp.shared.dto.OrderItemDto): String {
+    val unidad = item.unidad
+    val gramosLocal = item.gramos
+    // Pedido: "1 kg × 2" para kg; "3 unidad" para unidad/atado.
+    val pedido = if (gramosLocal != null) {
+        val peso = if (gramosLocal >= 1000) "${gramosLocal / 1000} kg" else "$gramosLocal g"
+        "Pediste $peso × ${item.cantidad}"
+    } else {
+        "Pediste ${item.cantidad} $unidad"
+    }
+    val real = item.pesoReal?.let { gramosReales ->
+        // Formato compacto para mostrar el peso real: 1234g -> "1.23 kg", 800g -> "800 g".
+        val txt = if (gramosReales >= 1000) {
+            val kg = gramosReales / 1000.0
+            val redondeado = (kg * 100).toInt() / 100.0
+            "$redondeado kg"
+        } else {
+            "$gramosReales g"
+        }
+        "Llegó $txt"
+    }
+    return if (real != null) "$pedido · $real" else pedido
 }
 
 private fun statusLabel(status: String): String = when (status) {

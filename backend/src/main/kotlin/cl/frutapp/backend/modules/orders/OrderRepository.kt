@@ -331,6 +331,19 @@ class OrderRepository {
         subtotalReal + envio
     }
 
+    /** Picker asignado al pedido + numero. Null si el pedido no esta asignado o no existe.
+     *  Usado para notificar al picker cuando el cliente aprueba/rechaza el ajuste de peso. */
+    suspend fun findAssignedPickerAndNumero(orderId: UUID): Pair<UUID, String>? = dbQuery {
+        OrdersTable
+            .select(OrdersTable.assignedPickerId, OrdersTable.numero)
+            .where { (OrdersTable.id eq orderId) and OrdersTable.deletedAt.isNull() }
+            .singleOrNull()
+            ?.let { row ->
+                val picker = row[OrdersTable.assignedPickerId] ?: return@let null
+                picker to row[OrdersTable.numero]
+            }
+    }
+
     /** Dueno del pedido: para validar que el cliente que aprueba/rechaza es el mismo
      *  que lo creo. Excluye soft-deleted. */
     suspend fun findOwner(orderId: UUID): UUID? = dbQuery {

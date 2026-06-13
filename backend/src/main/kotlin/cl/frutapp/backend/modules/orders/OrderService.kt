@@ -30,7 +30,11 @@ class OrderService(
     private val onTransitionFired: ((orderId: java.util.UUID, from: OrderStatus, to: OrderStatus) -> Unit)? = null,
     /** Hook opcional: fired tras crear un pedido, para notificar a pickers
      *  de la location correspondiente. Mismas reglas null en tests. */
-    private val onOrderCreated: ((orderId: java.util.UUID, locationId: java.util.UUID, numero: String) -> Unit)? = null
+    private val onOrderCreated: ((orderId: java.util.UUID, locationId: java.util.UUID, numero: String) -> Unit)? = null,
+    /** Hook opcional: fired cuando el cliente aprueba/rechaza el ajuste de peso.
+     *  Le avisa al picker via inbox + push que su trabajo se resolvio. Null
+     *  en tests y cuando FCM no esta configurado. */
+    private val onAjusteResuelto: ((orderId: java.util.UUID, aprobado: Boolean) -> Unit)? = null
 ) {
 
     suspend fun create(userId: UUID, req: CreateOrderRequest): OrderDto {
@@ -267,6 +271,7 @@ class OrderService(
             throw ValidationException("Este pedido no tiene un ajuste pendiente.")
         }
         applyStep(orderId, from, OrderStatus.STOCK_CONFIRMADO, OrderActor.CLIENTE, userId, "cliente_aprobo_ajuste")
+        onAjusteResuelto?.invoke(orderId, true)
         return orders.findById(orderId) ?: throw NotFoundException("Pedido no encontrado.")
     }
 
@@ -303,6 +308,7 @@ class OrderService(
         val subtotalTrasRechazo = totalTrasRechazo - (orders.findById(orderId)?.envio ?: 0)
         val destino = if (subtotalTrasRechazo <= 0) OrderStatus.CANCELADO else OrderStatus.STOCK_CONFIRMADO
         applyStep(orderId, from, destino, OrderActor.CLIENTE, userId, "cliente_rechazo_items_ajuste")
+        onAjusteResuelto?.invoke(orderId, false)
         return orders.findById(orderId) ?: throw NotFoundException("Pedido no encontrado.")
     }
 

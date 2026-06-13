@@ -13,6 +13,7 @@ import cl.frutapp.backend.modules.auth.PasswordResetTokenRepository
 import cl.frutapp.backend.modules.auth.RefreshTokenRepository
 import cl.frutapp.backend.modules.auth.ResendEmailSender
 import cl.frutapp.backend.modules.auth.TokenService
+import cl.frutapp.backend.modules.admin.AdminOrderService
 import cl.frutapp.backend.modules.admin.AdminUserService
 import cl.frutapp.backend.modules.auth.UserRepository
 import cl.frutapp.backend.modules.catalog.CatalogRepository
@@ -184,11 +185,15 @@ fun Application.module() {
         },
         onOrderCreated = { id, locId, numero ->
             notificationDispatcher.onOrderReadyForPickers(id, locId, numero)
+        },
+        onAjusteResuelto = { id, aprobado ->
+            notificationDispatcher.onAjusteResueltoByCliente(id, aprobado)
         }
     )
     val adminUserService = AdminUserService(
         UserRepository(), rbacRepository, PasswordResetTokenRepository(), tokenService, emailSender
     )
+    val adminOrderService = AdminOrderService(orderRepository)
     val configService = ConfigService(configRepository)
     val userEventService = UserEventService()
     val staffOrderService = StaffOrderService(
@@ -202,7 +207,7 @@ fun Application.module() {
         authService, catalogService, orderService,
         adminUserService, staffOrderService, userEventService,
         deviceTokenRepository, notificationInboxRepository, avatarService,
-        configService, configRepository
+        configService, configRepository, adminOrderService
     )
 
     // Refresca la config de negocio cada 60s (cambios en app_config sin redeploy).

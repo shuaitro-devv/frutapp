@@ -145,6 +145,58 @@ class NotificationDispatcher(
     }
 
     /**
+     * Notifica al PICKER asignado que el cliente resolvio el ajuste de peso.
+     * Cierra el loop del trabajo del picker: aprobo (pedido confirmado, va al
+     * despacho) o rechazo (algunos items con cambio se descartaron). Hoy llega
+     * al inbox + push; el picker no necesita actuar, pero entiende como termino
+     * lo que armo. Disparado desde OrderService.aprobarAjuste/rechazarAjuste.
+     */
+    fun onAjusteResueltoByCliente(orderId: java.util.UUID, aprobado: Boolean) {
+        scope.launch {
+            runCatching {
+                val info = orderRepo.findAssignedPickerAndNumero(orderId) ?: return@launch
+                val (pickerId, numero) = info
+                val titulo = if (aprobado) "Tu cliente aprobó el ajuste" else "Tu cliente ajustó el pedido"
+                val cuerpo = if (aprobado) {
+                    "Pedido $numero: el cliente aceptó el ajuste de peso. Ya pasó al repartidor."
+                } else {
+                    "Pedido $numero: el cliente descartó algunos items con cambio. El resto sigue su curso."
+                }
+                inbox.create(
+                    userId = pickerId,
+                    type = "PEDIDO",
+                    title = titulo,
+                    body = cuerpo,
+                    data = """{"orderId":"$orderId","orderNumero":"$numero","scope":"picker","ajuste":"${if (aprobado) "aprobado" else "rechazado"}"}"""
+                )
+                if (fcm == null) return@launch
+                val tokens = deviceTokens.listByUser(pickerId)
+                tokens.forEach { row ->
+                    val msg = FcmMessage(
+                        token = row.fcmToken,
+                        title = titulo,
+                        body = cuerpo,
+                        data = mapOf(
+                            "type" to "picker_ajuste_resuelto",
+                            "orderId" to orderId.toString(),
+                            "orderNumero" to numero,
+                            "ajuste" to if (aprobado) "aprobado" else "rechazado"
+                        ),
+                        androidCollapseKey = "picker_ajuste:$orderId",
+                        androidChannelId = ANDROID_CHANNEL_STAFF
+                    )
+                    when (fcm.send(msg)) {
+                        is SendResult.UnregisteredToken -> deviceTokens.deleteByToken(row.fcmToken)
+                        else -> Unit
+                    }
+                }
+            }.onFailure { e ->
+                logger.error("Error notificando picker del ajuste resuelto del pedido {}", orderId, e)
+            }
+        }
+    }
+
+    /**
      * Notifica a repartidores de una [locationId] que hay un despacho listo
      * para retiro. Disparado desde `StaffOrderService.complete` cuando un
      * pedido pasa a STOCK_CONFIRMADO.
