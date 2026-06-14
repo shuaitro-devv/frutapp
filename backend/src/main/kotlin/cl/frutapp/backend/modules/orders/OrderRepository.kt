@@ -316,10 +316,21 @@ class OrderRepository {
      *  pagaba 1kg cuando habia pedido 3kg, perdiendo plata el negocio. */
     suspend fun sustituirItem(
         orderId: UUID,
+        pickerId: UUID,
         itemId: UUID,
         sustituto: cl.frutapp.shared.dto.ProductDto,
         gramosReales: Int?
     ): Int = dbQuery {
+        // Ownership atomico (mismo patron que setItemPeso): chequeo y UPDATE en
+        // la misma transaccion. Cierra el TOCTOU del flujo anterior, donde el
+        // ownership se hacia en una dbQuery separada del service y entre medio
+        // otro picker podia rescatar por timeout dejandonos escribir basura.
+        val ownerEnPicking = OrdersTable.selectAll().where {
+            (OrdersTable.id eq orderId) and
+            (OrdersTable.assignedPickerId eq pickerId) and
+            (OrdersTable.status eq "EN_PICKING")
+        }.any()
+        if (!ownerEnPicking) return@dbQuery 0
         val itemRow = OrderItemsTable
             .selectAll().where { (OrderItemsTable.id eq itemId) and (OrderItemsTable.orderId eq orderId) }
             .singleOrNull() ?: return@dbQuery 0
@@ -352,7 +363,13 @@ class OrderRepository {
      *  Devuelve 0 si nuevaCantidad >= cantidad original o si el item no existe.
      *  El service ya valida nuevaCantidad > 0; aca chequeamos < cantidad original
      *  para que no se use para SUBIR cobrando de mas al cliente. */
-    suspend fun reducirItem(orderId: UUID, itemId: UUID, nuevaCantidad: Int): Int = dbQuery {
+    suspend fun reducirItem(orderId: UUID, pickerId: UUID, itemId: UUID, nuevaCantidad: Int): Int = dbQuery {
+        val ownerEnPicking = OrdersTable.selectAll().where {
+            (OrdersTable.id eq orderId) and
+            (OrdersTable.assignedPickerId eq pickerId) and
+            (OrdersTable.status eq "EN_PICKING")
+        }.any()
+        if (!ownerEnPicking) return@dbQuery 0
         val itemRow = OrderItemsTable
             .selectAll().where { (OrderItemsTable.id eq itemId) and (OrderItemsTable.orderId eq orderId) }
             .singleOrNull() ?: return@dbQuery 0
@@ -379,13 +396,33 @@ class OrderRepository {
         }
     }
 
-    /** Marca un item como SIN_STOCK (cliente rechazo el ajuste de este item). */
+    /** Marca un item como SIN_STOCK desde el flujo del CLIENTE (rechazar ajuste).
+     *  No valida ownership de picker — el caller (OrderService) ya valida que el
+     *  pedido pertenezca al cliente. */
     suspend fun marcarItemSinStock(orderId: UUID, itemId: UUID): Int = dbQuery {
         OrderItemsTable.update({
             (OrderItemsTable.id eq itemId) and (OrderItemsTable.orderId eq orderId)
         }) {
             it[itemStatus] = ITEM_STATUS_SIN_STOCK
             // monto_final = 0: el item no se cobra. peso_real puede quedar como esta.
+            it[montoFinal] = 0
+        }
+    }
+
+    /** Marca un item como SIN_STOCK desde el flujo del PICKER (reportar faltante).
+     *  Ownership atomico: pedido EN_PICKING + assigned_picker_id = pickerId,
+     *  en la misma transaccion que el UPDATE (cierra el TOCTOU). */
+    suspend fun marcarItemSinStockPicker(orderId: UUID, pickerId: UUID, itemId: UUID): Int = dbQuery {
+        val ownerEnPicking = OrdersTable.selectAll().where {
+            (OrdersTable.id eq orderId) and
+            (OrdersTable.assignedPickerId eq pickerId) and
+            (OrdersTable.status eq "EN_PICKING")
+        }.any()
+        if (!ownerEnPicking) return@dbQuery 0
+        OrderItemsTable.update({
+            (OrderItemsTable.id eq itemId) and (OrderItemsTable.orderId eq orderId)
+        }) {
+            it[itemStatus] = ITEM_STATUS_SIN_STOCK
             it[montoFinal] = 0
         }
     }

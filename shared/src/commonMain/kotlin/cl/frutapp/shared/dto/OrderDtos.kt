@@ -233,6 +233,11 @@ data class StaffOrderSummaryDto(
     val clienteNombre: String,     // solo nombre (no apellido si solo hay uno)
     val sector: String,            // ej. "Las Condes", "Providencia"
     val assignedAt: String? = null, // cuando lo tome el picker (null = en cola libre)
+    /** Cuando se actualizo por ultima vez (updatedAt del row). En estados
+     *  terminales-para-el-picker (STOCK_CONFIRMADO/EN_DESPACHO/ENTREGADO/FACTURADO)
+     *  representa el momento del armado completo, asi el UI puede decir "hace X min"
+     *  desde que TERMINO en lugar de desde que lo TOMO. Opcional para retrocompat. */
+    val updatedAt: String? = null,
     val assignedToMe: Boolean = false // true si soy yo quien lo tomo
 )
 
@@ -295,6 +300,9 @@ data class StaffDispatchSummaryDto(
     val direccion: String,        // direccion completa (acá si la necesita el repartidor)
     val telefono: String? = null, // contacto para coordinar entrega
     val assignedAt: String? = null,
+    /** Mismo proposito que [StaffOrderSummaryDto.updatedAt]: tiempo del armado
+     *  completo para mostrar "hace X min" desde que TERMINO, no desde que lo TOMO. */
+    val updatedAt: String? = null,
     val assignedToMe: Boolean = false
 )
 

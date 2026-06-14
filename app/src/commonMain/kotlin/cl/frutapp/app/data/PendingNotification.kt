@@ -48,4 +48,14 @@ object PendingNotification {
         status = null
         return Triple(oid, t, s)
     }
+
+    /** Limpia el buffer sin navegar. Llamar en LOGOUT: si el usuario tocaba
+     *  un push justo antes de cerrar sesion, esa noti era para ese usuario;
+     *  no queremos disparar la navegacion para el SIGUIENTE usuario que se
+     *  loguee (potencialmente otra persona en el mismo celu compartido). */
+    fun clear() {
+        orderId = null
+        type = null
+        status = null
+    }
 }

@@ -222,6 +222,7 @@ class StaffOrderService(
                 clienteNombre = nombre,
                 sector = sectorFromAddress(row[OrdersTable.direccion]),
                 assignedAt = row[OrdersTable.assignedAt]?.toString(),
+                updatedAt = row[OrdersTable.updatedAt].toString(),
                 assignedToMe = row[OrdersTable.assignedPickerId] == currentPickerId
             )
         }
@@ -347,7 +348,9 @@ class StaffOrderService(
      *    (asi el picker no puede sustituir 'Ajo $500' por 'Trufa $20.000').
      *  - El sustituto no puede ser el mismo producto (no-op).
      *
-     *  Ownership: pedido EN_PICKING y assignedPickerId = pickerId. */
+     *  Ownership: el repo valida pedido EN_PICKING + assigned_picker_id = pickerId
+     *  en la MISMA transaccion que el UPDATE (cierra el TOCTOU). El service NO
+     *  vuelve a chequear; un updated=0 significa "no es tuyo o el pedido cambio". */
     suspend fun sustituirItem(
         pickerId: UUID,
         orderId: UUID,
@@ -370,16 +373,8 @@ class StaffOrderService(
         if (sustituto.categoryId != productoOriginal.categoryId) {
             throw ValidationException("El sustituto debe ser de la misma categoría que el original.")
         }
-        val ownerEnPicking = dbQuery {
-            OrdersTable.selectAll().where {
-                (OrdersTable.id eq orderId) and
-                (OrdersTable.assignedPickerId eq pickerId) and
-                (OrdersTable.status eq STATUS_EN_PICKING)
-            }.any()
-        }
-        if (!ownerEnPicking) throw ValidationException("Este pedido no está en picking o no es tuyo.")
-        val updated = orderRepository.sustituirItem(orderId, itemId, sustituto, gramosReales)
-        if (updated == 0) throw NotFoundException("Item no encontrado en este pedido.")
+        val updated = orderRepository.sustituirItem(orderId, pickerId, itemId, sustituto, gramosReales)
+        if (updated == 0) throw ValidationException("Este pedido no está en picking o no es tuyo.")
         events.logSafely(
             eventType = "staff.item_sustituido",
             userId = pickerId,
@@ -400,7 +395,9 @@ class StaffOrderService(
     /** Picker reduce la cantidad entregada (mismo producto, menos unidades).
      *
      *  Anti-fraude: la nueva cantidad debe ser ESTRICTAMENTE menor a la original.
-     *  Si quiere mantener o subir, no es "reducir". */
+     *  Si quiere mantener o subir, no es "reducir".
+     *
+     *  Ownership: el repo valida en la misma tx que el UPDATE (cierra el TOCTOU). */
     suspend fun reducirItem(
         pickerId: UUID,
         orderId: UUID,
@@ -409,17 +406,12 @@ class StaffOrderService(
         context: EventContext
     ) {
         if (nuevaCantidad <= 0) throw ValidationException("La cantidad debe ser mayor a 0.")
-        val ownerEnPicking = dbQuery {
-            OrdersTable.selectAll().where {
-                (OrdersTable.id eq orderId) and
-                (OrdersTable.assignedPickerId eq pickerId) and
-                (OrdersTable.status eq STATUS_EN_PICKING)
-            }.any()
-        }
-        if (!ownerEnPicking) throw ValidationException("Este pedido no está en picking o no es tuyo.")
-        val updated = orderRepository.reducirItem(orderId, itemId, nuevaCantidad)
+        val updated = orderRepository.reducirItem(orderId, pickerId, itemId, nuevaCantidad)
         if (updated == 0) {
-            throw ValidationException("La nueva cantidad debe ser menor a la cantidad original (o el item no existe).")
+            // 0 puede significar: pedido no es del picker / cambio de estado /
+            // nuevaCantidad >= original / item no existe. El mensaje refleja
+            // los 2 escenarios mas probables sin filtrar info extra.
+            throw ValidationException("No se pudo reducir: revisa que la cantidad sea menor a la original y que el pedido siga en picking.")
         }
         events.logSafely(
             eventType = "staff.item_reducido",
@@ -435,23 +427,17 @@ class StaffOrderService(
     }
 
     /** Picker reporta que no tuvo el item — marca SIN_STOCK, monto 0. El total
-     *  final del pedido cae en consecuencia. */
+     *  final del pedido cae en consecuencia.
+     *
+     *  Ownership: el repo valida en la misma tx que el UPDATE (cierra el TOCTOU). */
     suspend fun reportarFaltante(
         pickerId: UUID,
         orderId: UUID,
         itemId: UUID,
         context: EventContext
     ) {
-        val ownerEnPicking = dbQuery {
-            OrdersTable.selectAll().where {
-                (OrdersTable.id eq orderId) and
-                (OrdersTable.assignedPickerId eq pickerId) and
-                (OrdersTable.status eq STATUS_EN_PICKING)
-            }.any()
-        }
-        if (!ownerEnPicking) throw ValidationException("Este pedido no está en picking o no es tuyo.")
-        val updated = orderRepository.marcarItemSinStock(orderId, itemId)
-        if (updated == 0) throw NotFoundException("Item no encontrado en este pedido.")
+        val updated = orderRepository.marcarItemSinStockPicker(orderId, pickerId, itemId)
+        if (updated == 0) throw ValidationException("Este pedido no está en picking o no es tuyo.")
         events.logSafely(
             eventType = "staff.item_faltante",
             userId = pickerId,
@@ -811,6 +797,7 @@ class StaffOrderService(
                 direccion = row[OrdersTable.direccion],
                 telefono = telefono,
                 assignedAt = row[OrdersTable.assignedAt]?.toString(),
+                updatedAt = row[OrdersTable.updatedAt].toString(),
                 assignedToMe = row[OrdersTable.assignedRepartidorId] == currentRepartidorId
             )
         }

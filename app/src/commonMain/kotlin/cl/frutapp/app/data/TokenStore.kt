@@ -107,6 +107,10 @@ object TokenStore {
         SessionStorage.remove(K_USER)
         // Logout NO arrastra el limbo: el usuario quiere salir limpio.
         clearPendingEmail()
+        // Si quedaba una noti pendiente sin consumir (tap durante el logout),
+        // descartarla: era para el usuario que se va, no para el proximo que
+        // se loguee — potencialmente otra persona en el mismo celu.
+        PendingNotification.clear()
         // FCM: borra el token del backend para que pushes del user anterior NO
         // lleguen al sucesor que se loguee en el mismo celu.
         FcmBridge.onLogoutSuccess(jwtSnapshot)

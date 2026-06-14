@@ -90,25 +90,34 @@ fun SustitucionModal(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val api = remember { StaffOrderApi() }
+    // Si el item es de 1 unidad, "reducir" no tiene sentido (no se puede bajar a 0;
+    // eso es FALTANTE). Ocultamos la opcion para evitar el rango vacio "1 until 1"
+    // que dejaba el boton Confirmar siempre deshabilitado.
+    val puedeReducir = item.cantidad.toInt() >= 2
     var tipo by remember { mutableStateOf(TipoSustitucion.SUSTITUIR) }
     var alternativas by remember { mutableStateOf<List<ProductDto>>(emptyList()) }
     var loadingAlt by remember { mutableStateOf(false) }
+    var errorAlt by remember { mutableStateOf(false) }
     var alternativaSel by remember { mutableStateOf(0) }
-    var nuevaCantidad by remember { mutableStateOf(item.cantidad.toInt().coerceAtLeast(1) - 1) }
+    var nuevaCantidad by remember { mutableStateOf((item.cantidad.toInt() - 1).coerceAtLeast(1)) }
     var enviando by remember { mutableStateOf(false) }
+    var triggerReintento by remember { mutableStateOf(0) }
 
     // Cargar productos similares al abrir (solo si tenemos el backendId del item
     // y estamos en modo backend real; sino el modal funciona "mock-style" para
-    // los demos del white-label).
+    // los demos del white-label). [triggerReintento] permite re-disparar la
+    // llamada al tocar el boton "Reintentar" cuando la primera carga fallo.
     val itemBackendId = item.backendId
     val productId = remember { item.productIdBackend() }
-    LaunchedEffect(productId) {
+    LaunchedEffect(productId, triggerReintento) {
         if (!esBackendReal || productId == null) return@LaunchedEffect
         loadingAlt = true
+        errorAlt = false
         runCatching { api.similares(productId, limit = 10) }
             .onSuccess { alternativas = it }
             .onFailure { e ->
                 if (e is kotlinx.coroutines.CancellationException) throw e
+                errorAlt = true
                 ErrorReporter.report(screen = "SustitucionModal", action = "similares", error = e)
             }
         loadingAlt = false
@@ -153,8 +162,20 @@ fun SustitucionModal(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
                         contentAlignment = Alignment.Center
                     ) { CircularProgressIndicator(color = FrutAppColors.Brand400) }
+                    errorAlt -> Column(modifier = Modifier.padding(top = 8.dp)) {
+                        Text(
+                            "No pudimos cargar las alternativas. Revisa la conexión.",
+                            color = FrutAppColors.Error, fontSize = 12.sp
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        FrutButtonOutline(
+                            text = "Reintentar",
+                            onClick = { triggerReintento++ },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                     alternativas.isEmpty() -> Text(
-                        "No hay productos similares disponibles ahora. Usá Reducir o Reportar faltante.",
+                        "No hay productos similares disponibles ahora. Usa Reducir o Reportar faltante.",
                         color = FrutAppColors.InkMuted, fontSize = 12.sp,
                         modifier = Modifier.padding(top = 8.dp)
                     )
@@ -171,30 +192,33 @@ fun SustitucionModal(
             }
             Spacer(Modifier.height(8.dp))
 
-            // 2. Reducir cantidad
-            OpcionExpandible(
-                seleccionada = tipo == TipoSustitucion.REDUCIR,
-                onSelect = { tipo = TipoSustitucion.REDUCIR },
-                icon = Icons.Filled.RemoveCircleOutline,
-                titulo = "2. Reducir cantidad",
-                subtitulo = "Entregar menos de lo solicitado."
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+            // 2. Reducir cantidad (solo si hay al menos 2 unidades — sino reducir
+            // no aplica conceptualmente: la unica baja posible es a 0 = FALTANTE).
+            if (puedeReducir) {
+                OpcionExpandible(
+                    seleccionada = tipo == TipoSustitucion.REDUCIR,
+                    onSelect = { tipo = TipoSustitucion.REDUCIR },
+                    icon = Icons.Filled.RemoveCircleOutline,
+                    titulo = "2. Reducir cantidad",
+                    subtitulo = "Entregar menos de lo solicitado."
                 ) {
-                    Text("Nueva cantidad:", color = FrutAppColors.InkSoft, fontSize = 12.sp)
-                    StepperCantidad(
-                        valor = nuevaCantidad,
-                        min = 1,
-                        max = item.cantidad.toInt().coerceAtLeast(1),
-                        onChange = { nuevaCantidad = it }
-                    )
-                    Text(item.unidad, color = FrutAppColors.InkMuted, fontSize = 12.sp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text("Nueva cantidad:", color = FrutAppColors.InkSoft, fontSize = 12.sp)
+                        StepperCantidad(
+                            valor = nuevaCantidad,
+                            min = 1,
+                            max = item.cantidad.toInt() - 1,
+                            onChange = { nuevaCantidad = it }
+                        )
+                        Text(item.unidad, color = FrutAppColors.InkMuted, fontSize = 12.sp)
+                    }
                 }
+                Spacer(Modifier.height(8.dp))
             }
-            Spacer(Modifier.height(8.dp))
 
             // 3. Reportar faltante
             OpcionExpandible(
