@@ -251,16 +251,25 @@ private fun Detail(
             }
         }
 
-        Box(
-            modifier = Modifier.fillMaxWidth().padding(top = 14.dp).height(170.dp).background(FrutAppColors.Brand50, RoundedCornerShape(20.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                painter = painterResource(Res.drawable.camion_reparto),
-                contentDescription = "Reparto",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxWidth().padding(16.dp).height(140.dp)
-            )
+        // Hero: mapa con tracking del repartidor cuando EN_DESPACHO; imagen
+        // ilustrativa para el resto de los estados.
+        if (o.status == "EN_DESPACHO") {
+            MapaRepartidor(orderId = o.id, modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 14.dp)
+                .height(220.dp))
+        } else {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(top = 14.dp).height(170.dp).background(FrutAppColors.Brand50, RoundedCornerShape(20.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(Res.drawable.camion_reparto),
+                    contentDescription = "Reparto",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxWidth().padding(16.dp).height(140.dp)
+                )
+            }
         }
 
         Row(
@@ -557,6 +566,55 @@ private fun detalleItem(item: cl.frutapp.shared.dto.OrderItemDto): String {
         "Llegó $txt"
     }
     return if (real != null) "$pedido · $real" else pedido
+}
+
+/**
+ * Mini-mapa con la ubicacion del repartidor para un pedido EN_DESPACHO.
+ * Hace polling cada 8s para refrescar el marker. Si el repartidor todavia
+ * no reporto (204 del backend), muestra mensaje "Esperando ubicacion" en
+ * vez del marker — pero el mapa igual aparece (centrado en Santiago).
+ *
+ * Sin clave Google Maps (manifest sin MAPS_API_KEY), el GoogleMap se ve
+ * gris. La app no crashea; el resto del tracking sigue siendo usable.
+ */
+@Composable
+private fun MapaRepartidor(orderId: String, modifier: Modifier = Modifier) {
+    val api = remember { cl.frutapp.app.data.remote.UbicacionApi() }
+    var ubic by remember { mutableStateOf<cl.frutapp.shared.dto.UbicacionDto?>(null) }
+    LaunchedEffect(orderId) {
+        while (true) {
+            runCatching { api.paraPedido(orderId) }
+                .onSuccess { ubic = it }
+            delay(8_000)
+        }
+    }
+    Box(
+        modifier = modifier.background(FrutAppColors.Brand50, RoundedCornerShape(20.dp))
+    ) {
+        // Default = centro de Santiago. Cuando llega la primera ubicacion
+        // real, recentramos.
+        val centerLat = ubic?.lat ?: -33.4489
+        val centerLng = ubic?.lng ?: -70.6693
+        cl.frutapp.app.platform.MapaCompose(
+            centerLat = centerLat,
+            centerLng = centerLng,
+            markerLat = ubic?.lat,
+            markerLng = ubic?.lng,
+            zoom = 15f,
+            modifier = Modifier.fillMaxSize()
+        )
+        if (ubic == null) {
+            Box(
+                modifier = Modifier
+                    .padding(top = 8.dp, end = 8.dp)
+                    .background(Color.White.copy(alpha = 0.9f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .align(Alignment.TopEnd)
+            ) {
+                Text("Esperando al repartidor…", color = FrutAppColors.Brand800, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
 }
 
 private fun statusLabel(status: String): String = when (status) {

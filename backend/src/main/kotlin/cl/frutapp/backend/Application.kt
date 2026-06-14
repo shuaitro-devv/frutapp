@@ -209,6 +209,9 @@ fun Application.module() {
         events = userEventService,
         cfg = webpayConfig,
     )
+    val ubicacionService = cl.frutapp.backend.modules.ubicacion.UbicacionService(
+        cl.frutapp.backend.modules.ubicacion.UbicacionRepository()
+    )
     environment.log.info(
         if (webpayConfig.esSandbox) "Webpay: SANDBOX habilitado (creds publicas de integracion). returnUrl={}/v1/pagos/webpay/retorno"
         else "Webpay: PRODUCCION habilitada. returnUrl={}/v1/pagos/webpay/retorno",
@@ -226,6 +229,7 @@ fun Application.module() {
         adminUserService, staffOrderService, userEventService,
         deviceTokenRepository, notificationInboxRepository, avatarService, evidenceService,
         webpayPagoService,
+        ubicacionService,
         configService, configRepository
     )
 

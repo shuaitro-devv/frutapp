@@ -93,6 +93,31 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
                     navigator.pop()
                 }
         }
+
+        // Tracking: el repartidor postea su ubicacion cada 10s mientras esta
+        // en esta pantalla. El cliente la consume desde OrderTrackingScreen
+        // para pintar el marker en su mapa. Si no hay permisos o el backend
+        // rechaza (pedido cambio de estado), abortamos silenciosamente — no
+        // bloqueamos al repartidor por algo del background.
+        val location = cl.frutapp.app.platform.rememberLocationProvider()
+        val ubicacionApi = remember { cl.frutapp.app.data.remote.UbicacionApi() }
+        LaunchedEffect(pedidoId) {
+            if (!esBackendReal) return@LaunchedEffect
+            if (!location.solicitarPermiso()) return@LaunchedEffect
+            while (true) {
+                val coord = location.obtenerActual()
+                if (coord != null) {
+                    runCatching { ubicacionApi.reportar(pedidoId, coord.lat, coord.lng) }
+                        .onFailure { e ->
+                            if (e is kotlinx.coroutines.CancellationException) throw e
+                            // No reportar al ErrorReporter cada falla: el polling
+                            // genera mucho ruido. Solo logueamos via println para
+                            // debug; el flujo del repartidor no se interrumpe.
+                        }
+                }
+                kotlinx.coroutines.delay(10_000)
+            }
+        }
         val despacho = despachoState ?: run {
             Box(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = FrutAppColors.Brand400)

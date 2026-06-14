@@ -6,6 +6,12 @@
     <!-- Android 13+ exige permiso runtime para mostrar notificaciones. Pre-13 lo da
          por default. Lo pide MainActivity la primera vez que el user inicia sesion. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Ubicacion: el cliente la usa para autocompletar la direccion en checkout;
+         el repartidor para reportar su posicion mientras esta EN_DESPACHO. FINE
+         para precision de GPS; COARSE como fallback en interiores. Se piden
+         runtime cuando hacen falta (no al instalar). -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <application
         android:label="@string/app_name"
@@ -52,6 +58,13 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="frutapp_orders" />
+
+        <!-- API key de Google Maps. El placeholder ${MAPS_API_KEY} viene de
+             local.properties (mapsApiKey=AIza...) o env var MAPS_API_KEY.
+             Sin clave, el mapa carga gris pero la app no crashea. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${MAPS_API_KEY}" />
     </application>
 
 </manifest>

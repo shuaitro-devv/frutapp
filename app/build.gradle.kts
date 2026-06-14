@@ -75,6 +75,11 @@ kotlin {
             implementation("com.google.firebase:firebase-messaging-ktx")
             // .await() sobre Task<T> de Firebase desde corutinas.
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.0")
+            // GPS / ubicacion: Fused Location Provider (Google Play Services).
+            implementation("com.google.android.gms:play-services-location:21.3.0")
+            // Mapa: SDK + binding Compose nativo (maps-compose).
+            implementation("com.google.android.gms:play-services-maps:19.0.0")
+            implementation("com.google.maps.android:maps-compose:4.4.1")
         }
     }
 }
@@ -89,6 +94,17 @@ android {
         targetSdk = libs.versions.android.target.sdk.get().toInt()
         versionCode = 1
         versionName = "0.1.0"
+        // Google Maps API key: se lee de local.properties (mapsApiKey=AIza...)
+        // o env var MAPS_API_KEY (CI). Sin clave el mapa carga gris pero el
+        // resto de la app funciona normal (mejor que crashear). El manifest
+        // tiene placeholder ${MAPS_API_KEY} que se sustituye con este valor.
+        val mapsKey = Properties().apply {
+            val f = rootProject.file("local.properties")
+            if (f.exists()) f.inputStream().use { load(it) }
+        }.getProperty("mapsApiKey")
+            ?: System.getenv("MAPS_API_KEY")
+            ?: ""
+        manifestPlaceholders["MAPS_API_KEY"] = mapsKey
     }
 
     // White-label: dos flavors que generan FrutApp.apk y Sofruco.apk desde el

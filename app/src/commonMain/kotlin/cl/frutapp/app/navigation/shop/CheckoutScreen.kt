@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.AlertDialog
@@ -169,6 +170,12 @@ class CheckoutScreen : Screen {
                         editando = editandoDir,
                         onToggleEdit = { editandoDir = !editandoDir },
                         onChange = { direccion = it },
+                        onUsarUbicacionActual = { nuevaDireccion ->
+                            // Reemplazamos la direccion y cerramos el modo edit
+                            // para que la card vuelva al estado read-only.
+                            direccion = nuevaDireccion
+                            editandoDir = false
+                        },
                         modifier = Modifier.padding(horizontal = 20.dp)
                     )
 
@@ -594,8 +601,13 @@ private fun AddressCard(
     editando: Boolean,
     onToggleEdit: () -> Unit,
     onChange: (String) -> Unit,
+    onUsarUbicacionActual: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val location = cl.frutapp.app.platform.rememberLocationProvider()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var gpsLoading by remember { mutableStateOf(false) }
+    var gpsError by remember { mutableStateOf<String?>(null) }
     Column(
         modifier = modifier.fillMaxWidth().background(FrutAppColors.Brand50, RoundedCornerShape(16.dp)).padding(16.dp)
     ) {
@@ -642,6 +654,53 @@ private fun AddressCard(
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
             )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White, RoundedCornerShape(10.dp))
+                    .border(1.dp, FrutAppColors.Brand200, RoundedCornerShape(10.dp))
+                    .clickable(enabled = !gpsLoading) {
+                        gpsError = null
+                        gpsLoading = true
+                        scope.launch {
+                            val ok = location.solicitarPermiso()
+                            if (!ok) {
+                                gpsError = "Necesitamos permiso de ubicación."
+                                gpsLoading = false
+                                return@launch
+                            }
+                            val coord = location.obtenerActual()
+                            if (coord == null) {
+                                gpsError = "No pudimos leer tu ubicación. Probá afuera."
+                                gpsLoading = false
+                                return@launch
+                            }
+                            val direc = location.reverseGeocode(coord.lat, coord.lng)
+                            gpsLoading = false
+                            if (direc.isNullOrBlank()) {
+                                gpsError = "No pudimos resolver la dirección."
+                            } else {
+                                onUsarUbicacionActual(direc)
+                            }
+                        }
+                    }
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.MyLocation, null, tint = FrutAppColors.Brand600, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (gpsLoading) "Buscando tu ubicación…" else "Usar mi ubicación actual",
+                    color = FrutAppColors.Brand800,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            gpsError?.let {
+                Spacer(Modifier.height(4.dp))
+                Text(it, color = FrutAppColors.Error, fontSize = 11.sp)
+            }
         }
     }
 }
