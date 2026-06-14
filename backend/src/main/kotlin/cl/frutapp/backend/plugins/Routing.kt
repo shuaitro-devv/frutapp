@@ -20,6 +20,8 @@ import cl.frutapp.backend.modules.notifications.DeviceTokenRepository
 import cl.frutapp.backend.modules.notifications.NotificationInboxRepository
 import cl.frutapp.backend.modules.notifications.deviceTokenRoutes
 import cl.frutapp.backend.modules.notifications.notificationInboxRoutes
+import cl.frutapp.backend.modules.pagos.WebpayPagoService
+import cl.frutapp.backend.modules.pagos.pagoRoutes
 import cl.frutapp.backend.modules.orders.OrderService
 import cl.frutapp.backend.modules.orders.orderRoutes
 import cl.frutapp.backend.modules.staff.StaffOrderService
@@ -38,6 +40,7 @@ fun Application.configureRouting(
     notificationInboxRepository: NotificationInboxRepository,
     avatarService: AvatarService?,
     evidenceService: EvidenceService?,
+    webpayPagoService: WebpayPagoService,
     configService: ConfigService,
     configRepository: ConfigRepository
 ) {
@@ -54,5 +57,6 @@ fun Application.configureRouting(
         notificationInboxRoutes(notificationInboxRepository)
         if (avatarService != null) avatarRoutes(avatarService)
         if (evidenceService != null) evidenceRoutes(evidenceService)
+        pagoRoutes(webpayPagoService)
     }
 }

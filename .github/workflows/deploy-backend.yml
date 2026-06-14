@@ -165,6 +165,7 @@ jobs:
               -e STORAGE_BUCKET='frutapp' \
               -e DEMO_AUTO_ADVANCE='false' \
               -e DEMO_AUTO_ADVANCE_SECONDS='15' \
+              -e WEBPAY_RETURN_URL_BASE='https://frutapp-api.grandline.cl' \
               -v frutapp-logs:/app/logs \
               --label "traefik.enable=true" \
               --label "traefik.http.routers.frutapp-backend.rule=Host(\`frutapp-api.grandline.cl\`)" \

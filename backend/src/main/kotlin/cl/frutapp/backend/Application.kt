@@ -201,6 +201,19 @@ fun Application.module() {
             events = userEventService
         )
     }
+    val webpayConfig = cl.frutapp.backend.config.WebpayConfig.from(environment.config)
+    val webpayPagoService = cl.frutapp.backend.modules.pagos.WebpayPagoService(
+        client = cl.frutapp.backend.modules.pagos.WebpayClient(webpayConfig),
+        repo = cl.frutapp.backend.modules.pagos.WebpayRepository(),
+        orders = orderRepository,
+        events = userEventService,
+        cfg = webpayConfig,
+    )
+    environment.log.info(
+        if (webpayConfig.esSandbox) "Webpay: SANDBOX habilitado (creds publicas de integracion). returnUrl={}/v1/pagos/webpay/retorno"
+        else "Webpay: PRODUCCION habilitada. returnUrl={}/v1/pagos/webpay/retorno",
+        webpayConfig.returnUrlBase
+    )
     val staffOrderService = StaffOrderService(
         userEventService,
         notificationDispatcher,
@@ -212,6 +225,7 @@ fun Application.module() {
         authService, catalogService, orderService,
         adminUserService, staffOrderService, userEventService,
         deviceTokenRepository, notificationInboxRepository, avatarService, evidenceService,
+        webpayPagoService,
         configService, configRepository
     )
 

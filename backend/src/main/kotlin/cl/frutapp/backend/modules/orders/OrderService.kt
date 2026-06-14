@@ -143,6 +143,10 @@ class OrderService(
         val frutcoinsClpCapado = minOf(frutcoinsClpPedido, BusinessConfig.maxFrutcoinsClp(total), total)
         val cashMethod = pagos.firstOrNull { it.method != PaymentMethod.FRUTCOINS.name }?.method
             ?: PaymentMethod.TARJETA.name
+        // Si el medio cash es WEBPAY, el pedido queda en CREADO esperando que
+        // el cliente complete el flujo Webpay. Cuando Transbank confirma el
+        // pago, WebpayPagoService.confirmarRetorno hace la transicion a PAGADO.
+        val esperandoWebpay = cashMethod == PaymentMethod.WEBPAY.name
 
         val id = orders.create(
             NewOrder(
@@ -163,7 +167,8 @@ class OrderService(
                 osVersion = req.context?.osVersion,
                 locale = req.context?.locale,
                 cashMethod = cashMethod,
-                frutcoinsClpRequested = frutcoinsClpCapado
+                frutcoinsClpRequested = frutcoinsClpCapado,
+                esperandoWebpay = esperandoWebpay
             )
         )
         // Push fire-and-forget a pickers de la location: "pedido nuevo en cola".

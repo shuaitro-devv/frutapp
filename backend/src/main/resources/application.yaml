@@ -48,3 +48,14 @@ jwt:
   realm: "$JWT_REALM:frutapp"
   accessTtlMinutes: "$JWT_ACCESS_TTL_MIN:15"
   refreshTtlDays: "$JWT_REFRESH_TTL_DAYS:60"
+
+# Webpay Plus (Transbank). Defaults = credenciales PUBLICAS de integracion
+# (sandbox), para que dev local funcione sin secrets. En prod sobreescribir
+# por env (WEBPAY_API_BASE_URL = https://webpay3g.transbank.cl + creds reales
+# del comercio). returnUrlBase = host publico al que Webpay redirige al
+# terminar; en emulador apunta a 10.0.2.2, en prod al subdominio API.
+webpay:
+  apiBaseUrl: "$WEBPAY_API_BASE_URL:https://webpay3gint.transbank.cl"
+  commerceCode: "$WEBPAY_COMMERCE_CODE:597055555532"
+  apiKey: "$WEBPAY_API_KEY:579B532A7440BB0C9079DED94D31EA1615BACEB56610332264630D42D0A36B1C"
+  returnUrlBase: "$WEBPAY_RETURN_URL_BASE:http://10.0.2.2:8080"

@@ -51,7 +51,12 @@ data class NewOrder(
     /** Medio de pago para el remanente en efectivo (no-FrutCoins). */
     val cashMethod: String,
     /** CLP que el cliente quiere pagar con FrutCoins (ya capado por config). */
-    val frutcoinsClpRequested: Int
+    val frutcoinsClpRequested: Int,
+    /** true cuando el pago real va por Webpay y todavia no se confirmo. El pedido
+     *  se crea en CREADO (no PAGADO) y queda esperando que el cliente complete
+     *  el flujo Webpay. El WebpayPagoService.confirmarRetorno hace la transicion
+     *  CREADO -> PAGADO al recibir el aprobado de Transbank. */
+    val esperandoWebpay: Boolean = false
 )
 
 /** Datos de contacto del cliente dueño de un pedido (back office). */
@@ -93,11 +98,17 @@ class OrderRepository {
             .firstOrNull()
             ?.get(PickupLocationTable.id)
 
+        // Webpay: el pedido se crea en CREADO esperando confirmacion del pago
+        // real. El WebpayPagoService.confirmarRetorno hace la transicion
+        // CREADO -> PAGADO al recibir el aprobado de Transbank. El resto del
+        // flujo legacy (otros medios) sigue creando PAGADO directo — flujo
+        // "fake pay" del MVP hasta tener cada medio integrado.
+        val statusInicial = if (o.esperandoWebpay) OrderStatus.CREADO else OrderStatus.PAGADO
         OrdersTable.insert {
             it[id] = orderId
             it[numero] = o.numero
             it[userId] = o.userId
-            it[status] = OrderStatus.PAGADO.name
+            it[status] = statusInicial.name
             it[paymentStatus] = PaymentStatus.PREAUTORIZADO.name
             it[direccion] = o.direccion
             it[entrega] = o.entrega
@@ -136,7 +147,9 @@ class OrderRepository {
         if (cashClp > 0) insertPayment(orderId, o.cashMethod, cashClp, now)
 
         insertHistory(orderId, null, OrderStatus.CREADO, OrderActor.CLIENTE, o.userId, "Pedido creado")
-        insertHistory(orderId, OrderStatus.CREADO, OrderStatus.PAGADO, OrderActor.SISTEMA, null, "Pago pre-autorizado (simulado)")
+        if (!o.esperandoWebpay) {
+            insertHistory(orderId, OrderStatus.CREADO, OrderStatus.PAGADO, OrderActor.SISTEMA, null, "Pago pre-autorizado (simulado)")
+        }
 
         var balance = saldoActual
         if (coinsGastados > 0) {

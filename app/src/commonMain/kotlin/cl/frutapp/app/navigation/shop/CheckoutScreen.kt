@@ -96,10 +96,13 @@ class CheckoutScreen : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        // Webpay primero: es el unico medio de pago REAL. Tarjeta y Mercado Pago
+        // siguen siendo "fake pay" (placeholder hasta integrar cada uno). Default
+        // de seleccion = 0 → Webpay, asi el flow real es el camino por defecto.
         val metodos = listOf(
+            PayMethod("Webpay", Icons.Filled.CreditCard, "WEBPAY"),
             PayMethod("Tarjeta de crédito/débito", Icons.Filled.CreditCard, "TARJETA"),
-            PayMethod("Mercado Pago", Icons.Filled.AccountBalanceWallet, "MERCADO_PAGO"),
-            PayMethod("Webpay", Icons.Filled.CreditCard, "WEBPAY")
+            PayMethod("Mercado Pago", Icons.Filled.AccountBalanceWallet, "MERCADO_PAGO")
         )
         var metodoSel by remember { mutableStateOf(0) }
         var esRetiro by remember { mutableStateOf(false) }
@@ -271,6 +274,35 @@ class CheckoutScreen : Screen {
                                     delay(1500) // duración mínima de la animación
                                     apiJob.await().onSuccess { dto ->
                                         CartStore.clear()
+                                        val metodoElegido = metodos[metodoSel].code
+                                        if (metodoElegido == "WEBPAY") {
+                                            // Webpay real: arranca el flujo Webpay; el pedido
+                                            // recien creado esta en CREADO y se marca PAGADO
+                                            // cuando Transbank confirme. Si iniciar() falla,
+                                            // el pedido queda en CREADO — el cliente lo ve
+                                            // en Mis pedidos y puede reintentar.
+                                            mensajePagando = "Abriendo Webpay…"
+                                            runCatching { cl.frutapp.app.data.remote.PagoApi().iniciar(dto.id) }
+                                                .onSuccess { res ->
+                                                    navigator.replace(
+                                                        PagoWebpayScreen(
+                                                            orderId = dto.id,
+                                                            token = res.token,
+                                                            urlFormPost = res.urlFormPost
+                                                        )
+                                                    )
+                                                }
+                                                .onFailure { ie ->
+                                                    if (ie is kotlinx.coroutines.CancellationException) throw ie
+                                                    cl.frutapp.app.ui.ErrorReporter.report(
+                                                        screen = "Checkout", action = "webpay_iniciar", error = ie
+                                                    )
+                                                    error = "Tu pedido se creó pero no pudimos abrir Webpay. Revisalo en Mis pedidos y reintenta."
+                                                    loading = false
+                                                }
+                                            return@onSuccess
+                                        }
+                                        // Otros medios: flujo legacy "fake pay" → OrderConfirmedScreen.
                                         navigator.replace(
                                             OrderConfirmedScreen(
                                                 orderId = dto.id,
