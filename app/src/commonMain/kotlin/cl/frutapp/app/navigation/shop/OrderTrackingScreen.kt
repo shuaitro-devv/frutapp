@@ -24,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.ShoppingBasket
 import androidx.compose.material.icons.filled.Star
@@ -84,6 +85,8 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
         val scope = rememberCoroutineScope()
         var order by remember { mutableStateOf<OrderDto?>(null) }
         var error by remember { mutableStateOf(false) }
+        var evidencias by remember { mutableStateOf<List<cl.frutapp.shared.dto.OrderItemEvidenceDto>>(emptyList()) }
+        var visorEvidencia by remember { mutableStateOf<cl.frutapp.shared.dto.OrderItemEvidenceDto?>(null) }
 
         // Auto-refresh: re-consulta el pedido mientras la pantalla está abierta para que el
         // timeline avance solo (el backend mueve el estado). Para al llegar a un estado final.
@@ -101,6 +104,17 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
                     }
                 if (order?.status in setOf("ENTREGADO", "CANCELADO", "DEVOLUCION")) break
                 delay(8000)
+            }
+        }
+
+        // Evidencias del picker: silencioso si falla (no es info critica).
+        // Re-fetch cada 30s para que las fotos aparezcan a medida que el picker
+        // las sube en otro lado mientras el cliente mira el tracking.
+        LaunchedEffect(orderId) {
+            while (true) {
+                runCatching { cl.frutapp.app.data.remote.OrderEvidenceApi().listar(orderId) }
+                    .onSuccess { evidencias = it }
+                delay(30_000)
             }
         }
 
@@ -129,6 +143,8 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
                     else -> Detail(
                         o,
                         modifier = Modifier.weight(1f),
+                        evidencias = evidencias,
+                        onEvidenciaClick = { visorEvidencia = it },
                         onReorder = {
                             scope.launch {
                                 val r = reorderIntoCart(o.items)
@@ -154,6 +170,9 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
                     selected = FrutTab.PEDIDOS,
                     onSelect = { tab -> if (tab != FrutTab.PEDIDOS) navigator.popUntilRoot() }
                 )
+            }
+            visorEvidencia?.let { ev ->
+                VisorEvidenciaFullscreen(evidencia = ev, onCerrar = { visorEvidencia = null })
             }
         }
     }
@@ -210,7 +229,15 @@ private fun AjusteBanner(numero: String, modifier: Modifier = Modifier, onRevisa
 }
 
 @Composable
-private fun Detail(o: OrderDto, modifier: Modifier, onReorder: () -> Unit, onCalificar: () -> Unit, onGuardarCanasta: () -> Unit) {
+private fun Detail(
+    o: OrderDto,
+    modifier: Modifier,
+    evidencias: List<cl.frutapp.shared.dto.OrderItemEvidenceDto>,
+    onEvidenciaClick: (cl.frutapp.shared.dto.OrderItemEvidenceDto) -> Unit,
+    onReorder: () -> Unit,
+    onCalificar: () -> Unit,
+    onGuardarCanasta: () -> Unit
+) {
     val pasos = pasosFor(o.status)
     Column(modifier = modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
         Row(
@@ -252,7 +279,7 @@ private fun Detail(o: OrderDto, modifier: Modifier, onReorder: () -> Unit, onCal
         // con badge "No disponible" para que el cliente recuerde por que el total
         // cambio respecto a lo que pedio. Y items con peso ajustado del picker
         // muestran el peso real para que sea claro lo que llega.
-        ProductosResumen(o.items, modifier = Modifier.padding(top = 16.dp))
+        ProductosResumen(o.items, evidencias = evidencias, onEvidenciaClick = onEvidenciaClick, modifier = Modifier.padding(top = 16.dp))
 
         val esRetiro = o.fulfillmentType == "RETIRO"
         Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -326,7 +353,12 @@ private fun Centered(text: String) {
  * peso real al lado del pedido.
  */
 @Composable
-private fun ProductosResumen(items: List<cl.frutapp.shared.dto.OrderItemDto>, modifier: Modifier = Modifier) {
+private fun ProductosResumen(
+    items: List<cl.frutapp.shared.dto.OrderItemDto>,
+    evidencias: List<cl.frutapp.shared.dto.OrderItemEvidenceDto> = emptyList(),
+    onEvidenciaClick: (cl.frutapp.shared.dto.OrderItemEvidenceDto) -> Unit = {},
+    modifier: Modifier = Modifier
+) {
     if (items.isEmpty()) return
     Column(
         modifier = modifier
@@ -409,6 +441,15 @@ private fun ProductosResumen(items: List<cl.frutapp.shared.dto.OrderItemDto>, mo
                             )
                         }
                     }
+                    val fotosItem = evidencias.filter { it.orderItemId == item.id }
+                    if (fotosItem.isNotEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            fotosItem.forEach { ev ->
+                                EvidenciaThumb(ev = ev, onClick = { onEvidenciaClick(ev) })
+                            }
+                        }
+                    }
                 }
                 Text(
                     text = formatClp(if (sinStock) 0 else (item.montoFinal ?: item.montoEstimado)),
@@ -418,6 +459,78 @@ private fun ProductosResumen(items: List<cl.frutapp.shared.dto.OrderItemDto>, mo
                     textDecoration = if (sinStock) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun EvidenciaThumb(ev: cl.frutapp.shared.dto.OrderItemEvidenceDto, onClick: () -> Unit) {
+    var bytes by remember(ev.url) { mutableStateOf<ByteArray?>(null) }
+    LaunchedEffect(ev.url) {
+        runCatching { cl.frutapp.app.platform.Imagenes.descargar(ev.url) }
+            .onSuccess { bytes = it }
+    }
+    val img = bytes?.let { cl.frutapp.app.platform.decodeImagen(it) }
+    Box(
+        modifier = Modifier
+            .size(54.dp)
+            .background(FrutAppColors.Brand50, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (img != null) {
+            Image(
+                bitmap = img,
+                contentDescription = "Foto del item",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(54.dp)
+            )
+        } else {
+            Icon(
+                Icons.Filled.PhotoCamera,
+                null,
+                tint = FrutAppColors.Brand600,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun VisorEvidenciaFullscreen(evidencia: cl.frutapp.shared.dto.OrderItemEvidenceDto, onCerrar: () -> Unit) {
+    var bytes by remember(evidencia.url) { mutableStateOf<ByteArray?>(null) }
+    LaunchedEffect(evidencia.url) {
+        runCatching { cl.frutapp.app.platform.Imagenes.descargar(evidencia.url) }
+            .onSuccess { bytes = it }
+    }
+    val img = bytes?.let { cl.frutapp.app.platform.decodeImagen(it) }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.94f))
+            .clickable(onClick = onCerrar),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (img != null) {
+                Image(
+                    bitmap = img,
+                    contentDescription = "Foto del item",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxWidth().padding(top = 40.dp)
+                )
+            } else {
+                Text("Cargando…", color = Color.White, fontSize = 14.sp)
+            }
+            evidencia.comentario?.let { c ->
+                Spacer(Modifier.height(16.dp))
+                Text(c, color = Color.White, fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+            Spacer(Modifier.height(20.dp))
+            Text("Toca para cerrar", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
         }
     }
 }

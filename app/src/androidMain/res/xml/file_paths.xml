@@ -2,4 +2,6 @@
 <paths>
     <!-- Para compartir imágenes generadas (share card de huella verde, canasta). -->
     <cache-path name="shared_images" path="shared/" />
+    <!-- Para que la cámara escriba la foto del picker (evidencia de item) en cache. -->
+    <cache-path name="camara_evidencia" path="camara/" />
 </paths>

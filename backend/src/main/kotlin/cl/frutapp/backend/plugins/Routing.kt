@@ -13,7 +13,9 @@ import cl.frutapp.backend.modules.catalog.catalogRoutes
 import cl.frutapp.backend.modules.health.healthRoutes
 import cl.frutapp.backend.modules.audit.UserEventService
 import cl.frutapp.backend.modules.media.AvatarService
+import cl.frutapp.backend.modules.media.EvidenceService
 import cl.frutapp.backend.modules.media.avatarRoutes
+import cl.frutapp.backend.modules.media.evidenceRoutes
 import cl.frutapp.backend.modules.notifications.DeviceTokenRepository
 import cl.frutapp.backend.modules.notifications.NotificationInboxRepository
 import cl.frutapp.backend.modules.notifications.deviceTokenRoutes
@@ -35,6 +37,7 @@ fun Application.configureRouting(
     deviceTokenRepository: DeviceTokenRepository,
     notificationInboxRepository: NotificationInboxRepository,
     avatarService: AvatarService?,
+    evidenceService: EvidenceService?,
     configService: ConfigService,
     configRepository: ConfigRepository
 ) {
@@ -50,5 +53,6 @@ fun Application.configureRouting(
         deviceTokenRoutes(deviceTokenRepository)
         notificationInboxRoutes(notificationInboxRepository)
         if (avatarService != null) avatarRoutes(avatarService)
+        if (evidenceService != null) evidenceRoutes(evidenceService)
     }
 }

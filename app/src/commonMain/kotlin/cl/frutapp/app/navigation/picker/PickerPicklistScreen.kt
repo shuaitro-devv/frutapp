@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -235,6 +236,14 @@ class PickerPicklistScreen(
                                 itemModal = item
                                 modalAbierto = ModalPicklist.SUSTITUCION
                             }
+                        },
+                        onEvidencia = {
+                            if (esBackendReal && item.backendId != null) {
+                                itemModal = item
+                                modalAbierto = ModalPicklist.EVIDENCIA
+                            } else {
+                                showToast("Foto disponible solo con pedido real (no en demo).")
+                            }
                         }
                     )
                 }
@@ -312,6 +321,14 @@ class PickerPicklistScreen(
                 }
             )
         }
+        if (modalAbierto == ModalPicklist.EVIDENCIA && itemModal?.backendId != null) {
+            EvidenciaModal(
+                backendOrderId = pedidoId,
+                backendItemId = itemModal!!.backendId!!,
+                itemNombre = itemModal!!.nombre,
+                onCerrar = { modalAbierto = null; itemModal = null }
+            )
+        }
         if (opcionesAbierto) {
             PickerOpcionesSheet(
                 onCerrar = { opcionesAbierto = false },
@@ -380,7 +397,7 @@ class PickerPicklistScreen(
     }
 }
 
-internal enum class ModalPicklist { PESO, SUSTITUCION }
+internal enum class ModalPicklist { PESO, SUSTITUCION, EVIDENCIA }
 
 @Composable
 private fun TopBar(pedidoId: String, onBack: () -> Unit, onMenu: () -> Unit) {
@@ -510,7 +527,7 @@ private fun DonutSegmentado(
 }
 
 @Composable
-private fun ItemCard(item: ItemPicklist, estado: EstadoItem, onToggle: () -> Unit, onSwap: () -> Unit) {
+private fun ItemCard(item: ItemPicklist, estado: EstadoItem, onToggle: () -> Unit, onSwap: () -> Unit, onEvidencia: () -> Unit) {
     // Toda la card es tappeable para marcar/desmarcar. El borde refleja el estado:
     // verde fuerte si esta resuelto, gris si pendiente.
     val resuelto = estado.resuelto()
@@ -579,8 +596,13 @@ private fun ItemCard(item: ItemPicklist, estado: EstadoItem, onToggle: () -> Uni
         Spacer(Modifier.width(8.dp))
         Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             EstadoBoxGrande(estado = estado, onClick = onToggle)
-            IconButton(onClick = onSwap, modifier = Modifier.size(28.dp)) {
-                Icon(Icons.Filled.SwapHoriz, "Sustituir", tint = FrutAppColors.InkSoft, modifier = Modifier.size(18.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                IconButton(onClick = onSwap, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Filled.SwapHoriz, "Sustituir", tint = FrutAppColors.InkSoft, modifier = Modifier.size(18.dp))
+                }
+                IconButton(onClick = onEvidencia, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Filled.PhotoCamera, "Foto", tint = FrutAppColors.InkSoft, modifier = Modifier.size(18.dp))
+                }
             }
         }
     }

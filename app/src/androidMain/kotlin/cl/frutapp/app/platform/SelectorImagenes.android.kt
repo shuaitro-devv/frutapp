@@ -9,13 +9,17 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.core.content.FileProvider
 import androidx.compose.ui.platform.LocalContext
 import java.io.ByteArrayOutputStream
+import java.io.File
 
 actual class SelectorImagenes internal constructor(
     private val onGaleria: () -> Unit,
+    private val onCamara: () -> Unit,
 ) {
     actual fun galeria() = onGaleria()
+    actual fun camara() = onCamara()
 }
 
 @Composable
@@ -24,6 +28,20 @@ actual fun rememberSelectorImagenes(onImagen: (ByteArray) -> Unit): SelectorImag
     val launcherGaleria = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri -> uri?.let { leerBytes(context, it)?.let(onImagen) } }
+    // ActivityResultContracts.TakePicture exige una Uri donde la camara escribe
+    // la foto a pixel-full. Usamos FileProvider sobre cache para que la app no
+    // necesite permiso WRITE_EXTERNAL_STORAGE. El archivo lo creamos al lanzar
+    // y lo leemos al recibir el callback.
+    var ultimoCamaraUri: Uri? = null
+    val launcherCamara = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture(),
+    ) { ok ->
+        if (ok) {
+            ultimoCamaraUri?.let { uri ->
+                leerBytes(context, uri)?.let(onImagen)
+            }
+        }
+    }
     return remember {
         SelectorImagenes(
             onGaleria = {
@@ -31,8 +49,24 @@ actual fun rememberSelectorImagenes(onImagen: (ByteArray) -> Unit): SelectorImag
                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                 )
             },
+            onCamara = {
+                val (file, uri) = crearArchivoCamara(context)
+                ultimoCamaraUri = uri
+                launcherCamara.launch(uri)
+                // file queda en cache; al proximo `cache` cleanup el sistema lo borra.
+            },
         )
     }
+}
+
+/** Crea un File temporal en el cache de la app y devuelve su content:// Uri
+ *  via FileProvider para que la camara pueda escribir ahi. */
+private fun crearArchivoCamara(context: Context): Pair<File, Uri> {
+    val dir = File(context.cacheDir, "camara").apply { mkdirs() }
+    val file = File(dir, "captura_${System.currentTimeMillis()}.jpg")
+    val authority = "${context.packageName}.fileprovider"
+    val uri = FileProvider.getUriForFile(context, authority, file)
+    return file to uri
 }
 
 private fun leerBytes(context: Context, uri: Uri): ByteArray? {

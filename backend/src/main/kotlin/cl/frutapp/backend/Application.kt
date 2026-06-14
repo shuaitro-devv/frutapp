@@ -194,6 +194,13 @@ fun Application.module() {
     )
     val configService = ConfigService(configRepository)
     val userEventService = UserEventService()
+    val evidenceService = storageService?.let {
+        cl.frutapp.backend.modules.media.EvidenceService(
+            storage = it,
+            repo = cl.frutapp.backend.modules.media.EvidenceRepository(),
+            events = userEventService
+        )
+    }
     val staffOrderService = StaffOrderService(
         userEventService,
         notificationDispatcher,
@@ -204,7 +211,7 @@ fun Application.module() {
     configureRouting(
         authService, catalogService, orderService,
         adminUserService, staffOrderService, userEventService,
-        deviceTokenRepository, notificationInboxRepository, avatarService,
+        deviceTokenRepository, notificationInboxRepository, avatarService, evidenceService,
         configService, configRepository
     )
 
