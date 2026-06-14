@@ -83,7 +83,11 @@ class StaffOrderService(
                     )
                 )
             }
-            .orderBy(OrdersTable.createdAt)
+            // tiebreaker por id: sin esto, pedidos con el mismo createdAt
+            // (timestamp truncado) ordenan no-deterministico — la cola refresca y
+            // los items saltan de lugar entre vistas, confundiendo al picker.
+            .orderBy(OrdersTable.createdAt, SortOrder.ASC)
+            .orderBy(OrdersTable.id, SortOrder.ASC)
             .limit(50)
             .toList()
 
@@ -188,6 +192,7 @@ class StaffOrderService(
                 (OrdersTable.updatedAt greaterEq inicioDeHoy)
             }
             .orderBy(OrdersTable.updatedAt, SortOrder.DESC)
+            .orderBy(OrdersTable.id, SortOrder.DESC)  // tiebreaker estable
             .limit(50)
             .toList()
         materializeSummaries(rows, pickerId)
@@ -565,7 +570,8 @@ class StaffOrderService(
                         )
                     )
                 }
-                .orderBy(OrdersTable.createdAt)
+                .orderBy(OrdersTable.createdAt, SortOrder.ASC)
+                .orderBy(OrdersTable.id, SortOrder.ASC)
                 .limit(50)
                 .toList()
         }
@@ -601,6 +607,7 @@ class StaffOrderService(
                     (OrdersTable.updatedAt greaterEq inicioDeHoy)
                 }
                 .orderBy(OrdersTable.updatedAt, SortOrder.DESC)
+                .orderBy(OrdersTable.id, SortOrder.DESC)
                 .limit(50)
                 .toList()
         }

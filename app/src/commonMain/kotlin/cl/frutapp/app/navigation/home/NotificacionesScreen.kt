@@ -237,7 +237,21 @@ private fun parseNotiData(data: String?): Triple<String, String?, String?>? {
             else -> "order_status"
         }
         Triple(orderId, type, status)
-    }.getOrNull()
+    }
+        .onFailure { e ->
+            // El payload no era el shape esperado. Reportar para detectar drift
+            // del backend (ej: nuevo tipo de noti que no estamos parseando) en
+            // lugar de tragarlo silenciosamente y que la noti quede no-clickeable
+            // sin que sepamos por que.
+            if (e !is kotlinx.coroutines.CancellationException) {
+                cl.frutapp.app.ui.ErrorReporter.report(
+                    screen = "NotificacionesScreen",
+                    action = "parse_noti_data",
+                    error = e
+                )
+            }
+        }
+        .getOrNull()
 }
 
 @Composable

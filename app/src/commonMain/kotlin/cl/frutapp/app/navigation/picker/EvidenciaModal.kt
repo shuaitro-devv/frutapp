@@ -45,6 +45,7 @@ import cl.frutapp.app.data.remote.StaffEvidenceApi
 import cl.frutapp.app.platform.decodeImagen
 import cl.frutapp.app.platform.rememberSelectorImagenes
 import cl.frutapp.app.ui.ErrorReporter
+import cl.frutapp.app.ui.PlatformBackHandler
 import cl.frutapp.app.ui.mensajeAmigable
 import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.components.FrutButtonOutline
@@ -88,6 +89,12 @@ fun EvidenciaModal(
         error = null
     }
 
+    // ModalBottomSheet ya intercepta back hardware en general, pero en algunos
+    // dispositivos / configs de gestos el back llega a Voyager antes que al
+    // sheet y cierra el modal a pesar del guard de onDismissRequest. Este
+    // PlatformBackHandler garantiza que mientras subiendo=true el back hardware
+    // es consumido sin efecto.
+    PlatformBackHandler(enabled = subiendo, onBack = { /* swallow */ })
     ModalBottomSheet(
         onDismissRequest = { if (!subiendo) onCerrar() },
         sheetState = sheetState,

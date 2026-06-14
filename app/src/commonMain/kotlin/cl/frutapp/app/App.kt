@@ -13,6 +13,7 @@ import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.navigation.SplashScreen
 import cl.frutapp.app.navigation.auth.LoginScreen
 import cl.frutapp.app.navigation.picker.PickerHomeScreen
+import cl.frutapp.app.navigation.repartidor.RepartidorHomeScreen
 import cl.frutapp.app.navigation.picker.PickerPicklistScreen
 import cl.frutapp.app.navigation.repartidor.RepartidorDetalleScreen
 import cl.frutapp.app.navigation.shop.AjusteAprobacionScreen
@@ -77,8 +78,21 @@ fun App() {
                     val data = PendingNotification.consume() ?: return@LaunchedEffect
                     val (orderId, type, status) = data
                     val roles = TokenStore.user?.roles ?: emptyList()
+                    val esCliente = "cliente" in roles
                     val esPicker = "picker" in roles
                     val esRepartidor = "repartidor" in roles
+                    // Fallback: si el push apunta a un rol que el usuario NO tiene
+                    // (ej. cliente recibe picker_new_order por error de targeting),
+                    // mandar a la home apropiada en vez de OrderTrackingScreen que
+                    // es pantalla de cliente (un picker/repartidor sin rol cliente
+                    // recibe 403/404 ahi). Asi al menos el usuario aterriza en una
+                    // pantalla operativa para SU rol.
+                    val fallback: Screen = when {
+                        esCliente -> OrderTrackingScreen(orderId)
+                        esPicker -> PickerHomeScreen()
+                        esRepartidor -> RepartidorHomeScreen()
+                        else -> OrderTrackingScreen(orderId)  // sin roles utiles
+                    }
                     // Routing por tipo de push + rol del usuario logueado.
                     // - Cliente (order_status): si hay ajuste pendiente va DIRECTO a
                     //   AjusteAprobacionScreen; cualquier otro estado (EN_PICKING,
@@ -91,15 +105,16 @@ fun App() {
                     //   el aviso del destino).
                     // - Repartidor (repartidor_new_dispatch): va al detalle del
                     //   despacho para poder tomarlo.
-                    // Si el push es para un rol que el usuario NO tiene (ej. cliente
-                    // recibe picker_new_order — no deberia, pero defensivo), va al
-                    // tracking generico que va a 404 server-side y mostrar mensaje.
                     val destino: Screen = when (type) {
-                        "picker_new_order" -> if (esPicker) PickerPicklistScreen(orderId) else OrderTrackingScreen(orderId)
-                        "picker_ajuste_resuelto" -> if (esPicker) PickerHomeScreen() else OrderTrackingScreen(orderId)
-                        "repartidor_new_dispatch" -> if (esRepartidor) RepartidorDetalleScreen(orderId) else OrderTrackingScreen(orderId)
-                        "order_status" -> if (status == "ESPERANDO_AJUSTE_CLIENTE") AjusteAprobacionScreen(orderId) else OrderTrackingScreen(orderId)
-                        else -> OrderTrackingScreen(orderId)
+                        "picker_new_order" -> if (esPicker) PickerPicklistScreen(orderId) else fallback
+                        "picker_ajuste_resuelto" -> if (esPicker) PickerHomeScreen() else fallback
+                        "repartidor_new_dispatch" -> if (esRepartidor) RepartidorDetalleScreen(orderId) else fallback
+                        "order_status" -> when {
+                            !esCliente -> fallback
+                            status == "ESPERANDO_AJUSTE_CLIENTE" -> AjusteAprobacionScreen(orderId)
+                            else -> OrderTrackingScreen(orderId)
+                        }
+                        else -> fallback
                     }
                     navigator.push(destino)
                 }

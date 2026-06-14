@@ -48,6 +48,7 @@ import cl.frutapp.app.data.drawableForImageKey
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.data.remote.StaffOrderApi
 import cl.frutapp.app.ui.ErrorReporter
+import cl.frutapp.app.ui.PlatformBackHandler
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.mensajeAmigable
@@ -123,6 +124,9 @@ fun SustitucionModal(
         loadingAlt = false
     }
 
+    // Mientras enviando, capturar el back hardware para que el modal no se
+    // cierre a la mitad de un POST a sustituir/reducir/faltante.
+    PlatformBackHandler(enabled = enviando, onBack = { /* swallow */ })
     ModalBottomSheet(
         onDismissRequest = { if (!enviando) onCerrar() },
         sheetState = sheetState,

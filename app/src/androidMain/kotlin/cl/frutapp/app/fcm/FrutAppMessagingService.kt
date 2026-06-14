@@ -119,6 +119,16 @@ internal fun showNotification(
     val nm = context.getSystemService(NotificationManager::class.java) ?: return
     // collapse_key del backend hace que el sistema reemplace; usamos id por orderId
     // para que multiples updates del mismo pedido NO acumulen 4 notifs en la barra.
-    val notifId = orderId?.hashCode() ?: notifIdSeq.incrementAndGet()
+    // Usamos los 128 bits del UUID combinados con XOR en vez de String.hashCode()
+    // — el hashCode de un UUID-string esta sujeto a clustering (cadenas largas
+    // similares colisionan mas) y un colision aqui significa que la noti del
+    // pedido X tapa la del pedido Y. Si no es UUID valido (formato inesperado)
+    // caemos al hashCode como fallback.
+    val notifId = if (orderId != null) {
+        runCatching {
+            val uuid = java.util.UUID.fromString(orderId)
+            (uuid.mostSignificantBits xor uuid.leastSignificantBits).toInt()
+        }.getOrNull() ?: orderId.hashCode()
+    } else notifIdSeq.incrementAndGet()
     nm.notify(notifId, notif)
 }
