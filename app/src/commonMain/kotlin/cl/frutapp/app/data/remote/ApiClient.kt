@@ -130,6 +130,9 @@ object ApiClient {
     val client: HttpClient = HttpClient {
         install(ContentNegotiation) { json(json) }
         install(HttpTimeout) { requestTimeoutMillis = 15_000; connectTimeoutMillis = 10_000 }
+        // WebSockets para el chat in-app. El plugin es no-op si nadie lo usa,
+        // asi que su instalacion global no afecta los endpoints HTTP normales.
+        install(io.ktor.client.plugins.websocket.WebSockets)
         // Sin esto, Ktor intenta deserializar el body de error (ej. 401 con
         // {"error":"Invalid credentials"}) como el DTO esperado y falla con
         // MissingFieldException — que no es legible ni para la heurística de

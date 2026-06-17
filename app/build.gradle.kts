@@ -46,6 +46,7 @@ kotlin {
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.client.logging)
+            implementation(libs.ktor.client.websockets)
             implementation(libs.ktor.serialization.kotlinx.json)
 
             // Voyager navigation
@@ -61,7 +62,10 @@ kotlin {
             implementation(libs.androidx.core.ktx)
             implementation(libs.androidx.activity.compose)
             implementation(libs.androidx.lifecycle.runtime.ktx)
-            implementation(libs.ktor.client.android)
+            // Ktor client engine: okhttp en vez de android porque android engine
+            // NO soporta WebSockets. okhttp si, y el resto del API (HTTP regular)
+            // funciona identico — el switch es invisible para los demas calls.
+            implementation(libs.ktor.client.okhttp)
             implementation(libs.koin.android)
             implementation(libs.kotlinx.coroutines.android)
             // Huella / biometría (trae androidx.fragment para FragmentActivity)

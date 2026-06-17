@@ -26,6 +26,10 @@ import cl.frutapp.backend.modules.pagos.WebpayPagoService
 import cl.frutapp.backend.modules.pagos.pagoRoutes
 import cl.frutapp.backend.modules.ubicacion.UbicacionService
 import cl.frutapp.backend.modules.ubicacion.ubicacionRoutes
+import cl.frutapp.backend.modules.chat.ChatHub
+import cl.frutapp.backend.modules.chat.ChatService
+import cl.frutapp.backend.modules.chat.chatRoutes
+import cl.frutapp.backend.modules.auth.TokenService
 import cl.frutapp.backend.modules.orders.OrderService
 import cl.frutapp.backend.modules.orders.orderRoutes
 import cl.frutapp.backend.modules.staff.StaffOrderService
@@ -47,6 +51,9 @@ fun Application.configureRouting(
     evidenceService: EvidenceService?,
     webpayPagoService: WebpayPagoService,
     ubicacionService: UbicacionService,
+    chatService: ChatService,
+    chatHub: ChatHub,
+    tokenService: TokenService,
     configService: ConfigService,
     configRepository: ConfigRepository
 ) {
@@ -66,5 +73,6 @@ fun Application.configureRouting(
         if (evidenceService != null) evidenceRoutes(evidenceService)
         pagoRoutes(webpayPagoService)
         ubicacionRoutes(ubicacionService)
+        chatRoutes(chatService, chatHub, tokenService)
     }
 }

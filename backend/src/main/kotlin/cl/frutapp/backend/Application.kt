@@ -26,6 +26,7 @@ import cl.frutapp.backend.modules.rbac.RbacRepository
 import cl.frutapp.backend.plugins.configureCors
 import cl.frutapp.backend.plugins.configureRateLimit
 import cl.frutapp.backend.plugins.configureDatabases
+import cl.frutapp.backend.plugins.configureWebSocketsPlugin
 import cl.frutapp.backend.modules.audit.UserEventService
 import cl.frutapp.backend.modules.media.AvatarService
 import cl.frutapp.backend.modules.media.StorageService
@@ -126,6 +127,7 @@ fun Application.module() {
     configureStatusPages()
     configureMonitoring()
     configureDatabases()
+    configureWebSocketsPlugin()
 
     // Config de negocio desde BD (app_config): carga el caché antes de servir y luego
     // lo refresca periódicamente (cambiar un parámetro = editar la fila, sin redeploy).
@@ -214,6 +216,12 @@ fun Application.module() {
     val ubicacionService = cl.frutapp.backend.modules.ubicacion.UbicacionService(
         cl.frutapp.backend.modules.ubicacion.UbicacionRepository()
     )
+    val chatHub = cl.frutapp.backend.modules.chat.ChatHub()
+    val chatService = cl.frutapp.backend.modules.chat.ChatService(
+        repo = cl.frutapp.backend.modules.chat.ChatRepository(),
+        hub = chatHub,
+        notifications = notificationDispatcher,
+    )
     environment.log.info(
         if (webpayConfig.esSandbox) "Webpay: SANDBOX habilitado (creds publicas de integracion). returnUrl={}/v1/pagos/webpay/retorno"
         else "Webpay: PRODUCCION habilitada. returnUrl={}/v1/pagos/webpay/retorno",
@@ -232,6 +240,7 @@ fun Application.module() {
         deviceTokenRepository, notificationInboxRepository, avatarService, evidenceService,
         webpayPagoService,
         ubicacionService,
+        chatService, chatHub, tokenService,
         configService, configRepository
     )
 

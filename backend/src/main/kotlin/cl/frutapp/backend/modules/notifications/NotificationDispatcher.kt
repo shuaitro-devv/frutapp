@@ -238,6 +238,62 @@ class NotificationDispatcher(
         }
     }
 
+    /**
+     * Chat in-app: el destinatario NO esta conectado al WS y recibe un push
+     * para que abra la app y vea el mensaje. Llamado solo cuando el ChatHub
+     * detecta cero conexiones del orderId (si estuviera conectado, el mensaje
+     * ya viajo por el WS y un push duplicaria el aviso).
+     */
+    fun onChatMensaje(
+        orderId: java.util.UUID,
+        destinatarioUserId: java.util.UUID,
+        autorRol: String,
+        cuerpoBreve: String,
+    ) {
+        scope.launch {
+            runCatching {
+                val tituloAutor = when (autorRol) {
+                    "cliente" -> "Cliente"
+                    "picker" -> "Seleccionador de Frescura"
+                    "repartidor" -> "Repartidor"
+                    else -> "Equipo FrutApp"
+                }
+                val titulo = "Mensaje de tu $tituloAutor"
+                inbox.create(
+                    userId = destinatarioUserId,
+                    type = "CHAT",
+                    title = titulo,
+                    body = cuerpoBreve,
+                    data = """{"orderId":"$orderId","type":"chat_mensaje","autorRol":"$autorRol"}"""
+                )
+                if (fcm == null) return@launch
+                val tokens = deviceTokens.listByUser(destinatarioUserId)
+                tokens.forEach { row ->
+                    val msg = FcmMessage(
+                        token = row.fcmToken,
+                        title = titulo,
+                        body = cuerpoBreve,
+                        data = mapOf(
+                            "type" to "chat_mensaje",
+                            "orderId" to orderId.toString(),
+                            "autorRol" to autorRol,
+                        ),
+                        // Un solo push activo por pedido: notis nuevas pisan
+                        // a las anteriores para evitar acumular avisos.
+                        androidCollapseKey = "chat:$orderId",
+                        androidChannelId = ANDROID_CHANNEL_ORDERS,
+                    )
+                    when (fcm.send(msg)) {
+                        is SendResult.UnregisteredToken -> deviceTokens.deleteByToken(row.fcmToken)
+                        else -> Unit
+                    }
+                }
+            }.onFailure { e ->
+                logger.error("Error notificando chat del pedido {}", orderId, e)
+            }
+        }
+    }
+
     /** Devuelve el mensaje para el cliente o null si la transicion no le interesa. */
     private fun clientMessageFor(to: OrderStatus): ClientMessage? = when (to) {
         OrderStatus.EN_PICKING -> ClientMessage(

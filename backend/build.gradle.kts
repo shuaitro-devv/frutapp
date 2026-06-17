@@ -38,6 +38,9 @@ dependencies {
     implementation(libs.ktor.server.auth.jwt)
     implementation(libs.bcrypt)
 
+    // WebSockets (chat in-app realtime)
+    implementation(libs.ktor.server.websockets)
+
     // Storage S3-compatible (MinIO) para avatars/media
     implementation(libs.minio)
 

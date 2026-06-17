@@ -138,6 +138,24 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
                     Text("En camino", color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     Text("Pedido ${despacho.id}", color = FrutAppColors.InkMuted, fontSize = 11.sp)
                 }
+                // Boton chat con el cliente, gated por feature.chat.
+                val chatHabilitado = cl.frutapp.app.data.ConfigStore.featureEnabled("feature.chat")
+                if (chatHabilitado && esBackendReal) {
+                    Row(
+                        modifier = Modifier
+                            .clickable {
+                                navigator.push(cl.frutapp.app.navigation.shop.ChatScreen(
+                                    orderId = pedidoId,
+                                    destinatarioRol = "cliente",
+                                    tituloContraparte = "Cliente del pedido",
+                                ))
+                            }
+                            .padding(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Chat, null, tint = FrutAppColors.Brand600, modifier = Modifier.size(20.dp))
+                    }
+                }
                 Row(
                     modifier = Modifier.clickable { menuAbierto = true }.padding(6.dp),
                     verticalAlignment = Alignment.CenterVertically

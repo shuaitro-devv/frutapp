@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Remove
@@ -424,6 +425,21 @@ private fun TopBar(pedidoId: String, onBack: () -> Unit, onMenu: () -> Unit) {
             Box(modifier = Modifier.size(6.dp).background(FrutAppColors.Brand600, CircleShape))
             Spacer(Modifier.width(6.dp))
             Text("En preparación", color = FrutAppColors.Brand800, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+        }
+        // Boton de chat con el cliente, gated por feature.chat. backendId
+        // del pedido se pasa al ChatScreen como orderId.
+        val chatHabilitado = cl.frutapp.app.data.ConfigStore.featureEnabled("feature.chat")
+        if (chatHabilitado) {
+            val navigator = cafe.adriel.voyager.navigator.LocalNavigator.currentOrThrow
+            IconButton(onClick = {
+                navigator.push(cl.frutapp.app.navigation.shop.ChatScreen(
+                    orderId = pedidoId,
+                    destinatarioRol = "cliente",
+                    tituloContraparte = "Cliente del pedido",
+                ))
+            }) {
+                Icon(Icons.Filled.ChatBubble, "Chat", tint = FrutAppColors.Brand800)
+            }
         }
         IconButton(onClick = onMenu) {
             Icon(Icons.Filled.MoreVert, "Más", tint = FrutAppColors.Brand800)

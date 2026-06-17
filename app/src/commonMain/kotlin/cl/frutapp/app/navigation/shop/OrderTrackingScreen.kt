@@ -303,6 +303,68 @@ private fun Detail(
             }
         }
 
+        // Botones de chat segun estado del pedido. Gated por feature.chat.
+        // Cliente puede chatear con el picker cuando el pedido esta en
+        // armado (EN_PICKING / ESPERANDO_AJUSTE / STOCK_CONFIRMADO) y con el
+        // repartidor cuando esta EN_DESPACHO.
+        val chatHabilitado = cl.frutapp.app.data.ConfigStore.featureEnabled("feature.chat")
+        if (chatHabilitado) {
+            val canPicker = o.status in setOf("EN_PICKING", "ESPERANDO_AJUSTE_CLIENTE", "STOCK_CONFIRMADO")
+            val canRepartidor = o.status == "EN_DESPACHO"
+            if (canPicker || canRepartidor) {
+                val navigator2 = LocalNavigator.currentOrThrow
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (canPicker) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(FrutAppColors.Brand50, RoundedCornerShape(12.dp))
+                                .clickable {
+                                    navigator2.push(ChatScreen(
+                                        orderId = o.id,
+                                        destinatarioRol = "picker",
+                                        tituloContraparte = "Tu Seleccionador de Frescura"
+                                    ))
+                                }
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                "Chatear con el seleccionador",
+                                color = FrutAppColors.Brand800,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                    if (canRepartidor) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(FrutAppColors.Brand50, RoundedCornerShape(12.dp))
+                                .clickable {
+                                    navigator2.push(ChatScreen(
+                                        orderId = o.id,
+                                        destinatarioRol = "repartidor",
+                                        tituloContraparte = "Tu Repartidor"
+                                    ))
+                                }
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                "Chatear con el repartidor",
+                                color = FrutAppColors.Brand800,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         if (o.payments.isNotEmpty()) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp).background(FrutAppColors.Cream, RoundedCornerShape(14.dp)).padding(14.dp)
