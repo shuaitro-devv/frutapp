@@ -71,6 +71,16 @@ object ConfigCache {
 
     fun int(key: String, default: Int): Int = entries[key]?.value?.toIntOrNull() ?: default
     fun double(key: String, default: Double): Double = entries[key]?.value?.toDoubleOrNull() ?: default
+    fun bool(key: String, default: Boolean): Boolean =
+        entries[key]?.value?.equals("true", ignoreCase = true) ?: default
+
+    /** Feature flags: convencion `feature.<nombre>` con value BOOL. Atajo para
+     *  el patron mas comun del backend (gate en endpoints). Default = false:
+     *  si la flag NO esta en la tabla, el feature esta apagado (fail-safe).
+     *  Para activar hay que insertar la fila explicitamente (via migration o
+     *  endpoint admin) → la app vieja sin la flag no rompe, solo no muestra
+     *  el feature nuevo. */
+    fun featureEnabled(key: String): Boolean = bool(key, default = false)
 
     /** Subconjunto seguro para el cliente (GET /v1/config). */
     fun clientVisible(): Map<String, String> =

@@ -97,14 +97,17 @@ class CheckoutScreen : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        // Webpay primero: es el unico medio de pago REAL. Tarjeta y Mercado Pago
-        // siguen siendo "fake pay" (placeholder hasta integrar cada uno). Default
-        // de seleccion = 0 → Webpay, asi el flow real es el camino por defecto.
-        val metodos = listOf(
-            PayMethod("Webpay", Icons.Filled.CreditCard, "WEBPAY"),
-            PayMethod("Tarjeta de crédito/débito", Icons.Filled.CreditCard, "TARJETA"),
-            PayMethod("Mercado Pago", Icons.Filled.AccountBalanceWallet, "MERCADO_PAGO")
-        )
+        // Webpay primero (gated por feature.webpay_real): es el unico medio de
+        // pago REAL. Tarjeta y Mercado Pago siguen siendo "fake pay". Si la
+        // central apaga la flag, Webpay desaparece de la lista y queda Tarjeta
+        // como default (fake-pay legacy). Asi se puede revertir al instante
+        // si Webpay rompe en demo.
+        val webpayHabilitado = ConfigStore.boolOrDefault("feature.webpay_real", default = true)
+        val metodos = buildList {
+            if (webpayHabilitado) add(PayMethod("Webpay", Icons.Filled.CreditCard, "WEBPAY"))
+            add(PayMethod("Tarjeta de crédito/débito", Icons.Filled.CreditCard, "TARJETA"))
+            add(PayMethod("Mercado Pago", Icons.Filled.AccountBalanceWallet, "MERCADO_PAGO"))
+        }
         var metodoSel by remember { mutableStateOf(0) }
         var esRetiro by remember { mutableStateOf(false) }
         var usarCoins by remember { mutableStateOf(false) }
@@ -654,6 +657,12 @@ private fun AddressCard(
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
             )
+            // El boton GPS solo aparece si la feature flag esta activa. Default
+            // true: cuando una APK vieja todavia no recibio las flags del backend,
+            // el feature se ve (era el comportamiento previo). Si la central lo
+            // apaga, desaparece en el proximo refresh de ConfigStore.
+            val gpsHabilitado = ConfigStore.boolOrDefault("feature.gps_autocompletar", default = true)
+            if (gpsHabilitado) {
             Spacer(Modifier.height(8.dp))
             Row(
                 modifier = Modifier
@@ -701,6 +710,7 @@ private fun AddressCard(
                 Spacer(Modifier.height(4.dp))
                 Text(it, color = FrutAppColors.Error, fontSize = 11.sp)
             }
+            }  // /feature.gps_autocompletar
         }
     }
 }

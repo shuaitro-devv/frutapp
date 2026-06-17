@@ -596,12 +596,17 @@ private fun ItemCard(item: ItemPicklist, estado: EstadoItem, onToggle: () -> Uni
         Spacer(Modifier.width(8.dp))
         Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             EstadoBoxGrande(estado = estado, onClick = onToggle)
+            // Foto evidencia gated por feature.foto_evidencia. Default true para
+            // retrocompat con APKs viejas.
+            val evidenciaHabilitada = cl.frutapp.app.data.ConfigStore.boolOrDefault("feature.foto_evidencia", default = true)
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 IconButton(onClick = onSwap, modifier = Modifier.size(28.dp)) {
                     Icon(Icons.Filled.SwapHoriz, "Sustituir", tint = FrutAppColors.InkSoft, modifier = Modifier.size(18.dp))
                 }
-                IconButton(onClick = onEvidencia, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Filled.PhotoCamera, "Foto", tint = FrutAppColors.InkSoft, modifier = Modifier.size(18.dp))
+                if (evidenciaHabilitada) {
+                    IconButton(onClick = onEvidencia, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Filled.PhotoCamera, "Foto", tint = FrutAppColors.InkSoft, modifier = Modifier.size(18.dp))
+                    }
                 }
             }
         }

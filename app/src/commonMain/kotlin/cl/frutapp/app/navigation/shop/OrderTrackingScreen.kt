@@ -252,8 +252,10 @@ private fun Detail(
         }
 
         // Hero: mapa con tracking del repartidor cuando EN_DESPACHO; imagen
-        // ilustrativa para el resto de los estados.
-        if (o.status == "EN_DESPACHO") {
+        // ilustrativa para el resto de los estados. Gated por feature.mapa_repartidor.
+        // Si la flag esta apagada, mostramos siempre la imagen.
+        val mapaHabilitado = cl.frutapp.app.data.ConfigStore.boolOrDefault("feature.mapa_repartidor", default = true)
+        if (o.status == "EN_DESPACHO" && mapaHabilitado) {
             MapaRepartidor(orderId = o.id, modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 14.dp)

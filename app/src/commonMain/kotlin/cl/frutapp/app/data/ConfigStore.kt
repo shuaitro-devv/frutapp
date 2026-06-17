@@ -103,6 +103,19 @@ object ConfigStore {
     fun doubleOrDefault(key: String, default: Double): Double =
         values[key]?.toDoubleOrNull() ?: default
 
+    fun boolOrDefault(key: String, default: Boolean): Boolean =
+        values[key]?.equals("true", ignoreCase = true) ?: default
+
+    /** Feature flags: convencion `feature.<nombre>`. Default = false (fail-safe:
+     *  si la flag NO esta en cache local todavia, el feature queda apagado en la
+     *  UI hasta que ConfigStore refresque y reciba la flag). Para gatear un
+     *  feature en la UI:
+     *    `if (ConfigStore.featureEnabled("feature.chat")) { ChatBoton() }`
+     *  Y para defaultear a `true` cuando es algo que estaba antes (retrocompat
+     *  con apps viejas que no traen flags en el primer fetch):
+     *    `ConfigStore.boolOrDefault("feature.foto_evidencia", default = true)`. */
+    fun featureEnabled(key: String): Boolean = boolOrDefault(key, default = false)
+
     /** Tolerancia de peso variable (kg) antes de pedir aprobacion del cliente.
      *  Default 0.10 (10%). Usado en checkout (cliente) y pantalla de pesar
      *  (picker) para mostrar transparencia sobre el rango aceptado. */
