@@ -11,6 +11,7 @@ import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import java.util.UUID
@@ -23,16 +24,25 @@ import java.util.UUID
 class AdminOrderService(private val orders: OrderRepository) {
 
     /**
-     * Pedidos de un día (por defecto hoy en zona Chile) con métricas agregadas.
-     * [status] opcional filtra por estado; inválido se ignora (no rompe la vista).
+     * Pedidos para la cola del back office. SIN fecha -> ventana reciente (últimos
+     * [RANGO_RECIENTE_DIAS] días) para operar (un pedido de ayer EN_PICKING necesita
+     * atención hoy). CON fecha -> ese día puntual. [status] opcional filtra por
+     * estado; inválido se ignora (no rompe la vista). Métricas sobre lo devuelto.
      */
     suspend fun list(dateParam: String?, status: String?): AdminOrdersPageDto {
         val tz = TimeZone.of("America/Santiago")
-        val date = parseDateOrToday(dateParam, tz)
-        val start = date.atStartOfDayIn(tz)
-        val end = date.plus(1, DateTimeUnit.DAY).atStartOfDayIn(tz)
         // Estado inválido -> se ignora el filtro (en vez de 422); el panel manda solo válidos.
         val statusFilter = status?.takeIf { it.isNotBlank() }?.let { OrderStatus.parse(it)?.name }
+        val hoy = Clock.System.now().toLocalDateTime(tz).date
+
+        val (start, end, fecha) = if (dateParam.isNullOrBlank()) {
+            val desde = hoy.minus(RANGO_RECIENTE_DIAS, DateTimeUnit.DAY)
+            Triple(desde.atStartOfDayIn(tz), hoy.plus(1, DateTimeUnit.DAY).atStartOfDayIn(tz), hoy.toString())
+        } else {
+            val date = runCatching { LocalDate.parse(dateParam) }
+                .getOrElse { throw ValidationException("Fecha inválida (formato esperado: YYYY-MM-DD).") }
+            Triple(date.atStartOfDayIn(tz), date.plus(1, DateTimeUnit.DAY).atStartOfDayIn(tz), date.toString())
+        }
 
         val list = orders.listForAdmin(start, end, statusFilter)
         val totalDia = list.sumOf { it.total }
@@ -42,7 +52,7 @@ class AdminOrderService(private val orders: OrderRepository) {
             count = list.size,
             ticketPromedio = ticket,
             totalDia = totalDia,
-            fecha = date.toString()
+            fecha = fecha
         )
     }
 
@@ -63,9 +73,8 @@ class AdminOrderService(private val orders: OrderRepository) {
         )
     }
 
-    private fun parseDateOrToday(dateParam: String?, tz: TimeZone): LocalDate {
-        if (dateParam.isNullOrBlank()) return Clock.System.now().toLocalDateTime(tz).date
-        return runCatching { LocalDate.parse(dateParam) }
-            .getOrElse { throw ValidationException("Fecha inválida (formato esperado: YYYY-MM-DD).") }
+    private companion object {
+        /** Ventana por defecto (sin fecha) para la cola operativa reciente. */
+        const val RANGO_RECIENTE_DIAS = 14
     }
 }
