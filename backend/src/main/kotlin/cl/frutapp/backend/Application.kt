@@ -13,6 +13,7 @@ import cl.frutapp.backend.modules.auth.PasswordResetTokenRepository
 import cl.frutapp.backend.modules.auth.RefreshTokenRepository
 import cl.frutapp.backend.modules.auth.ResendEmailSender
 import cl.frutapp.backend.modules.auth.TokenService
+import cl.frutapp.backend.modules.admin.AdminOrderService
 import cl.frutapp.backend.modules.admin.AdminUserService
 import cl.frutapp.backend.modules.auth.UserRepository
 import cl.frutapp.backend.modules.catalog.CatalogRepository
@@ -192,6 +193,7 @@ fun Application.module() {
     val adminUserService = AdminUserService(
         UserRepository(), rbacRepository, PasswordResetTokenRepository(), tokenService, emailSender
     )
+    val adminOrderService = AdminOrderService(orderRepository)
     val configService = ConfigService(configRepository)
     val userEventService = UserEventService()
     val evidenceService = storageService?.let {
@@ -226,7 +228,7 @@ fun Application.module() {
     configureSecurity(jwtConfig, tokenService)
     configureRouting(
         authService, catalogService, orderService,
-        adminUserService, staffOrderService, userEventService,
+        adminUserService, adminOrderService, staffOrderService, userEventService,
         deviceTokenRepository, notificationInboxRepository, avatarService, evidenceService,
         webpayPagoService,
         ubicacionService,

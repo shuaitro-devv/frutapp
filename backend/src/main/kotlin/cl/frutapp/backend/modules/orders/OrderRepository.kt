@@ -3,6 +3,7 @@ package cl.frutapp.backend.modules.orders
 import cl.frutapp.backend.config.BusinessConfig
 import cl.frutapp.backend.db.dbQuery
 import cl.frutapp.backend.modules.auth.UsersTable
+import cl.frutapp.shared.dto.AdminOrderSummaryDto
 import cl.frutapp.shared.dto.OrderDto
 import cl.frutapp.shared.dto.OrderItemDto
 import cl.frutapp.shared.dto.OrderPaymentDto
@@ -11,6 +12,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.JoinType
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.andWhere
 import org.jetbrains.exposed.sql.insert
@@ -231,6 +233,39 @@ class OrderRepository {
                 nombre = it[UsersTable.name],
                 email = it[UsersTable.email],
                 telefono = it[UsersTable.phone]
+            )
+        }
+    }
+
+    /**
+     * Back office: pedidos de un rango (un día) con los datos de la lista del panel.
+     * Filtra por estado si viene; excluye soft-deleted; ordena por más reciente.
+     * Join a `users` para el nombre del cliente; el sector sale de la dirección.
+     */
+    suspend fun listForAdmin(start: Instant, end: Instant, status: String?): List<AdminOrderSummaryDto> = dbQuery {
+        val q = OrdersTable
+            .join(UsersTable, JoinType.INNER, OrdersTable.userId, UsersTable.id)
+            .selectAll()
+            .where {
+                (OrdersTable.createdAt greaterEq start) and
+                    (OrdersTable.createdAt less end) and
+                    OrdersTable.deletedAt.isNull()
+            }
+        if (status != null) q.andWhere { OrdersTable.status eq status }
+        q.orderBy(OrdersTable.createdAt to SortOrder.DESC).map { row ->
+            val id = row[OrdersTable.id]
+            AdminOrderSummaryDto(
+                id = id.toString(),
+                numero = row[OrdersTable.numero],
+                status = row[OrdersTable.status],
+                paymentStatus = row[OrdersTable.paymentStatus],
+                total = row[OrdersTable.totalFinal] ?: row[OrdersTable.totalEstimado],
+                itemsCount = OrderItemsTable.selectAll()
+                    .where { OrderItemsTable.orderId eq id }.count().toInt(),
+                createdAt = row[OrdersTable.createdAt].toString(),
+                clienteNombre = row[UsersTable.name],
+                sector = sectorFromAddress(row[OrdersTable.direccion]),
+                fulfillmentType = row[OrdersTable.fulfillmentType],
             )
         }
     }
