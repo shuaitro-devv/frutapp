@@ -4,6 +4,7 @@ import cl.frutapp.backend.error.NotFoundException
 import cl.frutapp.backend.modules.rbac.hasPermission
 import cl.frutapp.backend.plugins.JWT_AUTH
 import cl.frutapp.shared.dto.SetProductAvailabilityRequest
+import cl.frutapp.shared.dto.SetProductPriceRequest
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
 import io.ktor.server.auth.authenticate
@@ -41,6 +42,16 @@ fun Route.catalogRoutes(service: CatalogService) {
             val id = call.parameters["id"].orEmpty()
             val body = call.receive<SetProductAvailabilityRequest>()
             call.respond(service.setAvailability(id, body.disponible))
+        }
+
+        // Back office: editar el precio fijado del producto. Gated por `catalog:write`.
+        put("/v1/admin/products/{id}/price") {
+            if (!call.hasPermission("catalog:write")) {
+                call.respond(HttpStatusCode.Forbidden); return@put
+            }
+            val id = call.parameters["id"].orEmpty()
+            val body = call.receive<SetProductPriceRequest>()
+            call.respond(service.setPrice(id, body.priceClp))
         }
 
         // Picker pide productos similares para mostrar alternativas reales en el

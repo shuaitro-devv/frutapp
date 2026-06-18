@@ -37,4 +37,14 @@ class CatalogService(private val repo: CatalogRepository) {
         if (updated == 0) throw NotFoundException("Producto no encontrado.")
         return repo.findProduct(uuid) ?: throw NotFoundException("Producto no encontrado.")
     }
+
+    /** El back office edita el precio fijado del producto. Valida > 0; 404 si no existe. */
+    suspend fun setPrice(idRaw: String, priceClp: Int): ProductDto {
+        if (priceClp <= 0) throw ValidationException("El precio debe ser mayor a 0.")
+        val uuid = runCatching { UUID.fromString(idRaw) }.getOrNull()
+            ?: throw ValidationException("Id de producto inválido.")
+        val updated = repo.setPrice(uuid, priceClp)
+        if (updated == 0) throw NotFoundException("Producto no encontrado.")
+        return repo.findProduct(uuid) ?: throw NotFoundException("Producto no encontrado.")
+    }
 }

@@ -33,3 +33,9 @@ data class ProductDto(
 data class SetProductAvailabilityRequest(
     val disponible: Boolean
 )
+
+/** Request del back office para editar el precio fijado de un producto. */
+@Serializable
+data class SetProductPriceRequest(
+    val priceClp: Int
+)

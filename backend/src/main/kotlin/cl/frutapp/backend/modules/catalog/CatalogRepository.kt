@@ -111,4 +111,14 @@ class CatalogRepository {
             it[ProductTable.updatedAt] = kotlinx.datetime.Clock.System.now()
         }
     }
+
+    /** Edita el precio del producto. Devuelve filas afectadas: 0 = no existe / soft-deleted. */
+    suspend fun setPrice(id: UUID, priceClp: Int): Int = dbQuery {
+        ProductTable.update({
+            (ProductTable.id eq id) and ProductTable.deletedAt.isNull()
+        }) {
+            it[ProductTable.priceClp] = priceClp
+            it[ProductTable.updatedAt] = kotlinx.datetime.Clock.System.now()
+        }
+    }
 }
