@@ -5,6 +5,7 @@ import cl.frutapp.backend.error.ValidationException
 import cl.frutapp.shared.dto.CategoryDto
 import cl.frutapp.shared.dto.CreateProductRequest
 import cl.frutapp.shared.dto.ProductDto
+import java.text.Normalizer
 import java.util.UUID
 
 class CatalogService(private val repo: CatalogRepository) {
@@ -83,8 +84,8 @@ class CatalogService(private val repo: CatalogRepository) {
     }
 
     private fun slugify(name: String): String {
-        val sinAcentos = java.text.Normalizer
-            .normalize(name.trim().lowercase(), java.text.Normalizer.Form.NFD)
+        val sinAcentos = Normalizer
+            .normalize(name.trim().lowercase(), Normalizer.Form.NFD)
             .replace(Regex("\\p{M}+"), "")
         return sinAcentos.replace(Regex("[^a-z0-9]+"), "-").trim('-').ifBlank { "producto" }
     }
