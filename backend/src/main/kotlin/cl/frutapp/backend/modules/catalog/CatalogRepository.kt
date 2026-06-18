@@ -7,6 +7,7 @@ import org.jetbrains.exposed.sql.JoinType
 import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.lowerCase
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
@@ -120,5 +121,55 @@ class CatalogRepository {
             it[ProductTable.priceClp] = priceClp
             it[ProductTable.updatedAt] = kotlinx.datetime.Clock.System.now()
         }
+    }
+
+    /** ¿Existe la categoría? Para validar el alta antes de insertar (evita FK violation). */
+    suspend fun categoryExists(id: UUID): Boolean = dbQuery {
+        CategoryTable.selectAll().where { CategoryTable.id eq id }.limit(1).any()
+    }
+
+    /** ¿Hay un producto con ese slug? Para garantizar slug único al crear. */
+    suspend fun slugExists(slug: String): Boolean = dbQuery {
+        ProductTable.selectAll().where { ProductTable.slug eq slug }.limit(1).any()
+    }
+
+    /** Inserta un producto nuevo (active=true). El `slug` debe venir ya resuelto único. */
+    suspend fun createProduct(
+        categoryId: UUID,
+        name: String,
+        slug: String,
+        description: String,
+        priceClp: Int,
+        unit: String,
+        imageKey: String,
+        disponible: Boolean
+    ): ProductDto = dbQuery {
+        val newId = UUID.randomUUID()
+        val now = kotlinx.datetime.Clock.System.now()
+        ProductTable.insert {
+            it[id] = newId
+            it[ProductTable.categoryId] = categoryId
+            it[ProductTable.name] = name
+            it[ProductTable.slug] = slug
+            it[ProductTable.description] = description
+            it[ProductTable.priceClp] = priceClp
+            it[ProductTable.unit] = unit
+            it[ProductTable.imageKey] = imageKey
+            it[active] = true
+            it[ProductTable.disponible] = disponible
+            it[createdAt] = now
+            it[updatedAt] = now
+        }
+        ProductDto(
+            id = newId.toString(),
+            categoryId = categoryId.toString(),
+            name = name,
+            slug = slug,
+            description = description,
+            priceClp = priceClp,
+            unit = unit,
+            imageKey = imageKey,
+            disponible = disponible
+        )
     }
 }

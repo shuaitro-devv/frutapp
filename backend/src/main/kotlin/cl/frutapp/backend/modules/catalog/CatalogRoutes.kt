@@ -3,6 +3,7 @@ package cl.frutapp.backend.modules.catalog
 import cl.frutapp.backend.error.NotFoundException
 import cl.frutapp.backend.modules.rbac.hasPermission
 import cl.frutapp.backend.plugins.JWT_AUTH
+import cl.frutapp.shared.dto.CreateProductRequest
 import cl.frutapp.shared.dto.SetProductAvailabilityRequest
 import cl.frutapp.shared.dto.SetProductPriceRequest
 import io.ktor.http.HttpStatusCode
@@ -12,6 +13,7 @@ import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 
@@ -52,6 +54,14 @@ fun Route.catalogRoutes(service: CatalogService) {
             val id = call.parameters["id"].orEmpty()
             val body = call.receive<SetProductPriceRequest>()
             call.respond(service.setPrice(id, body.priceClp))
+        }
+
+        // Back office: alta de producto en el catálogo. Gated por `catalog:write`.
+        post("/v1/admin/products") {
+            if (!call.hasPermission("catalog:write")) {
+                call.respond(HttpStatusCode.Forbidden); return@post
+            }
+            call.respond(HttpStatusCode.Created, service.createProduct(call.receive<CreateProductRequest>()))
         }
 
         // Picker pide productos similares para mostrar alternativas reales en el

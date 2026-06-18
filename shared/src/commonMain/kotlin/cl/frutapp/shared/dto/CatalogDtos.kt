@@ -39,3 +39,15 @@ data class SetProductAvailabilityRequest(
 data class SetProductPriceRequest(
     val priceClp: Int
 )
+
+/** Request del back office para dar de alta un producto en el catálogo. */
+@Serializable
+data class CreateProductRequest(
+    val name: String,
+    val categoryId: String,
+    val description: String? = null,
+    val priceClp: Int,
+    val unit: String,
+    val imageKey: String? = null,
+    val disponible: Boolean = true
+)

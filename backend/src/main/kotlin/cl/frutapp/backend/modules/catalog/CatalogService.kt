@@ -3,6 +3,7 @@ package cl.frutapp.backend.modules.catalog
 import cl.frutapp.backend.error.NotFoundException
 import cl.frutapp.backend.error.ValidationException
 import cl.frutapp.shared.dto.CategoryDto
+import cl.frutapp.shared.dto.CreateProductRequest
 import cl.frutapp.shared.dto.ProductDto
 import java.util.UUID
 
@@ -46,5 +47,45 @@ class CatalogService(private val repo: CatalogRepository) {
         val updated = repo.setPrice(uuid, priceClp)
         if (updated == 0) throw NotFoundException("Producto no encontrado.")
         return repo.findProduct(uuid) ?: throw NotFoundException("Producto no encontrado.")
+    }
+
+    /** Alta de producto desde el back office. Valida campos + categoría y genera slug único. */
+    suspend fun createProduct(req: CreateProductRequest): ProductDto {
+        if (req.name.isBlank()) throw ValidationException("El nombre es obligatorio.")
+        if (req.priceClp <= 0) throw ValidationException("El precio debe ser mayor a 0.")
+        if (req.unit.isBlank()) throw ValidationException("La unidad es obligatoria.")
+        val categoryId = runCatching { UUID.fromString(req.categoryId) }.getOrNull()
+            ?: throw ValidationException("Categoría inválida.")
+        if (!repo.categoryExists(categoryId)) throw ValidationException("La categoría no existe.")
+
+        val slug = uniqueSlug(slugify(req.name))
+        val imageKey = req.imageKey?.trim()?.ifBlank { null } ?: slug
+        return repo.createProduct(
+            categoryId = categoryId,
+            name = req.name.trim(),
+            slug = slug,
+            description = req.description?.trim().orEmpty(),
+            priceClp = req.priceClp,
+            unit = req.unit.trim(),
+            imageKey = imageKey,
+            disponible = req.disponible
+        )
+    }
+
+    private suspend fun uniqueSlug(base: String): String {
+        var slug = base
+        var n = 2
+        while (repo.slugExists(slug)) {
+            slug = "$base-$n"
+            n++
+        }
+        return slug
+    }
+
+    private fun slugify(name: String): String {
+        val sinAcentos = java.text.Normalizer
+            .normalize(name.trim().lowercase(), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{M}+"), "")
+        return sinAcentos.replace(Regex("[^a-z0-9]+"), "-").trim('-').ifBlank { "producto" }
     }
 }
