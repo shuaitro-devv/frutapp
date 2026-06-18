@@ -10,6 +10,7 @@ import io.ktor.server.auth.authenticate
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 
@@ -17,6 +18,13 @@ import io.ktor.server.routing.route
 fun Route.adminUserRoutes(service: AdminUserService) {
     authenticate(JWT_AUTH) {
         route("/v1/admin/users") {
+            // GET /v1/admin/users -> listado de equipo (staff + roles + estado). Gated por user:read.
+            get {
+                if (!call.hasPermission("user:read")) {
+                    call.respond(HttpStatusCode.Forbidden); return@get
+                }
+                call.respond(service.list())
+            }
             post {
                 if (!call.hasPermission("user:create")) {
                     call.respond(HttpStatusCode.Forbidden); return@post

@@ -27,3 +27,21 @@ data class AdminUserDto(
     val phone: String? = null,
     val roles: List<String>
 )
+
+/** Ítem del listado de equipo: usuario + roles + estado de activación. */
+@Serializable
+data class AdminUserListItemDto(
+    val id: String,
+    val name: String,
+    val email: String,
+    val phone: String? = null,
+    val roles: List<String>,
+    /** "verificado" = ya fijó su clave; "pendiente" = invitado, aún sin activar. */
+    val estado: String
+)
+
+/** Listado de usuarios de equipo (back office). */
+@Serializable
+data class AdminUserListResponseDto(
+    val users: List<AdminUserListItemDto>
+)

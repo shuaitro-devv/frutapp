@@ -44,6 +44,19 @@ class PasswordResetTokenRepository {
         } == 1
     }
 
+    /** True si el usuario tiene un código vigente (no usado, no vencido). Lo usa el
+     *  back office para marcar "invitación pendiente" en el listado de equipo. */
+    suspend fun hasActiveToken(userId: UUID): Boolean = dbQuery {
+        PasswordResetTokensTable
+            .selectAll().where {
+                (PasswordResetTokensTable.userId eq userId) and
+                    PasswordResetTokensTable.usedAt.isNull() and
+                    (PasswordResetTokensTable.expiresAt greater Clock.System.now())
+            }
+            .limit(1)
+            .any()
+    }
+
     /** Invalida códigos previos del usuario (al pedir uno nuevo). */
     suspend fun invalidateAllForUser(userId: UUID) = dbQuery {
         PasswordResetTokensTable.update({

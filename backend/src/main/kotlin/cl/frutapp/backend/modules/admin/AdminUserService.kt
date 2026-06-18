@@ -13,6 +13,8 @@ import cl.frutapp.backend.modules.auth.UserRow
 import cl.frutapp.backend.modules.rbac.RbacRepository
 import cl.frutapp.shared.dto.AdminCreateUserRequest
 import cl.frutapp.shared.dto.AdminUserDto
+import cl.frutapp.shared.dto.AdminUserListItemDto
+import cl.frutapp.shared.dto.AdminUserListResponseDto
 import cl.frutapp.shared.dto.SetRolesRequest
 import kotlinx.datetime.Clock
 import org.slf4j.LoggerFactory
@@ -63,6 +65,19 @@ class AdminUserService(
         req.add.forEach { rbac.assignRole(id, it) }
         req.remove.forEach { rbac.revokeRole(id, it) }
         return dto(user.id, user.name, user.email, user.phone)
+    }
+
+    /** Listado de equipo: usuarios con rol elevado (staff) + sus roles + estado de
+     *  activación (pendiente = tiene invitación vigente sin usar). */
+    suspend fun list(): AdminUserListResponseDto {
+        val items = rbac.staffUserIds().mapNotNull { id ->
+            val user = users.findById(id) ?: return@mapNotNull null
+            val estado = if (passwordResetTokens.hasActiveToken(id)) "pendiente" else "verificado"
+            AdminUserListItemDto(
+                user.id.toString(), user.name, user.email, user.phone, rbac.rolesOf(id), estado
+            )
+        }.sortedBy { it.name }
+        return AdminUserListResponseDto(items)
     }
 
     private suspend fun dto(id: UUID, name: String, email: String, phone: String?): AdminUserDto =

@@ -43,6 +43,16 @@ class RbacRepository {
         RoleTable.selectAll().map { it[RoleTable.code] }.toSet()
     }
 
+    /** Ids de usuarios con al menos un rol elevado (staff: cualquiera que NO sea
+     *  solo 'cliente'). Para el listado de equipo del back office. */
+    suspend fun staffUserIds(): List<UUID> = dbQuery {
+        UserRoleTable
+            .join(RoleTable, JoinType.INNER, onColumn = UserRoleTable.roleId, otherColumn = RoleTable.id)
+            .selectAll().where { RoleTable.code neq "cliente" }
+            .map { it[UserRoleTable.userId] }
+            .distinct()
+    }
+
     /** roleCode -> set de permisos (para [PermissionCache]). */
     suspend fun loadRolePermissions(): Map<String, Set<String>> = dbQuery {
         RolePermissionTable
