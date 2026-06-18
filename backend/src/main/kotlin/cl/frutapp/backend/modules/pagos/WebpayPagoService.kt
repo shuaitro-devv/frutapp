@@ -44,6 +44,11 @@ class WebpayPagoService(
     private val orders: OrderRepository,
     private val events: UserEventService,
     private val cfg: WebpayConfig,
+    /** Notifica a los pickers de la location del pedido que hay uno nuevo
+     *  listo para tomar. Se dispara DESPUES de confirmar el pago, no al crear:
+     *  si la app del cliente crea el pedido y queda esperando Webpay, los
+     *  pickers no deben verlo hasta que Transbank apruebe. Null en tests. */
+    private val onOrderPaid: ((orderId: UUID, locationId: UUID, numero: String) -> Unit)? = null,
 ) {
     private val logger = LoggerFactory.getLogger(WebpayPagoService::class.java)
 
@@ -247,6 +252,23 @@ class WebpayPagoService(
                 put("ultimosDigitosTarjeta", JsonPrimitive(confirmar.ultimosDigitosTarjeta ?: ""))
             },
         )
+
+        // Notificar pickers: ahora que el pedido esta PAGADO de verdad, los
+        // pickers de la location pueden tomarlo. En OrderService.create
+        // saltamos este hook para pedidos esperandoWebpay (sino los pickers
+        // recibian el push antes de que Transbank confirmara y el flujo
+        // arrancaba sin pago real).
+        val onPaid = onOrderPaid
+        if (onPaid != null) {
+            runCatching {
+                orders.findNumeroAndLocation(tx.orderId)?.let { (numero, locId) ->
+                    if (locId != null) onPaid(tx.orderId, locId, numero)
+                }
+            }.onFailure { e ->
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                logger.warn("Webpay.retorno: fallo al notificar pickers para pedido ${tx.orderId}", e)
+            }
+        }
         return RetornoResult.Aprobada
     }
 

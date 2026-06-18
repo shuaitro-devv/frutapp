@@ -181,6 +181,11 @@ class PickerPicklistScreen(
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
             TopBar(
                 pedidoId = data.pedidoId,
+                // backendOrderId = el UUID real (lo usa el chat para pegar al
+                // endpoint). data.pedidoId es el numero legible (#FRU-XXX) y
+                // el backend lo rechaza con 404. Solo se pasa en modo backend
+                // real; en mockup queda null y el boton chat se oculta solo.
+                backendOrderId = if (esBackendReal) pedidoId else null,
                 onBack = { navigator.pop() },
                 onMenu = { opcionesAbierto = true }
             )
@@ -401,7 +406,7 @@ class PickerPicklistScreen(
 internal enum class ModalPicklist { PESO, SUSTITUCION, EVIDENCIA }
 
 @Composable
-private fun TopBar(pedidoId: String, onBack: () -> Unit, onMenu: () -> Unit) {
+private fun TopBar(pedidoId: String, backendOrderId: String?, onBack: () -> Unit, onMenu: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 6.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -426,14 +431,16 @@ private fun TopBar(pedidoId: String, onBack: () -> Unit, onMenu: () -> Unit) {
             Spacer(Modifier.width(6.dp))
             Text("En preparación", color = FrutAppColors.Brand800, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
         }
-        // Boton de chat con el cliente, gated por feature.chat. backendId
-        // del pedido se pasa al ChatScreen como orderId.
+        // Boton chat con el cliente, gated por feature.chat. Solo aparece en
+        // modo backend real (mock no tiene endpoint que pegarle). El orderId
+        // que mandamos al ChatScreen es el UUID, NO el numero legible — el
+        // backend valida el path como UUID.
         val chatHabilitado = cl.frutapp.app.data.ConfigStore.featureEnabled("feature.chat")
-        if (chatHabilitado) {
+        if (chatHabilitado && backendOrderId != null) {
             val navigator = cafe.adriel.voyager.navigator.LocalNavigator.currentOrThrow
             IconButton(onClick = {
                 navigator.push(cl.frutapp.app.navigation.shop.ChatScreen(
-                    orderId = pedidoId,
+                    orderId = backendOrderId,
                     destinatarioRol = "cliente",
                     tituloContraparte = "Cliente del pedido",
                 ))

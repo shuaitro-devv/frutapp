@@ -212,6 +212,12 @@ fun Application.module() {
         orders = orderRepository,
         events = userEventService,
         cfg = webpayConfig,
+        // Tras confirmar el pago, recien ahi avisamos a los pickers que el
+        // pedido esta en cola (en OrderService.create lo saltamos para
+        // pedidos esperandoWebpay).
+        onOrderPaid = { id, locId, numero ->
+            notificationDispatcher.onOrderReadyForPickers(id, locId, numero)
+        },
     )
     val ubicacionService = cl.frutapp.backend.modules.ubicacion.UbicacionService(
         cl.frutapp.backend.modules.ubicacion.UbicacionRepository()

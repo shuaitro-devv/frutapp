@@ -175,7 +175,12 @@ class OrderService(
         // Lookup minimo del pickup_location_id (NewOrder NO lo expone aca; el
         // repo lo asigno con su default). Si el pedido no tiene location todavia
         // (legacy / migration en curso) el hook se descarta silenciosamente.
-        if (onOrderCreated != null) {
+        //
+        // IMPORTANTE: si el pedido espera Webpay, NO disparamos el push aca.
+        // El pedido esta en CREADO (no PAGADO) y los pickers no deberian verlo
+        // ni tomarlo hasta que Transbank confirme el pago. WebpayPagoService.
+        // confirmarRetorno hace la transicion a PAGADO y dispara el push ahi.
+        if (onOrderCreated != null && !esperandoWebpay) {
             orders.findNumeroAndLocation(id)?.let { (numeroDb, locId) ->
                 if (locId != null) onOrderCreated.invoke(id, locId, numeroDb)
             }
