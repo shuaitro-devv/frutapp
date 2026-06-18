@@ -435,7 +435,7 @@ private fun TopBar(pedidoId: String, backendOrderId: String?, onBack: () -> Unit
         // modo backend real (mock no tiene endpoint que pegarle). El orderId
         // que mandamos al ChatScreen es el UUID, NO el numero legible — el
         // backend valida el path como UUID.
-        val chatHabilitado = cl.frutapp.app.data.ConfigStore.featureEnabled("feature.chat")
+        val chatHabilitado = cl.frutapp.app.data.ConfigStore.boolOrDefault("feature.chat", default = true)
         if (chatHabilitado && backendOrderId != null) {
             val navigator = cafe.adriel.voyager.navigator.LocalNavigator.currentOrThrow
             IconButton(onClick = {

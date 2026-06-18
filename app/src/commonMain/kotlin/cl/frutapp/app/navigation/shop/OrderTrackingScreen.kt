@@ -317,7 +317,11 @@ private fun Detail(
         // Cliente puede chatear con el picker cuando el pedido esta en
         // armado (EN_PICKING / ESPERANDO_AJUSTE / STOCK_CONFIRMADO) y con el
         // repartidor cuando esta EN_DESPACHO.
-        val chatHabilitado = cl.frutapp.app.data.ConfigStore.featureEnabled("feature.chat")
+        // Default = true (mismo patron que el resto de features actuales).
+        // featureEnabled() defaultea a false y eso oculta el boton si la
+        // cache local del cliente todavia no recibio la flag — bug
+        // reportado por el usuario al no ver el chat en tracking.
+        val chatHabilitado = cl.frutapp.app.data.ConfigStore.boolOrDefault("feature.chat", default = true)
         if (chatHabilitado) {
             val canPicker = o.status in setOf("EN_PICKING", "ESPERANDO_AJUSTE_CLIENTE", "STOCK_CONFIRMADO")
             val canRepartidor = o.status == "EN_DESPACHO"
