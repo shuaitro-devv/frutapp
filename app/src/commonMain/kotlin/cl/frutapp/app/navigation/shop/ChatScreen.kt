@@ -140,7 +140,7 @@ class ChatScreen(
                 if (mensajes.isEmpty() && error == null) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
-                            "Aún no hay mensajes.\nEscribí el primero abajo.",
+                            "Aún no hay mensajes.\nEscribe el primero abajo.",
                             color = FrutAppColors.InkSoft,
                             fontSize = 13.sp,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center

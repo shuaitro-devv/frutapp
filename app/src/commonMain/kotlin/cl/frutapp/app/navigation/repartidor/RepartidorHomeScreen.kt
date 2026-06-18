@@ -174,7 +174,7 @@ private fun ProximamentePlaceholder(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Estamos preparando la herramienta del repartidor.\nVolvé en unos días.",
+                text = "Estamos preparando la herramienta del repartidor.\nVuelve en unos días.",
                 color = FrutAppColors.InkSoft,
                 fontSize = 13.sp,
                 textAlign = TextAlign.Center,

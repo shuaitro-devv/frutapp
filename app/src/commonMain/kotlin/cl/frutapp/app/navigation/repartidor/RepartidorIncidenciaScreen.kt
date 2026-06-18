@@ -68,7 +68,7 @@ class RepartidorIncidenciaScreen(private val pedidoId: String) : Screen {
                 .onFailure { e ->
                     if (e is kotlinx.coroutines.CancellationException) throw e
                     ErrorReporter.report(screen = "RepartidorIncidencia", action = "fetch_detalle", error = e)
-                    showToast("No pudimos cargar el pedido. Volvé a intentarlo.")
+                    showToast("No pudimos cargar el pedido. Vuelve a intentarlo.")
                     navigator.pop()
                 }
         }

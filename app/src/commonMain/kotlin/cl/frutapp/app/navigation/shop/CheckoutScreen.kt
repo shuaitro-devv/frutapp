@@ -681,7 +681,7 @@ private fun AddressCard(
                             }
                             val coord = location.obtenerActual()
                             if (coord == null) {
-                                gpsError = "No pudimos leer tu ubicación. Probá afuera."
+                                gpsError = "No pudimos leer tu ubicación. Prueba afuera."
                                 gpsLoading = false
                                 return@launch
                             }

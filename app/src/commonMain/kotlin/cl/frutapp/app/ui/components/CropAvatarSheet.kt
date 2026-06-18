@@ -141,7 +141,7 @@ private fun CropContent(
                         Icon(Icons.Filled.Close, contentDescription = "Cerrar", tint = Color.White)
                     }
                     Text(
-                        "Ajustá tu foto",
+                        "Ajusta tu foto",
                         color = Color.White,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold,

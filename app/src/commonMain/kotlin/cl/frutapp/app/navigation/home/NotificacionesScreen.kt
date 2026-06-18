@@ -85,7 +85,7 @@ class NotificacionesScreen : Screen {
                 .onFailure { e ->
                     if (e is kotlinx.coroutines.CancellationException) throw e
                     ErrorReporter.report(screen = "Notificaciones", action = "list", error = e)
-                    errorMsg = "No pudimos cargar tus notificaciones. Tocá para reintentar."
+                    errorMsg = "No pudimos cargar tus notificaciones. Toca para reintentar."
                     loading = false
                 }
         }

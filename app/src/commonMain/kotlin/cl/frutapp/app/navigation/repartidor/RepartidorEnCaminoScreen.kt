@@ -89,7 +89,7 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
                     ErrorReporter.report(screen = "RepartidorEnCamino", action = "fetch_detalle", error = e)
                     // No caer al mock: el detalle es crítico (cliente, dirección).
                     // Mejor avisar y pop a En ruta para reintentar.
-                    showToast("No pudimos cargar el despacho. Volvé a intentarlo.")
+                    showToast("No pudimos cargar el despacho. Vuelve a intentarlo.")
                     navigator.pop()
                 }
         }

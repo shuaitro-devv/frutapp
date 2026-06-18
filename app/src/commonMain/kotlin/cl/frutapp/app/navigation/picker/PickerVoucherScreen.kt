@@ -94,7 +94,7 @@ class PickerVoucherScreen(
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = "Pegá este voucher a la caja antes del handoff a despacho.",
+                    text = "Pega este voucher a la caja antes del handoff a despacho.",
                     color = FrutAppColors.InkSoft,
                     fontSize = 12.sp,
                     textAlign = TextAlign.Center,

@@ -80,7 +80,7 @@ fun RepartidorItemsSheet(
             .onFailure { e ->
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 ErrorReporter.report(screen = "RepartidorItemsSheet", action = "fetch_detalle", error = e)
-                showToast("No pudimos cargar los items. Volvé a intentarlo.")
+                showToast("No pudimos cargar los items. Vuelve a intentarlo.")
                 onCerrar()
             }
     }
