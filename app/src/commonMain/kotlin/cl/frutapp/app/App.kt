@@ -114,6 +114,25 @@ fun App() {
                             status == "ESPERANDO_AJUSTE_CLIENTE" -> AjusteAprobacionScreen(orderId)
                             else -> OrderTrackingScreen(orderId)
                         }
+                        "chat_mensaje" -> when {
+                            // Staff abre ChatScreen directo al cliente. Para el
+                            // cliente vamos al tracking (ahi elige picker o
+                            // repartidor segun corresponda al estado del
+                            // pedido — no resolvemos el destinatario aca
+                            // porque no sabemos el estado actual).
+                            esPicker -> cl.frutapp.app.navigation.shop.ChatScreen(
+                                orderId = orderId,
+                                destinatarioRol = "cliente",
+                                tituloContraparte = "Cliente del pedido",
+                            )
+                            esRepartidor -> cl.frutapp.app.navigation.shop.ChatScreen(
+                                orderId = orderId,
+                                destinatarioRol = "cliente",
+                                tituloContraparte = "Cliente del pedido",
+                            )
+                            esCliente -> OrderTrackingScreen(orderId)
+                            else -> fallback
+                        }
                         else -> fallback
                     }
                     navigator.push(destino)

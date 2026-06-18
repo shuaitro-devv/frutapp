@@ -107,6 +107,16 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
             }
         }
 
+        // Refrescar feature flags al abrir el tracking: si la central activo
+        // chat / mapa / etc despues de que el cliente abrio la app, el TTL
+        // de 30 min del ConfigStore no nos sirve. Esta pantalla es uno de
+        // los puntos de entrada principales del cliente, asi que aprovechamos
+        // para tirar un refresh y que los botones del chat / mapa aparezcan
+        // sin que el cliente cierre la app.
+        LaunchedEffect(Unit) {
+            runCatching { cl.frutapp.app.data.ConfigStore.refreshNow() }
+        }
+
         // Evidencias del picker: silencioso si falla (no es info critica).
         // Re-fetch cada 30s para que las fotos aparezcan a medida que el picker
         // las sube en otro lado mientras el cliente mira el tracking.
