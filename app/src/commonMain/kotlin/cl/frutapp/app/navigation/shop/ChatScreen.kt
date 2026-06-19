@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -143,6 +143,17 @@ class ChatScreen(
                 delay(1500L)
             }
         }
+        // Trigger throttleado para marcar leidos al recibir mensajes mientras
+        // la pantalla esta abierta. Sin esto, los ticks azules del autor solo
+        // aparecen al cerrar/reabrir el chat. Mismo patron conflate: 1 call al
+        // backend cada ~600ms aunque lleguen muchos mensajes seguidos.
+        val leerTrigger = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
+        LaunchedEffect(Unit) {
+            leerTrigger.conflate().collect {
+                runCatching { api.marcarLeidos(orderId) }
+                delay(600L)
+            }
+        }
 
         val selector = rememberSelectorImagenes { bytes ->
             imagenPendiente = bytes
@@ -171,6 +182,15 @@ class ChatScreen(
                         if (mensajes.none { it.id == nuevo.id }) {
                             mensajes = mensajes + nuevo
                         }
+                        // Si el mensaje viene del OTRO lado y estoy en la
+                        // pantalla, marcar leido para cerrar el ciclo del tick
+                        // azul del autor (sin esperar que el user cierre/abra).
+                        val esMioMensajeNuevo = if (destinatarioRol == "cliente") {
+                            nuevo.autorRol != "cliente"
+                        } else {
+                            nuevo.autorRol == "cliente"
+                        }
+                        if (!esMioMensajeNuevo) leerTrigger.tryEmit(Unit)
                     }
                     WsChatPush.TYPE_TYPING -> {
                         // Solo me importa si el que tipea NO soy yo (el server
@@ -253,7 +273,14 @@ class ChatScreen(
                         modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(mensajes, key = { it.id }) { m ->
+                        itemsIndexed(mensajes, key = { _, m -> m.id }) { idx, m ->
+                            // Separador de dia cuando el mensaje arranca un dia
+                            // distinto al anterior (o es el primero). Mismo
+                            // patron que WhatsApp / Telegram.
+                            val anterior = mensajes.getOrNull(idx - 1)
+                            if (anterior == null || diaDiferente(anterior.createdAt, m.createdAt)) {
+                                SeparadorDia(m.createdAt)
+                            }
                             // Es mio si lo envie como el rol que se mostro
                             // como autor (cliente si destinatarioRol != cliente,
                             // o staff si destinatarioRol == cliente).
@@ -603,6 +630,55 @@ private fun horaCorta(iso: String): String = runCatching {
     val m = local.minute.toString().padStart(2, '0')
     "$h:$m"
 }.getOrDefault("")
+
+/** True si [a] y [b] caen en dias calendario distintos (zona local). Si alguno
+ *  no parsea, devuelve true para que el separador aparezca (mejor mostrar de
+ *  mas que esconder cambios de dia). */
+private fun diaDiferente(a: String, b: String): Boolean {
+    val da = runCatching { Instant.parse(a).toLocalDateTime(TimeZone.currentSystemDefault()).date }.getOrNull()
+    val db = runCatching { Instant.parse(b).toLocalDateTime(TimeZone.currentSystemDefault()).date }.getOrNull()
+    if (da == null || db == null) return true
+    return da != db
+}
+
+/** Etiqueta del dia para el separador. "Hoy" / "Ayer" / "dd de MMM" en es-CL. */
+private fun etiquetaDia(iso: String): String {
+    val instant = runCatching { Instant.parse(iso) }.getOrNull() ?: return ""
+    val tz = TimeZone.currentSystemDefault()
+    val fecha = instant.toLocalDateTime(tz).date
+    val hoy = kotlinx.datetime.Clock.System.now().toLocalDateTime(tz).date
+    val diff = fecha.toEpochDays() - hoy.toEpochDays()
+    return when (diff) {
+        0 -> "Hoy"
+        -1 -> "Ayer"
+        else -> "${fecha.dayOfMonth} de ${mesCorto(fecha.monthNumber)}"
+    }
+}
+
+private fun mesCorto(n: Int): String = when (n) {
+    1 -> "ene"; 2 -> "feb"; 3 -> "mar"; 4 -> "abr"; 5 -> "may"; 6 -> "jun"
+    7 -> "jul"; 8 -> "ago"; 9 -> "sep"; 10 -> "oct"; 11 -> "nov"; 12 -> "dic"
+    else -> ""
+}
+
+/** Chip centrado con la etiqueta del dia, entre grupos de mensajes. */
+@Composable
+private fun SeparadorDia(iso: String) {
+    Box(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            etiquetaDia(iso),
+            color = FrutAppColors.InkMuted,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .background(FrutAppColors.Brand50, RoundedCornerShape(10.dp))
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+        )
+    }
+}
 
 /** Inicial de avatar: primero el rol (si el titulo es generico/vacio),
  *  si no la primera letra del titulo. Asi cliente abriendo chat con picker
