@@ -15,7 +15,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
@@ -39,10 +41,16 @@ class ChatWsClient(
 ) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
     private val _frames = MutableSharedFlow<WsChatPush>(replay = 0, extraBufferCapacity = 64)
+    private val _conectado = MutableStateFlow(false)
 
     /** Flow unificado de frames recibidos por el WS. La pantalla filtra por
      *  [WsChatPush.type] para distinguir mensaje / typing / leido. */
     val frames: SharedFlow<WsChatPush> = _frames
+
+    /** Estado de la conexion WS: true cuando hay sesion activa, false durante
+     *  el primer connect / reconexion / red caida. La pantalla lo usa para
+     *  mostrar "Conectando..." en el header cuando esta cortado. */
+    val conectado: StateFlow<Boolean> = _conectado
 
     /** Compat alias: emite solo los frames de tipo "mensaje" como ChatMensajeDto.
      *  Util si algun caller solo quiere mensajes y no eventos efimeros. */
@@ -70,6 +78,7 @@ class ChatWsClient(
                     client.webSocket({ url(wsUrl) }) {
                         backoffMs = 1_000L  // conexion exitosa → reset backoff
                         sesionActiva = this
+                        _conectado.value = true
                         try {
                             for (frame in incoming) {
                                 if (frame !is Frame.Text) continue
@@ -80,6 +89,7 @@ class ChatWsClient(
                             }
                         } finally {
                             sesionActiva = null
+                            _conectado.value = false
                         }
                     }
                 }.onFailure { e ->
@@ -113,6 +123,7 @@ class ChatWsClient(
         job?.cancelAndJoin()
         job = null
         sesionActiva = null
+        _conectado.value = false
     }
 
     private fun buildWsUrl(orderId: String, token: String): String {

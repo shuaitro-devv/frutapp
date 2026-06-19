@@ -1,9 +1,11 @@
 package cl.frutapp.app.navigation.shop
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,6 +49,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -58,6 +61,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -75,6 +80,7 @@ import cl.frutapp.app.platform.rememberSelectorImagenes
 import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.IconBubble
+import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
 import cl.frutapp.shared.dto.ChatMensajeDto
 import cl.frutapp.shared.dto.WsChatPush
@@ -133,6 +139,14 @@ class ChatScreen(
         // el job de clear se cancela y reinicia.
         var contraparteTyping by remember { mutableStateOf<String?>(null) }
         var typingClearJob by remember { mutableStateOf<Job?>(null) }
+        // Estado de conexion del WS: la UI muestra "Conectando…" en el header
+        // cuando esta caido. Reset typing si se desconecta para no quedar
+        // mostrando "escribiendo…" colgado.
+        val wsConectado by ws.conectado.collectAsState()
+        LaunchedEffect(wsConectado) {
+            if (!wsConectado) { contraparteTyping = null; typingClearJob?.cancel() }
+        }
+        val clipboard = LocalClipboardManager.current
         // Trigger throttleado para mandar frames typing al server. Mientras
         // el usuario tipea, el TextField hace tryEmit; el collector manda
         // 1 typing + delay 1.5s. Conflate descarta intermedios.
@@ -242,13 +256,20 @@ class ChatScreen(
                 .imePadding()
         ) {
             // Header con avatar de la contraparte. Subtitulo dinamico:
-            // "escribiendo…" en color brand cuando la contraparte tipea,
-            // si no "En este pedido" gris.
+            //  - "Conectando…" si el WS no esta conectado (mas prioritario para
+            //    que el usuario sepa por que no se actualiza).
+            //  - "escribiendo…" en color brand cuando la contraparte tipea.
+            //  - "En este pedido" como default.
+            val subtitulo = when {
+                !wsConectado -> "Conectando…"
+                contraparteTyping != null -> "escribiendo…"
+                else -> "En este pedido"
+            }
             ChatHeader(
                 rolContraparte = destinatarioRol,
                 titulo = tituloContraparte,
-                subtitulo = if (contraparteTyping != null) "escribiendo…" else "En este pedido",
-                subtituloDestacado = contraparteTyping != null,
+                subtitulo = subtitulo,
+                subtituloDestacado = wsConectado && contraparteTyping != null,
                 onBack = { navigator.pop() }
             )
 
@@ -289,7 +310,20 @@ class ChatScreen(
                             } else {
                                 m.autorRol == "cliente"
                             }
-                            MensajeBurbuja(mensaje = m, esMio = esMio)
+                            MensajeBurbuja(
+                                mensaje = m,
+                                esMio = esMio,
+                                onLongPress = {
+                                    // Solo copiamos el texto. Si el mensaje es
+                                    // solo-imagen, no hay nada que copiar y el
+                                    // long press no hace toast (mejor que
+                                    // copiar "" y mentir que se copio algo).
+                                    if (m.cuerpo.isNotBlank()) {
+                                        clipboard.setText(AnnotatedString(m.cuerpo))
+                                        showToast("Mensaje copiado")
+                                    }
+                                }
+                            )
                         }
                     }
                 }
@@ -456,8 +490,19 @@ private fun ChatHeader(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MensajeBurbuja(mensaje: ChatMensajeDto, esMio: Boolean) {
+private fun MensajeBurbuja(
+    mensaje: ChatMensajeDto,
+    esMio: Boolean,
+    onLongPress: () -> Unit = {},
+) {
+    val bubbleShape = RoundedCornerShape(
+        topStart = 14.dp,
+        topEnd = 14.dp,
+        bottomStart = if (esMio) 14.dp else 4.dp,
+        bottomEnd = if (esMio) 4.dp else 14.dp,
+    )
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (esMio) Arrangement.End else Arrangement.Start,
@@ -479,12 +524,14 @@ private fun MensajeBurbuja(mensaje: ChatMensajeDto, esMio: Boolean) {
                     .widthIn(max = 280.dp)
                     .background(
                         if (esMio) FrutAppColors.Brand600 else Color.White,
-                        RoundedCornerShape(
-                            topStart = 14.dp,
-                            topEnd = 14.dp,
-                            bottomStart = if (esMio) 14.dp else 4.dp,
-                            bottomEnd = if (esMio) 4.dp else 14.dp,
-                        )
+                        bubbleShape
+                    )
+                    // Long press copia el texto al portapapeles. onClick={} para
+                    // que la burbuja no se vuelva "clickable visual" (rippie por
+                    // toque corto); solo larga el long press.
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = onLongPress
                     )
                     .padding(
                         // Imagen ocupa toda la burbuja (sin padding lateral)
