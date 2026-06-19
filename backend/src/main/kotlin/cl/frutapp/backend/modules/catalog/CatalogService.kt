@@ -83,10 +83,12 @@ class CatalogService(private val repo: CatalogRepository) {
         return slug
     }
 
-    private fun slugify(name: String): String {
-        val sinAcentos = Normalizer
-            .normalize(name.trim().lowercase(), Normalizer.Form.NFD)
-            .replace(Regex("\\p{M}+"), "")
-        return sinAcentos.replace(Regex("[^a-z0-9]+"), "-").trim('-').ifBlank { "producto" }
-    }
+}
+
+/** Genera un slug URL-safe desde el nombre: sin acentos, minúsculas, símbolos -> guion. */
+internal fun slugify(name: String): String {
+    val sinAcentos = Normalizer
+        .normalize(name.trim().lowercase(), Normalizer.Form.NFD)
+        .replace(Regex("\\p{M}+"), "")
+    return sinAcentos.replace(Regex("[^a-z0-9]+"), "-").trim('-').ifBlank { "producto" }
 }
