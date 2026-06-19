@@ -3,11 +3,11 @@ package cl.frutapp.backend.modules.chat
 import cl.frutapp.backend.db.dbQuery
 import cl.frutapp.backend.error.NotFoundException
 import cl.frutapp.backend.error.ValidationException
+import cl.frutapp.backend.modules.media.StorageService
 import cl.frutapp.backend.modules.orders.OrdersTable
 import cl.frutapp.backend.modules.notifications.NotificationDispatcher
 import cl.frutapp.shared.dto.ChatMensajeDto
 import kotlinx.datetime.Instant
-import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 import java.util.UUID
 
@@ -25,6 +25,10 @@ import java.util.UUID
  *    Si el cliente envia a un destinatario no asignado todavia (ej. picker
  *    cuando el pedido aun no fue tomado), rechazamos con ValidationException.
  *
+ *  - **Adjuntos**: solo imagenes (JPEG/PNG). Mismo patron de validacion que
+ *    EvidenceService (MIME whitelist + magic-number + 5 MB cap). Mensaje
+ *    puede ser solo-texto, texto+imagen, o solo-imagen.
+ *
  *  - **Realtime**: tras persistir el mensaje, broadcast a las conexiones WS
  *    de ese pedido. Si el destinatario NO esta conectado (no hay conexiones
  *    suyas en el Hub), mandamos FCM data-only — la app lo recibe y muestra
@@ -34,7 +38,13 @@ class ChatService(
     private val repo: ChatRepository,
     private val hub: ChatHub,
     private val notifications: NotificationDispatcher,
+    private val storage: StorageService?,
 ) {
+
+    companion object {
+        private const val MAX_IMAGE_BYTES = 5L * 1024 * 1024  // 5 MB
+        private val MIME_WHITELIST = setOf("image/jpeg", "image/png")
+    }
 
     /** Envia un mensaje y lo persiste + broadcast + push al destinatario. */
     suspend fun enviar(
@@ -43,11 +53,16 @@ class ChatService(
         orderId: UUID,
         destinatarioRolPedido: String,
         cuerpo: String,
+        imagenBytes: ByteArray? = null,
+        imagenContentType: String? = null,
     ): ChatMensajeDto {
         val texto = cuerpo.trim()
-        if (texto.isEmpty()) throw ValidationException("El mensaje no puede estar vacio.")
-        if (texto.length > 1000) throw ValidationException("El mensaje supera el limite de 1000 caracteres.")
-        if (autorRol !in ChatRol.VALIDOS) throw ValidationException("Rol invalido.")
+        val hayImagen = imagenBytes != null && imagenBytes.isNotEmpty()
+        if (texto.isEmpty() && !hayImagen) {
+            throw ValidationException("El mensaje no puede estar vacío.")
+        }
+        if (texto.length > 1000) throw ValidationException("El mensaje supera el límite de 1000 caracteres.")
+        if (autorRol !in ChatRol.VALIDOS) throw ValidationException("Rol inválido.")
 
         // Resolver el destinatario: si el autor es staff, siempre es cliente;
         // si el autor es cliente, depende del destinatario_rol que pidio.
@@ -55,35 +70,51 @@ class ChatService(
             ChatRol.PICKER, ChatRol.REPARTIDOR -> ChatRol.CLIENTE
             ChatRol.CLIENTE -> {
                 if (destinatarioRolPedido !in setOf(ChatRol.PICKER, ChatRol.REPARTIDOR)) {
-                    throw ValidationException("Destinatario invalido: solo picker o repartidor.")
+                    throw ValidationException("Destinatario inválido: solo picker o repartidor.")
                 }
                 destinatarioRolPedido
             }
-            else -> throw ValidationException("Rol invalido.")
+            else -> throw ValidationException("Rol inválido.")
         }
 
-        // Ownership + validez del destinatario asignado (no podes hablarle al
+        // Ownership + validez del destinatario asignado (no puedes hablarle al
         // picker si el pedido todavia no fue tomado).
         val tipo = resolverRolUsuarioEnPedido(orderId, autorUserId)
             ?: throw NotFoundException("Pedido no encontrado.")
         if (tipo != autorRol) {
             // El cliente del pedido NO puede mandar como picker, etc.
-            throw ValidationException("No tenes ese rol en este pedido.")
+            throw ValidationException("No tienes ese rol en este pedido.")
         }
         if (autorRol == ChatRol.CLIENTE) {
             val asignado = quienEsta(orderId, destinatarioReal)
             if (asignado == null) {
                 throw ValidationException(
                     when (destinatarioReal) {
-                        ChatRol.PICKER -> "Tu pedido todavia no fue tomado por un picker."
-                        ChatRol.REPARTIDOR -> "Tu pedido todavia no tiene repartidor asignado."
+                        ChatRol.PICKER -> "Tu pedido todavía no fue tomado por un picker."
+                        ChatRol.REPARTIDOR -> "Tu pedido todavía no tiene repartidor asignado."
                         else -> "Destinatario no asignado."
                     }
                 )
             }
         }
 
-        val row = repo.insert(orderId, autorUserId, autorRol, destinatarioReal, texto)
+        // Si hay imagen: validar + subir a MinIO antes de persistir. El key usa
+        // el mensajeId que ya reservamos asi mensaje<->objeto matchean siempre.
+        // (Mismo patron que EvidenceService: sube PRIMERO, despues inserta;
+        // si el insert falla queda un huerfano benigno en el bucket.)
+        val mensajeId = UUID.randomUUID()
+        val imageKey = if (hayImagen) {
+            val store = storage
+                ?: throw ValidationException("Imágenes deshabilitadas en este ambiente.")
+            val ct = imagenContentType ?: "application/octet-stream"
+            validarImagen(imagenBytes!!, ct)
+            val ext = if (ct == "image/png") "png" else "jpg"
+            val key = "chat/$orderId/$mensajeId.$ext"
+            store.subir(key, imagenBytes, ct)
+            key
+        } else null
+
+        val row = repo.insert(orderId, autorUserId, autorRol, destinatarioReal, texto, imageKey, forcedId = mensajeId)
         val dto = row.toDto()
 
         // Broadcast realtime a las conexiones del pedido.
@@ -93,11 +124,12 @@ class ChatService(
         // ya recibio el frame por el WS — un push duplicado da ruido.
         val destinatarioUserId = quienEsta(orderId, destinatarioReal)
         if (destinatarioUserId != null && hub.conexionesDe(orderId) == 0) {
+            val cuerpoBreve = if (texto.isNotEmpty()) texto.take(80) else "Te envió una foto"
             notifications.onChatMensaje(
                 orderId = orderId,
                 destinatarioUserId = destinatarioUserId,
                 autorRol = autorRol,
-                cuerpoBreve = texto.take(80),
+                cuerpoBreve = cuerpoBreve,
             )
         }
         return dto
@@ -156,6 +188,28 @@ class ChatService(
         }
     }
 
+    private fun validarImagen(bytes: ByteArray, contentType: String) {
+        if (contentType !in MIME_WHITELIST) {
+            throw ValidationException("Tipo de imagen no permitido. Solo JPEG o PNG.")
+        }
+        if (bytes.size.toLong() > MAX_IMAGE_BYTES) {
+            throw ValidationException("La imagen pesa más de 5 MB. Sácala con menos resolución o comprímela.")
+        }
+        if (!verificarMagicNumber(bytes, contentType)) {
+            throw ValidationException("La imagen está corrupta o no coincide con el tipo declarado.")
+        }
+    }
+
+    private fun verificarMagicNumber(bytes: ByteArray, contentType: String): Boolean {
+        if (bytes.size < 8) return false
+        return when (contentType) {
+            "image/jpeg" -> bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte()
+            "image/png" -> bytes[0] == 0x89.toByte() && bytes[1] == 0x50.toByte() &&
+                bytes[2] == 0x4E.toByte() && bytes[3] == 0x47.toByte()
+            else -> false
+        }
+    }
+
     private fun ChatRepository.MensajeRow.toDto() = ChatMensajeDto(
         id = id.toString(),
         orderId = orderId.toString(),
@@ -163,6 +217,7 @@ class ChatService(
         autorRol = autorRol,
         destinatarioRol = destinatarioRol,
         cuerpo = cuerpo,
+        imagenUrl = imageKey?.let { storage?.urlFirmada(it) },
         leidoEn = leidoEn?.toString(),
         createdAt = createdAt.toString(),
     )

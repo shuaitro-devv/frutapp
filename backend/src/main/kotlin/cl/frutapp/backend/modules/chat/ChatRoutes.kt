@@ -5,16 +5,18 @@ import cl.frutapp.backend.error.ValidationException
 import cl.frutapp.backend.modules.audit.userId
 import cl.frutapp.backend.modules.auth.TokenService
 import cl.frutapp.backend.plugins.JWT_AUTH
-import cl.frutapp.shared.dto.EnviarMensajeRequest
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.PartData
+import io.ktor.http.content.forEachPart
 import io.ktor.server.application.call
 import io.ktor.server.auth.authenticate
-import io.ktor.server.request.receive
+import io.ktor.server.request.receiveMultipart
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.websocket.webSocket
+import io.ktor.utils.io.core.readBytes
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.close
 import kotlinx.datetime.Instant
@@ -41,12 +43,35 @@ fun Route.chatRoutes(service: ChatService, hub: ChatHub, tokenService: TokenServ
 
     authenticate(JWT_AUTH) {
 
+        // Multipart (mismo patron que EvidenceRoutes): campos
+        //   - destinatarioRol: FormItem string (picker | repartidor; el server lo
+        //     ignora si el autor es staff)
+        //   - cuerpo: FormItem string opcional (puede ser vacio si hay archivo)
+        //   - archivo: FileItem opcional (imagen JPEG/PNG)
+        // Al menos uno de cuerpo/archivo debe venir; el service lo valida.
         post("/v1/orders/{orderId}/chat") {
             if (!gate()) { call.respond(HttpStatusCode.Forbidden); return@post }
             val autorUserId = call.userId()
             val orderId = call.parameters["orderId"]?.let { runCatching { UUID.fromString(it) }.getOrNull() }
                 ?: throw ValidationException("orderId invalido.")
-            val body = call.receive<EnviarMensajeRequest>()
+            var destinatarioRol = ""
+            var cuerpo = ""
+            var bytes: ByteArray? = null
+            var contentType: String? = null
+            call.receiveMultipart().forEachPart { part ->
+                when (part) {
+                    is PartData.FileItem -> {
+                        contentType = part.contentType?.toString() ?: "application/octet-stream"
+                        bytes = part.provider().readBytes()
+                    }
+                    is PartData.FormItem -> when (part.name) {
+                        "destinatarioRol" -> destinatarioRol = part.value
+                        "cuerpo" -> cuerpo = part.value
+                    }
+                    else -> Unit
+                }
+                part.dispose()
+            }
             // El rol del autor se deriva del usuario: cliente del pedido, o
             // picker/repartidor asignado. El service resuelve y valida.
             val rolAutor = service.rolEnPedido(orderId, autorUserId)
@@ -55,8 +80,10 @@ fun Route.chatRoutes(service: ChatService, hub: ChatHub, tokenService: TokenServ
                 autorUserId = autorUserId,
                 autorRol = rolAutor,
                 orderId = orderId,
-                destinatarioRolPedido = body.destinatarioRol,
-                cuerpo = body.cuerpo,
+                destinatarioRolPedido = destinatarioRol,
+                cuerpo = cuerpo,
+                imagenBytes = bytes,
+                imagenContentType = contentType,
             )
             call.respond(HttpStatusCode.Created, dto)
         }

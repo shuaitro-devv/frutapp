@@ -11,6 +11,7 @@ internal object ChatMensajeTable : Table("chat_mensaje") {
     val autorRol = text("autor_rol")
     val destinatarioRol = text("destinatario_rol")
     val cuerpo = text("cuerpo")
+    val imageKey = text("image_key").nullable()
     val leidoEn = timestamp("leido_en").nullable()
     val createdAt = timestamp("created_at")
 

@@ -227,6 +227,7 @@ fun Application.module() {
         repo = cl.frutapp.backend.modules.chat.ChatRepository(),
         hub = chatHub,
         notifications = notificationDispatcher,
+        storage = storageService,
     )
     environment.log.info(
         if (webpayConfig.esSandbox) "Webpay: SANDBOX habilitado (creds publicas de integracion). returnUrl={}/v1/pagos/webpay/retorno"

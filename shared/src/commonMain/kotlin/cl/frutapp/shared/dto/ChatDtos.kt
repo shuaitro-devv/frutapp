@@ -11,11 +11,16 @@ data class ChatMensajeDto(
     val autorRol: String,        // cliente / picker / repartidor
     val destinatarioRol: String, // picker / repartidor
     val cuerpo: String,
+    /** URL presignada de la imagen adjunta, o null si el mensaje es solo texto.
+     *  El backend la firma cada vez que devuelve el mensaje (no se persiste). */
+    val imagenUrl: String? = null,
     val leidoEn: String?,        // ISO o null si no fue leido
     val createdAt: String,       // ISO
 )
 
-/** Body para POST /v1/orders/{id}/chat. */
+/** Body (legacy JSON) para POST /v1/orders/{id}/chat. El endpoint ahora prefiere
+ *  multipart para soportar imagen adjunta; este DTO queda para mantener tests
+ *  o clientes que aun mandan JSON. */
 @Serializable
 data class EnviarMensajeRequest(
     /** picker o repartidor — a quien le habla el cliente. Cuando el autor es

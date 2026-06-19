@@ -13,14 +13,25 @@ import java.util.UUID
 /** Acceso a `chat_mensaje`. SQL puro — sin reglas de negocio. */
 class ChatRepository {
 
+    /**
+     * Inserta un mensaje. [cuerpo] puede ser vacio si [imageKey] no es null
+     * (mensaje solo-imagen). El check de la V31 garantiza que al menos uno
+     * de los dos tenga contenido — si ambos estan vacios la DB rechaza.
+     *
+     * [forcedId] permite al caller (ChatService) reservar el UUID antes de
+     * subir bytes al bucket: asi el key del bucket usa el mismo UUID que
+     * la fila de DB y mensaje<->objeto matchean siempre.
+     */
     suspend fun insert(
         orderId: UUID,
         autorUserId: UUID,
         autorRol: String,
         destinatarioRol: String,
         cuerpo: String,
+        imageKey: String? = null,
+        forcedId: UUID? = null,
     ): MensajeRow = dbQuery {
-        val id = UUID.randomUUID()
+        val id = forcedId ?: UUID.randomUUID()
         val now = Clock.System.now()
         ChatMensajeTable.insert {
             it[ChatMensajeTable.id] = id
@@ -29,9 +40,10 @@ class ChatRepository {
             it[ChatMensajeTable.autorRol] = autorRol
             it[ChatMensajeTable.destinatarioRol] = destinatarioRol
             it[ChatMensajeTable.cuerpo] = cuerpo
+            it[ChatMensajeTable.imageKey] = imageKey
             it[ChatMensajeTable.createdAt] = now
         }
-        MensajeRow(id, orderId, autorUserId, autorRol, destinatarioRol, cuerpo, leidoEn = null, createdAt = now)
+        MensajeRow(id, orderId, autorUserId, autorRol, destinatarioRol, cuerpo, imageKey, leidoEn = null, createdAt = now)
     }
 
     /** Historial del pedido ordenado del mas viejo al mas nuevo (cronologico,
@@ -58,6 +70,7 @@ class ChatRepository {
                 autorRol = row[ChatMensajeTable.autorRol],
                 destinatarioRol = row[ChatMensajeTable.destinatarioRol],
                 cuerpo = row[ChatMensajeTable.cuerpo],
+                imageKey = row[ChatMensajeTable.imageKey],
                 leidoEn = row[ChatMensajeTable.leidoEn],
                 createdAt = row[ChatMensajeTable.createdAt],
             )
@@ -84,6 +97,7 @@ class ChatRepository {
         val autorRol: String,
         val destinatarioRol: String,
         val cuerpo: String,
+        val imageKey: String?,
         val leidoEn: Instant?,
         val createdAt: Instant,
     )
