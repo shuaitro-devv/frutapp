@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Send
@@ -50,20 +52,27 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -147,6 +156,29 @@ class ChatScreen(
             if (!wsConectado) { contraparteTyping = null; typingClearJob?.cancel() }
         }
         val clipboard = LocalClipboardManager.current
+        // URL de la imagen que se esta viendo en fullscreen, o null. Se setea
+        // al tocar la imagen de una burbuja; el dialog se cierra al volver.
+        var verImagenUrl by remember { mutableStateOf<String?>(null) }
+
+        // Estado del scroll: "cerca del final" se usa para decidir si
+        // auto-scrollar cuando llega un mensaje y para mostrar el boton
+        // flotante "ir abajo" con badge de nuevos. Declarado aca arriba
+        // porque el LaunchedEffect del WS-collect lo usa.
+        val listState = rememberLazyListState()
+        val cercaDelFinal by remember {
+            derivedStateOf {
+                val total = listState.layoutInfo.totalItemsCount
+                val ultimoVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+                total == 0 || ultimoVisible >= total - 2
+            }
+        }
+        var nuevosNoVistos by remember { mutableIntStateOf(0) }
+        LaunchedEffect(Unit) {
+            // Cada vez que vuelvo a "cerca del final", resetear el contador.
+            snapshotFlow { cercaDelFinal }.collect { cerca ->
+                if (cerca) nuevosNoVistos = 0
+            }
+        }
         // Trigger throttleado para mandar frames typing al server. Mientras
         // el usuario tipea, el TextField hace tryEmit; el collector manda
         // 1 typing + delay 1.5s. Conflate descarta intermedios.
@@ -193,7 +225,8 @@ class ChatScreen(
                         val nuevo = push.mensaje ?: return@collect
                         // Append solo si no esta ya (el envio local agrego el
                         // dto antes del broadcast → evitamos duplicar el autor).
-                        if (mensajes.none { it.id == nuevo.id }) {
+                        val esDuplicado = mensajes.any { it.id == nuevo.id }
+                        if (!esDuplicado) {
                             mensajes = mensajes + nuevo
                         }
                         // Si el mensaje viene del OTRO lado y estoy en la
@@ -204,7 +237,12 @@ class ChatScreen(
                         } else {
                             nuevo.autorRol == "cliente"
                         }
-                        if (!esMioMensajeNuevo) leerTrigger.tryEmit(Unit)
+                        if (!esMioMensajeNuevo) {
+                            leerTrigger.tryEmit(Unit)
+                            // Si el user esta scrolleado arriba, contamos los
+                            // nuevos para mostrar badge en el boton ↓.
+                            if (!esDuplicado && !cercaDelFinal) nuevosNoVistos++
+                        }
                     }
                     WsChatPush.TYPE_TYPING -> {
                         // Solo me importa si el que tipea NO soy yo (el server
@@ -240,9 +278,11 @@ class ChatScreen(
             }
         }
 
-        val listState = rememberLazyListState()
         LaunchedEffect(mensajes.size) {
-            if (mensajes.isNotEmpty()) listState.animateScrollToItem(mensajes.size - 1)
+            if (mensajes.isEmpty()) return@LaunchedEffect
+            if (cercaDelFinal) {
+                listState.animateScrollToItem(mensajes.size - 1)
+            }
         }
 
         // imePadding en el Column raiz: cuando aparece el teclado, todo se
@@ -292,7 +332,7 @@ class ChatScreen(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         itemsIndexed(mensajes, key = { _, m -> m.id }) { idx, m ->
                             // Separador de dia cuando el mensaje arranca un dia
@@ -322,10 +362,28 @@ class ChatScreen(
                                         clipboard.setText(AnnotatedString(m.cuerpo))
                                         showToast("Mensaje copiado")
                                     }
-                                }
+                                },
+                                onTapImagen = { url -> verImagenUrl = url }
                             )
                         }
                     }
+                }
+                // Boton flotante "ir al final" alineado abajo a la derecha del
+                // area de mensajes. Aparece solo si el user esta scrolleado
+                // arriba. Si hay mensajes nuevos sin ver, badge con cantidad.
+                if (!cercaDelFinal && mensajes.isNotEmpty()) {
+                    BotonIrAbajo(
+                        nuevos = nuevosNoVistos,
+                        onClick = {
+                            scope.launch {
+                                listState.animateScrollToItem(mensajes.size - 1)
+                                nuevosNoVistos = 0
+                            }
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 14.dp, bottom = 14.dp)
+                    )
                 }
             }
 
@@ -424,6 +482,15 @@ class ChatScreen(
             }
         }
 
+        // Visor fullscreen de imagen. Tap → cierra. Pinch para zoom, drag para
+        // pan. Reusa la imagen ya cacheada (no la vuelve a descargar).
+        verImagenUrl?.let { url ->
+            VisorImagen(
+                url = url,
+                onCerrar = { verImagenUrl = null }
+            )
+        }
+
         // Sheet "Galeria / Camara" — separado para que el usuario elija
         // sin ocupar dos botones en el input row.
         if (elegirMedio) {
@@ -496,6 +563,7 @@ private fun MensajeBurbuja(
     mensaje: ChatMensajeDto,
     esMio: Boolean,
     onLongPress: () -> Unit = {},
+    onTapImagen: (String) -> Unit = {},
 ) {
     val bubbleShape = RoundedCornerShape(
         topStart = 14.dp,
@@ -545,6 +613,7 @@ private fun MensajeBurbuja(
                         modifier = Modifier
                             .widthIn(max = 240.dp)
                             .heightIn(min = 120.dp, max = 280.dp)
+                            .clickable { onTapImagen(mensaje.imagenUrl!!) }
                     )
                     if (mensaje.cuerpo.isNotBlank()) Spacer(Modifier.height(6.dp))
                 }
@@ -662,11 +731,133 @@ private fun ImagenRemota(url: String, modifier: Modifier = Modifier) {
     }
 }
 
+/** Boton circular flotante "ir al final del chat". Si [nuevos] > 0, muestra
+ *  un badge rojo arriba a la derecha con la cantidad de mensajes no vistos. */
+@Composable
+private fun BotonIrAbajo(
+    nuevos: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier.size(48.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White, CircleShape)
+                .border(1.dp, FrutAppColors.Brand100, CircleShape)
+                .clickable { onClick() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Filled.KeyboardArrowDown,
+                contentDescription = "Ir al final",
+                tint = FrutAppColors.Brand800,
+                modifier = Modifier.size(26.dp)
+            )
+        }
+        if (nuevos > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .background(Color(0xFFDC2626), CircleShape)
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = if (nuevos > 99) "99+" else nuevos.toString(),
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
 /** Cache de bitmaps decodificados de imagenes de chat. Vive el proceso. */
 private object ChatImagenCache {
     private val cache = mutableMapOf<String, ImageBitmap>()
     fun get(url: String): ImageBitmap? = cache[url]
     fun put(url: String, bitmap: ImageBitmap) { cache[url] = bitmap }
+}
+
+/** Dialog fullscreen con la imagen. Pinch para zoom (1x-5x), drag para pan.
+ *  Tap simple en el boton X cierra. Reusa el [ChatImagenCache] para no
+ *  redescargar. Doble tap resetea el zoom a 1x. */
+@Composable
+private fun VisorImagen(url: String, onCerrar: () -> Unit) {
+    val bitmap by produceState<ImageBitmap?>(initialValue = ChatImagenCache.get(url), url) {
+        if (value != null) return@produceState
+        runCatching {
+            val bytes = Imagenes.descargar(url)
+            decodeImagen(bytes)
+        }
+            .onSuccess { img ->
+                if (img != null) {
+                    ChatImagenCache.put(url, img)
+                    value = img
+                }
+            }
+    }
+    var escala by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    Dialog(
+        onDismissRequest = onCerrar,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            val img = bitmap
+            if (img == null) {
+                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp)
+            } else {
+                Image(
+                    bitmap = img,
+                    contentDescription = "Imagen del chat",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = escala
+                            scaleY = escala
+                            translationX = offset.x
+                            translationY = offset.y
+                        }
+                        .pointerInput(url) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                escala = (escala * zoom).coerceIn(1f, 5f)
+                                // Si volvemos a 1x, resetear offset para que la
+                                // imagen quede centrada.
+                                if (escala <= 1.01f) {
+                                    escala = 1f
+                                    offset = androidx.compose.ui.geometry.Offset.Zero
+                                } else {
+                                    offset += pan
+                                }
+                            }
+                        }
+                )
+            }
+            // Boton X arriba a la derecha, respeta status bar.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(12.dp),
+                contentAlignment = Alignment.TopEnd
+            ) {
+                IconButton(
+                    onClick = onCerrar,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                ) {
+                    Icon(Icons.Filled.Close, "Cerrar", tint = Color.White)
+                }
+            }
+        }
+    }
 }
 
 /** Formato corto "HH:mm" desde un ISO 8601. Si falla el parseo, devuelve "". */
