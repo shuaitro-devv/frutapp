@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -69,8 +71,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.text.font.FontWeight
@@ -179,6 +186,11 @@ class ChatScreen(
                 if (cerca) nuevosNoVistos = 0
             }
         }
+
+        // Estado de envio de mensajes locales (optimistic UI). Map id-local ->
+        // EstadoEnvio. Solo aplica a mensajes mientras esperamos la respuesta
+        // del backend; al confirmar se limpia el entry (el dto pasa a ser real).
+        var estadosEnvio by remember { mutableStateOf<Map<String, EstadoEnvioLocal>>(emptyMap()) }
         // Trigger throttleado para mandar frames typing al server. Mientras
         // el usuario tipea, el TextField hace tryEmit; el collector manda
         // 1 typing + delay 1.5s. Conflate descarta intermedios.
@@ -353,6 +365,7 @@ class ChatScreen(
                             MensajeBurbuja(
                                 mensaje = m,
                                 esMio = esMio,
+                                estadoEnvio = estadosEnvio[m.id],
                                 onLongPress = {
                                     // Solo copiamos el texto. Si el mensaje es
                                     // solo-imagen, no hay nada que copiar y el
@@ -456,6 +469,50 @@ class ChatScreen(
                             if (!puedeEnviar) return@IconButton
                             val txt = entrada.trim()
                             val foto = imagenPendiente
+                            // Solo aplicamos optimistic UI a mensajes de texto.
+                            // Con imagen no tenemos URL presignada para mostrar
+                            // local; mas simple esperar el response (como antes).
+                            if (foto == null && txt.isNotBlank()) {
+                                val localId = "local-" +
+                                    kotlinx.datetime.Clock.System.now().toEpochMilliseconds().toString()
+                                val miRol = if (destinatarioRol == "cliente") "picker" else "cliente"
+                                val destReal = if (destinatarioRol == "cliente") "cliente" else destinatarioRol
+                                val temporal = ChatMensajeDto(
+                                    id = localId,
+                                    orderId = orderId,
+                                    autorUserId = "local",
+                                    autorRol = miRol,
+                                    destinatarioRol = destReal,
+                                    cuerpo = txt,
+                                    imagenUrl = null,
+                                    leidoEn = null,
+                                    createdAt = kotlinx.datetime.Clock.System.now().toString(),
+                                )
+                                mensajes = mensajes + temporal
+                                estadosEnvio = estadosEnvio + (localId to EstadoEnvioLocal.ENVIANDO)
+                                entrada = ""
+                                scope.launch {
+                                    runCatching { api.enviar(orderId, destinatarioRol, txt, null) }
+                                        .onSuccess { dto ->
+                                            // Si el WS broadcast ya nos llego con el dto real,
+                                            // removemos el local; si no, lo reemplazamos.
+                                            mensajes = if (mensajes.any { it.id == dto.id }) {
+                                                mensajes.filter { it.id != localId }
+                                            } else {
+                                                mensajes.map { if (it.id == localId) dto else it }
+                                            }
+                                            estadosEnvio = estadosEnvio - localId
+                                        }
+                                        .onFailure { e ->
+                                            if (e is kotlinx.coroutines.CancellationException) throw e
+                                            estadosEnvio = estadosEnvio + (localId to EstadoEnvioLocal.ERROR)
+                                            ErrorReporter.report(screen = "Chat", action = "enviar", error = e)
+                                        }
+                                }
+                                return@IconButton
+                            }
+                            // Flujo con imagen: bloquea el boton hasta tener
+                            // la URL real del backend.
                             enviando = true
                             scope.launch {
                                 runCatching { api.enviar(orderId, destinatarioRol, txt, foto) }
@@ -562,6 +619,7 @@ private fun ChatHeader(
 private fun MensajeBurbuja(
     mensaje: ChatMensajeDto,
     esMio: Boolean,
+    estadoEnvio: EstadoEnvioLocal? = null,
     onLongPress: () -> Unit = {},
     onTapImagen: (String) -> Unit = {},
 ) {
@@ -618,10 +676,12 @@ private fun MensajeBurbuja(
                     if (mensaje.cuerpo.isNotBlank()) Spacer(Modifier.height(6.dp))
                 }
                 if (mensaje.cuerpo.isNotBlank()) {
-                    Text(
-                        mensaje.cuerpo,
-                        color = if (esMio) Color.White else FrutAppColors.Ink,
-                        fontSize = 14.sp,
+                    CuerpoConEnlaces(
+                        texto = mensaje.cuerpo,
+                        textoColor = if (esMio) Color.White else FrutAppColors.Ink,
+                        // En burbujas oscuras (mias, fondo verde) el azul tradicional
+                        // de link es ilegible; uso un azul claro/cyan que contraste.
+                        linkColor = if (esMio) Color(0xFFBFDBFE) else Color(0xFF1D4ED8),
                     )
                 }
             }
@@ -634,14 +694,37 @@ private fun MensajeBurbuja(
                 )
                 if (esMio) {
                     Spacer(Modifier.width(4.dp))
-                    // Tick azul (estilo WhatsApp) cuando el destinatario marca
-                    // como leido. Hasta entonces, gris (entregado al server).
-                    Icon(
-                        imageVector = if (mensaje.leidoEn != null) Icons.Filled.DoneAll else Icons.Filled.Done,
-                        contentDescription = if (mensaje.leidoEn != null) "Leído" else "Enviado",
-                        tint = if (mensaje.leidoEn != null) Color(0xFF3B82F6) else FrutAppColors.InkSoft,
-                        modifier = Modifier.size(12.dp)
-                    )
+                    when (estadoEnvio) {
+                        EstadoEnvioLocal.ENVIANDO -> {
+                            // Spinner pequeno gris: el server todavia no
+                            // confirmo. Tipico de WhatsApp/Telegram.
+                            CircularProgressIndicator(
+                                color = FrutAppColors.InkSoft,
+                                strokeWidth = 1.5.dp,
+                                modifier = Modifier.size(10.dp)
+                            )
+                        }
+                        EstadoEnvioLocal.ERROR -> {
+                            // Mensaje no enviado: ⚠ rojo, el user puede
+                            // intentar volver a enviar copiando el texto.
+                            Icon(
+                                imageVector = Icons.Filled.ErrorOutline,
+                                contentDescription = "No se pudo enviar",
+                                tint = Color(0xFFDC2626),
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                        null -> {
+                            // Tick azul (estilo WhatsApp) cuando el destinatario
+                            // marca como leido. Hasta entonces, gris (entregado).
+                            Icon(
+                                imageVector = if (mensaje.leidoEn != null) Icons.Filled.DoneAll else Icons.Filled.Done,
+                                contentDescription = if (mensaje.leidoEn != null) "Leído" else "Enviado",
+                                tint = if (mensaje.leidoEn != null) Color(0xFF3B82F6) else FrutAppColors.InkSoft,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -731,6 +814,47 @@ private fun ImagenRemota(url: String, modifier: Modifier = Modifier) {
     }
 }
 
+/** Regex simple para detectar URLs http(s) y dominios "como www.x.com" en
+ *  texto plano. Match termina antes de espacios, parentesis o coma final.
+ *  No pretende ser perfecta — solo cubrir los casos comunes de un chat:
+ *  pegar un link de mercado libre, IG, etc. */
+private val URL_REGEX = Regex(
+    """(?i)\b(?:https?://|www\.)[^\s)\]<>]+""",
+    RegexOption.IGNORE_CASE
+)
+
+/** Texto del cuerpo del mensaje con URLs auto-detectadas en azul + subrayado.
+ *  Tap en una URL abre el navegador. Usa LocalUriHandler (multiplataforma). */
+@Composable
+private fun CuerpoConEnlaces(texto: String, textoColor: Color, linkColor: Color) {
+    val uriHandler = LocalUriHandler.current
+    val annotated = remember(texto, textoColor, linkColor) {
+        buildAnnotatedString {
+            var lastEnd = 0
+            URL_REGEX.findAll(texto).forEach { match ->
+                append(texto.substring(lastEnd, match.range.first))
+                val raw = match.value
+                val href = if (raw.startsWith("http", ignoreCase = true)) raw else "https://$raw"
+                pushStringAnnotation(tag = "URL", annotation = href)
+                withStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)) {
+                    append(raw)
+                }
+                pop()
+                lastEnd = match.range.last + 1
+            }
+            if (lastEnd < texto.length) append(texto.substring(lastEnd))
+        }
+    }
+    ClickableText(
+        text = annotated,
+        style = TextStyle(color = textoColor, fontSize = 14.sp),
+        onClick = { offset ->
+            annotated.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                .firstOrNull()?.let { runCatching { uriHandler.openUri(it.item) } }
+        }
+    )
+}
+
 /** Boton circular flotante "ir al final del chat". Si [nuevos] > 0, muestra
  *  un badge rojo arriba a la derecha con la cantidad de mensajes no vistos. */
 @Composable
@@ -772,6 +896,11 @@ private fun BotonIrAbajo(
         }
     }
 }
+
+/** Estado de envio de un mensaje optimistic (creado en local antes de que el
+ *  backend confirme). ENVIADO normal NO tiene entry — el mapa solo lleva los
+ *  pendientes (ENVIANDO) o los que fallaron (ERROR). */
+private enum class EstadoEnvioLocal { ENVIANDO, ERROR }
 
 /** Cache de bitmaps decodificados de imagenes de chat. Vive el proceso. */
 private object ChatImagenCache {
