@@ -77,6 +77,11 @@ import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.IconBubble
 import cl.frutapp.app.ui.theme.FrutAppColors
 import cl.frutapp.shared.dto.ChatMensajeDto
+import cl.frutapp.shared.dto.WsChatPush
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Instant
@@ -123,6 +128,21 @@ class ChatScreen(
         var enviando by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
         var elegirMedio by remember { mutableStateOf(false) }
+        // Contraparte tipeando: rol de quien escribe, o null. Auto-clear a los
+        // 3.5s del ultimo frame typing recibido. Si llega otro typing antes,
+        // el job de clear se cancela y reinicia.
+        var contraparteTyping by remember { mutableStateOf<String?>(null) }
+        var typingClearJob by remember { mutableStateOf<Job?>(null) }
+        // Trigger throttleado para mandar frames typing al server. Mientras
+        // el usuario tipea, el TextField hace tryEmit; el collector manda
+        // 1 typing + delay 1.5s. Conflate descarta intermedios.
+        val typingTrigger = remember { MutableSharedFlow<Unit>(extraBufferCapacity = 1) }
+        LaunchedEffect(Unit) {
+            typingTrigger.conflate().collect {
+                ws.enviarTyping()
+                delay(1500L)
+            }
+        }
 
         val selector = rememberSelectorImagenes { bytes ->
             imagenPendiente = bytes
@@ -140,13 +160,41 @@ class ChatScreen(
                 }
             // Marcar leidos al abrir (fire-and-forget).
             scope.launch { runCatching { api.marcarLeidos(orderId) } }
-            // Abrir WS y escuchar pushes.
+            // Abrir WS y escuchar frames (mensaje, typing, leido).
             ws.conectar(scope, orderId)
-            ws.mensajes.collect { nuevo ->
-                // Append solo si no esta ya (el envio local agrego el dto antes
-                // del broadcast → evitamos duplicar el autor).
-                if (mensajes.none { it.id == nuevo.id }) {
-                    mensajes = mensajes + nuevo
+            ws.frames.collect { push ->
+                when (push.type) {
+                    WsChatPush.TYPE_MENSAJE -> {
+                        val nuevo = push.mensaje ?: return@collect
+                        // Append solo si no esta ya (el envio local agrego el
+                        // dto antes del broadcast → evitamos duplicar el autor).
+                        if (mensajes.none { it.id == nuevo.id }) {
+                            mensajes = mensajes + nuevo
+                        }
+                    }
+                    WsChatPush.TYPE_TYPING -> {
+                        // Solo me importa si el que tipea NO soy yo (el server
+                        // ya nos excluye, pero blindamos por las dudas).
+                        val quienRol = push.typingRol ?: return@collect
+                        contraparteTyping = quienRol
+                        typingClearJob?.cancel()
+                        typingClearJob = scope.launch {
+                            delay(3500L)
+                            contraparteTyping = null
+                        }
+                    }
+                    WsChatPush.TYPE_LEIDO -> {
+                        // La contraparte marco como leidos los mensajes
+                        // destinados a su rol. Actualizo en memoria todos los
+                        // mensajes mios cuyo destinatarioRol coincide y aun
+                        // estaban como no-leidos.
+                        val leidoEnRol = push.leidoEnRol ?: return@collect
+                        val ts = push.leidoEn ?: return@collect
+                        mensajes = mensajes.map { m ->
+                            if (m.destinatarioRol == leidoEnRol && m.leidoEn == null) m.copy(leidoEn = ts)
+                            else m
+                        }
+                    }
                 }
             }
         }
@@ -173,10 +221,14 @@ class ChatScreen(
                 .statusBarsPadding()
                 .imePadding()
         ) {
-            // Header con avatar de la contraparte
+            // Header con avatar de la contraparte. Subtitulo dinamico:
+            // "escribiendo…" en color brand cuando la contraparte tipea,
+            // si no "En este pedido" gris.
             ChatHeader(
                 rolContraparte = destinatarioRol,
                 titulo = tituloContraparte,
+                subtitulo = if (contraparteTyping != null) "escribiendo…" else "En este pedido",
+                subtituloDestacado = contraparteTyping != null,
                 onBack = { navigator.pop() }
             )
 
@@ -254,7 +306,13 @@ class ChatScreen(
                 ) {
                     BasicTextField(
                         value = entrada,
-                        onValueChange = { if (it.length <= 1000) entrada = it },
+                        onValueChange = {
+                            if (it.length <= 1000) {
+                                entrada = it
+                                // Dispara typing solo si hay texto; tryEmit es no-bloqueante.
+                                if (it.isNotEmpty()) typingTrigger.tryEmit(Unit)
+                            }
+                        },
                         textStyle = TextStyle(color = FrutAppColors.Ink, fontSize = 14.sp),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         modifier = Modifier.fillMaxWidth(),
@@ -337,7 +395,13 @@ class ChatScreen(
 }
 
 @Composable
-private fun ChatHeader(rolContraparte: String, titulo: String, onBack: () -> Unit) {
+private fun ChatHeader(
+    rolContraparte: String,
+    titulo: String,
+    subtitulo: String,
+    subtituloDestacado: Boolean,
+    onBack: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -355,7 +419,12 @@ private fun ChatHeader(rolContraparte: String, titulo: String, onBack: () -> Uni
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(titulo, color = FrutAppColors.Brand800, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            Text("En este pedido", color = FrutAppColors.InkSoft, fontSize = 11.sp)
+            Text(
+                subtitulo,
+                color = if (subtituloDestacado) FrutAppColors.Brand600 else FrutAppColors.InkSoft,
+                fontSize = 11.sp,
+                fontWeight = if (subtituloDestacado) FontWeight.SemiBold else FontWeight.Normal,
+            )
         }
     }
 }
@@ -422,10 +491,12 @@ private fun MensajeBurbuja(mensaje: ChatMensajeDto, esMio: Boolean) {
                 )
                 if (esMio) {
                     Spacer(Modifier.width(4.dp))
+                    // Tick azul (estilo WhatsApp) cuando el destinatario marca
+                    // como leido. Hasta entonces, gris (entregado al server).
                     Icon(
                         imageVector = if (mensaje.leidoEn != null) Icons.Filled.DoneAll else Icons.Filled.Done,
                         contentDescription = if (mensaje.leidoEn != null) "Leído" else "Enviado",
-                        tint = if (mensaje.leidoEn != null) FrutAppColors.Brand600 else FrutAppColors.InkSoft,
+                        tint = if (mensaje.leidoEn != null) Color(0xFF3B82F6) else FrutAppColors.InkSoft,
                         modifier = Modifier.size(12.dp)
                     )
                 }

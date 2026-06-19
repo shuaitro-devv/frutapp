@@ -18,8 +18,12 @@ import io.ktor.server.routing.post
 import io.ktor.server.websocket.webSocket
 import io.ktor.utils.io.core.readBytes
 import io.ktor.websocket.CloseReason
+import io.ktor.websocket.Frame
 import io.ktor.websocket.close
+import io.ktor.websocket.readText
 import kotlinx.datetime.Instant
+import kotlinx.serialization.json.Json
+import cl.frutapp.shared.dto.WsChatPush
 import java.util.UUID
 
 /**
@@ -133,12 +137,23 @@ fun Route.chatRoutes(service: ChatService, hub: ChatHub, tokenService: TokenServ
             close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Sin acceso")); return@webSocket
         }
         hub.registrar(orderId, this)
+        val wsJson = Json { ignoreUnknownKeys = true; isLenient = true }
         try {
-            // El cliente NO envia frames (envia mensajes via REST). Pero
-            // tenemos que iterar incoming para que la conexion siga viva y
-            // detectar cierre limpio.
+            // El cliente envia frames "typing" mientras tipea; el server los
+            // rebroadcastea a las OTRAS sesiones del pedido. Mensajes
+            // persistentes y "marcar leido" SIGUEN yendo por REST (auditable,
+            // idempotente). Cualquier otro tipo de frame se ignora silenciosamente.
             for (frame in incoming) {
-                // Ignoramos cualquier cosa que mande; ping/pong los maneja Ktor.
+                if (frame !is Frame.Text) continue
+                val push = runCatching { wsJson.decodeFromString(WsChatPush.serializer(), frame.readText()) }.getOrNull()
+                if (push?.type == WsChatPush.TYPE_TYPING) {
+                    hub.broadcastTyping(
+                        orderId = orderId,
+                        autorRol = rol,
+                        autorUserId = uid,
+                        excluir = this,
+                    )
+                }
             }
         } finally {
             hub.desregistrar(orderId, this)

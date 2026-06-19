@@ -15,8 +15,11 @@ import java.util.UUID
  *
  * Cada vez que un cliente abre el chat de un pedido, su WS se registra aca
  * (por `orderId`). Cuando alguien envia un mensaje por REST, el ChatService
- * llama a [broadcast] que empuja el mensaje a TODAS las conexiones de ese
- * pedido (cliente + picker/repartidor que esten conectados en ese momento).
+ * llama a [broadcastMensaje] que empuja el mensaje a TODAS las conexiones
+ * de ese pedido (cliente + picker/repartidor que esten conectados).
+ *
+ * Eventos efimeros (typing/leido) se rebroadcastean EXCLUYENDO al autor —
+ * no tiene sentido que el que tipea vea "te estas escribiendo".
  *
  * Si una conexion esta caida, falla el send y la limpiamos del set para no
  * acumular zombies.
@@ -49,14 +52,62 @@ class ChatHub {
         sesiones[orderId]?.size ?: 0
     }
 
-    /** Manda el mensaje a todas las conexiones de [orderId]. Saca a las que
-     *  fallen del set para evitar zombies. */
-    suspend fun broadcast(orderId: UUID, mensaje: ChatMensajeDto) {
+    /** Push de mensaje nuevo a TODAS las conexiones del pedido. */
+    suspend fun broadcastMensaje(orderId: UUID, mensaje: ChatMensajeDto) {
+        enviar(orderId, WsChatPush(type = WsChatPush.TYPE_MENSAJE, mensaje = mensaje), excluir = null)
+    }
+
+    /** Backcompat: alias del nuevo broadcastMensaje. */
+    suspend fun broadcast(orderId: UUID, mensaje: ChatMensajeDto) = broadcastMensaje(orderId, mensaje)
+
+    /** Rebroadcast de "esta escribiendo" a las OTRAS sesiones del pedido.
+     *  [excluir] es la sesion del autor — no tiene sentido reenviarselo. */
+    suspend fun broadcastTyping(
+        orderId: UUID,
+        autorRol: String,
+        autorUserId: UUID,
+        excluir: WebSocketSession?,
+    ) {
+        enviar(
+            orderId,
+            WsChatPush(
+                type = WsChatPush.TYPE_TYPING,
+                typingRol = autorRol,
+                typingUserId = autorUserId.toString(),
+            ),
+            excluir = excluir,
+        )
+    }
+
+    /** Broadcast de "leido": el rol [leidoEnRol] (= destinatario_rol de los
+     *  mensajes marcados) acaba de marcarlos como leidos. Las otras sesiones
+     *  del pedido lo usan para actualizar el tick a azul en tiempo real. */
+    suspend fun broadcastLeido(
+        orderId: UUID,
+        leidoEnRol: String,
+        leidoEn: String,
+    ) {
+        enviar(
+            orderId,
+            WsChatPush(
+                type = WsChatPush.TYPE_LEIDO,
+                leidoEnRol = leidoEnRol,
+                leidoEn = leidoEn,
+            ),
+            excluir = null,
+        )
+    }
+
+    /** Envia [push] a las conexiones de [orderId]. Si [excluir] != null, salta
+     *  esa sesion (util para no reenviar el typing al propio autor). Limpia
+     *  conexiones zombies como efecto. */
+    private suspend fun enviar(orderId: UUID, push: WsChatPush, excluir: WebSocketSession?) {
         val snapshot = mutex.withLock { sesiones[orderId]?.toList().orEmpty() }
         if (snapshot.isEmpty()) return
-        val payload = json.encodeToString(WsChatPush.serializer(), WsChatPush(mensaje))
+        val payload = json.encodeToString(WsChatPush.serializer(), push)
         val muertos = mutableListOf<WebSocketSession>()
         for (ws in snapshot) {
+            if (ws === excluir) continue
             try {
                 ws.send(Frame.Text(payload))
             } catch (e: Throwable) {

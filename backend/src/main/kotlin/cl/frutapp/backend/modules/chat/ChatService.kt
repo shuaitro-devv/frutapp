@@ -148,13 +148,22 @@ class ChatService(
     }
 
     /** El destinatario marca todos sus mensajes como leidos. Devuelve la
-     *  cantidad afectada. */
+     *  cantidad afectada. Si marcamos al menos 1, broadcast por WS para que
+     *  el autor vea el tick azul en tiempo real (sin recargar). */
     suspend fun marcarLeidos(userId: UUID, orderId: UUID): Int {
         val rol = resolverRolUsuarioEnPedido(orderId, userId)
             ?: throw NotFoundException("Pedido no encontrado.")
         // El cliente marca los mensajes destinados a "cliente"; staff marca
         // los destinados a su rol.
-        return repo.marcarLeidos(orderId, rol)
+        val n = repo.marcarLeidos(orderId, rol)
+        if (n > 0) {
+            hub.broadcastLeido(
+                orderId = orderId,
+                leidoEnRol = rol,
+                leidoEn = kotlinx.datetime.Clock.System.now().toString(),
+            )
+        }
+        return n
     }
 
     /** True si el [userId] participa en el chat de [orderId]. Tambien usado

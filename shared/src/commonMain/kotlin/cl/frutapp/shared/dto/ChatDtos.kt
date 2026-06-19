@@ -31,9 +31,37 @@ data class EnviarMensajeRequest(
 )
 
 /**
- * Frame que el server empuja por el WebSocket cuando hay un mensaje nuevo
- * del pedido. El cliente NO envia frames — el WS es solo push (lectura).
- * Para enviar mensajes o marcar leidos se usa REST (idempotente, auditable).
+ * Frame que se intercambia por el WebSocket de chat. Es un sobre con `type`
+ * + payload opcional por tipo:
+ *
+ *  - **mensaje**: nuevo mensaje en el chat (push del server a todas las
+ *    sesiones del pedido). [mensaje] tiene el DTO.
+ *  - **typing**: alguien esta escribiendo. El cliente lo envia mientras
+ *    tipea (throttled ~1.5s); el server lo rebroadcastea a las OTRAS
+ *    sesiones del pedido (no al autor). [typingRol] y [typingUserId]
+ *    identifican quien escribe.
+ *  - **leido**: alguien marco como leidos los mensajes destinados a su
+ *    rol. El server lo rebroadcastea para que el autor vea su tick azul
+ *    en tiempo real sin recargar. [leidoEnRol] es el rol del que leyo
+ *    (= destinatario_rol de los mensajes afectados); [leidoEn] es el
+ *    timestamp ISO del marcado.
+ *
+ * Diseno con default en [type]="mensaje" para que APKs viejas que solo
+ * miran `mensaje` no se rompan al recibir frames typing/leido (los
+ * ignoran porque `mensaje` viene null).
  */
 @Serializable
-data class WsChatPush(val mensaje: ChatMensajeDto)
+data class WsChatPush(
+    val type: String = TYPE_MENSAJE,
+    val mensaje: ChatMensajeDto? = null,
+    val typingRol: String? = null,
+    val typingUserId: String? = null,
+    val leidoEnRol: String? = null,
+    val leidoEn: String? = null,
+) {
+    companion object {
+        const val TYPE_MENSAJE = "mensaje"
+        const val TYPE_TYPING = "typing"
+        const val TYPE_LEIDO = "leido"
+    }
+}
