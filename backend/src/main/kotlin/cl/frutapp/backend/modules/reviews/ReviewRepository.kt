@@ -56,7 +56,12 @@ class ReviewRepository {
 
     /** Lista resenas del producto ordenadas por created_at DESC. */
     suspend fun listarPorProducto(productId: UUID, limite: Int = 50): List<ResenaRow> = dbQuery {
-        (ProductoResenaTable innerJoin UsersTable)
+        ProductoResenaTable.join(
+            UsersTable,
+            org.jetbrains.exposed.sql.JoinType.INNER,
+            onColumn = ProductoResenaTable.userId,
+            otherColumn = UsersTable.id,
+        )
             .selectAll()
             .where { ProductoResenaTable.productId eq productId }
             .orderBy(ProductoResenaTable.createdAt, SortOrder.DESC)
@@ -66,7 +71,12 @@ class ReviewRepository {
 
     /** La resena del usuario para este producto, o null si no existe. */
     suspend fun miResena(productId: UUID, userId: UUID): ResenaRow? = dbQuery {
-        (ProductoResenaTable innerJoin UsersTable)
+        ProductoResenaTable.join(
+            UsersTable,
+            org.jetbrains.exposed.sql.JoinType.INNER,
+            onColumn = ProductoResenaTable.userId,
+            otherColumn = UsersTable.id,
+        )
             .selectAll()
             .where {
                 (ProductoResenaTable.productId eq productId) and (ProductoResenaTable.userId eq userId)
@@ -78,7 +88,12 @@ class ReviewRepository {
     /** Helper: cargar por id con JOIN. Privado para mantener la API publica
      *  enfocada en los dos queries de negocio. */
     private suspend fun cargarPorId(id: UUID): ResenaRow? = dbQuery {
-        (ProductoResenaTable innerJoin UsersTable)
+        ProductoResenaTable.join(
+            UsersTable,
+            org.jetbrains.exposed.sql.JoinType.INNER,
+            onColumn = ProductoResenaTable.userId,
+            otherColumn = UsersTable.id,
+        )
             .selectAll()
             .where { ProductoResenaTable.id eq id }
             .singleOrNull()
