@@ -4,57 +4,113 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.graphics.ImageBitmap
+import cl.frutapp.app.data.remote.ReviewApi
+import cl.frutapp.shared.dto.ResenaDto
+import kotlinx.datetime.toLocalDateTime
 
 data class Resena(
-    val id: Int,
+    val id: String,
     val nombre: String,
     val estrellas: Int,
     val fecha: String,
     val texto: String,
     /** True si la escribió el usuario actual (se puede editar). */
     val propia: Boolean = false,
-    /** Foto real seleccionada por el usuario desde su galería (sin subir a backend). */
+    /** Foto local seleccionada por el usuario (no sube al backend en V1). Solo
+     *  vive el proceso; al cargar desde el backend nunca tiene imagen. */
     val imagen: ImageBitmap? = null
 )
 
 /**
- * Reseñas por producto (dummy, en memoria). Cada producto arranca con las reseñas semilla
- * y el usuario puede agregar/editar la suya (queda arriba). En producción esto vendría del backend.
+ * Reseñas por producto. Hidrata desde el backend (V32 `producto_resena`) y
+ * cachea en memoria para que las pantallas las consuman sincronicamente como
+ * estado Compose.
+ *
+ * Flujo tipico:
+ *  1. La pantalla llama [cargar] en un LaunchedEffect al entrar (idempotente).
+ *  2. Mientras tanto la lista refleja lo cacheado de cargas previas (o vacio).
+ *  3. Al guardar/editar via [guardarRemoto], el POST hace upsert en backend y
+ *     al volver mutamos el cache local con el dto real (estable en id, fecha
+ *     y nombre del autor).
+ *
+ * El campo `imagen` se mantiene local: en V1 NO subimos fotos adjuntas a la
+ * resena (foto evidencia ya cubre la prueba visual del item por parte del
+ * picker; resenas de cliente con texto y estrellas son suficientes).
  */
 object ResenasStore {
-    private fun semilla() = listOf(
-        Resena(1, "Camila R.", 5, "hace 2 días", "Llegó fresquísimo y muy rápido. Calidad de feria sin moverme de la casa."),
-        Resena(2, "Felipe M.", 5, "hace 1 semana", "Excelente selección, todo en su punto. Ya es mi compra fija de la semana."),
-        Resena(3, "Daniela P.", 4, "hace 2 semanas", "Muy buena calidad y buen precio. Repito sin dudarlo.")
-    )
-
-    private const val SEMILLA_COUNT = 3
-    private var nextId = 100
     private val porProducto = mutableStateMapOf<String, SnapshotStateList<Resena>>()
+    private val cargadosBackend = mutableSetOf<String>()
+    private val api = ReviewApi()
 
-    fun resenas(productId: String): SnapshotStateList<Resena> =
-        porProducto.getOrPut(productId) { mutableStateListOf<Resena>().apply { addAll(semilla()) } }
+    /** Lista mutable de resenas de un producto. Si nunca se cargo, devuelve
+     *  vacia — la pantalla deberia llamar [cargar] en paralelo. */
+    fun resenas(productoId: String): SnapshotStateList<Resena> =
+        porProducto.getOrPut(productoId) { mutableStateListOf() }
 
-    /** Reseñas que el usuario agregó a este producto (sobre las semilla). */
-    fun extras(productId: String): Int = (resenas(productId).size - SEMILLA_COUNT).coerceAtLeast(0)
+    /** Cantidad de resenas en el cache para este producto. */
+    fun extras(productoId: String): Int = resenas(productoId).size
 
-    /** La reseña del usuario para este producto (si ya la escribió). */
-    fun miResena(productId: String): Resena? = resenas(productId).firstOrNull { it.propia }
+    /** La resena del usuario actual para este producto, o null si todavia no
+     *  la escribio (o no fue cargada del backend). */
+    fun miResena(productoId: String): Resena? = resenas(productoId).firstOrNull { it.propia }
 
-    fun agregar(productId: String, nombre: String, estrellas: Int, texto: String, imagen: ImageBitmap? = null) {
-        resenas(productId).add(0, Resena(nextId++, nombre, estrellas, "recién", texto.trim(), propia = true, imagen = imagen))
+    /** Hidrata el cache desde el backend. Idempotente: si ya se cargo, no
+     *  vuelve a pegar (salvo [force]=true). Falla silenciosa → deja el cache
+     *  como estaba (lista vacia si nunca se hidrato). */
+    suspend fun cargar(productoId: String, miUserId: String?, force: Boolean = false) {
+        if (!force && productoId in cargadosBackend) return
+        val resp = runCatching { api.listar(productoId) }.getOrNull() ?: return
+        val lista = resp.map { it.toUi(miUserId) }
+        val st = resenas(productoId)
+        st.clear()
+        st.addAll(lista)
+        cargadosBackend.add(productoId)
     }
 
-    fun editar(productId: String, id: Int, estrellas: Int, texto: String, imagen: ImageBitmap? = null) {
-        val lista = resenas(productId)
-        val i = lista.indexOfFirst { it.id == id }
-        if (i >= 0) lista[i] = lista[i].copy(estrellas = estrellas, texto = texto.trim(), fecha = "editada", imagen = imagen)
+    /** Crear o actualizar mi resena. Hace POST upsert en backend; al volver
+     *  reemplaza la resena local del usuario por la persistida (id estable,
+     *  fecha del backend, autorNombre real). Devuelve la Resena resultante
+     *  o null si fallo (la UI puede mostrar toast). */
+    suspend fun guardarRemoto(productoId: String, estrellas: Int, texto: String): Resena? {
+        val dto = runCatching { api.guardar(productoId, estrellas, texto) }.getOrNull() ?: return null
+        val miUserId = TokenStore.user?.id
+        val r = dto.toUi(miUserId)
+        val st = resenas(productoId)
+        val idx = st.indexOfFirst { it.propia }
+        if (idx >= 0) st[idx] = r else st.add(0, r)
+        cargadosBackend.add(productoId)
+        return r
     }
 
-    /** Crea o actualiza la reseña del usuario (una por producto). */
-    fun guardar(productId: String, nombre: String, estrellas: Int, texto: String, imagen: ImageBitmap? = null) {
-        val mia = miResena(productId)
-        if (mia != null) editar(productId, mia.id, estrellas, texto, imagen)
-        else agregar(productId, nombre, estrellas, texto, imagen)
+    private fun ResenaDto.toUi(miUserId: String?): Resena = Resena(
+        id = id,
+        nombre = autorNombre,
+        estrellas = estrellas,
+        fecha = fechaCorta(createdAt),
+        texto = texto,
+        propia = miUserId != null && autorUserId == miUserId,
+    )
+}
+
+/** Formato corto "hoy" / "ayer" / "12 jun" para mostrar la fecha de la resena.
+ *  No usa Clock.System.now() para evitar el llamado a getEpochMilliseconds en
+ *  scripts; aca SI es legitimo (la app puede llamar a Clock cuando quiera). */
+private fun fechaCorta(iso: String): String = runCatching {
+    val instant = kotlinx.datetime.Instant.parse(iso)
+    val tz = kotlinx.datetime.TimeZone.currentSystemDefault()
+    val fecha = instant.toLocalDateTime(tz).date
+    val hoy = kotlinx.datetime.Clock.System.now().toLocalDateTime(tz).date
+    val diff = fecha.toEpochDays() - hoy.toEpochDays()
+    when (diff) {
+        0 -> "hoy"
+        -1 -> "ayer"
+        in -7..-2 -> "hace ${-diff} días"
+        else -> "${fecha.dayOfMonth} ${mesCorto(fecha.monthNumber)}"
     }
+}.getOrDefault("")
+
+private fun mesCorto(n: Int): String = when (n) {
+    1 -> "ene"; 2 -> "feb"; 3 -> "mar"; 4 -> "abr"; 5 -> "may"; 6 -> "jun"
+    7 -> "jul"; 8 -> "ago"; 9 -> "sep"; 10 -> "oct"; 11 -> "nov"; 12 -> "dic"
+    else -> ""
 }

@@ -229,6 +229,9 @@ fun Application.module() {
         notifications = notificationDispatcher,
         storage = storageService,
     )
+    val reviewService = cl.frutapp.backend.modules.reviews.ReviewService(
+        repo = cl.frutapp.backend.modules.reviews.ReviewRepository(),
+    )
     environment.log.info(
         if (webpayConfig.esSandbox) "Webpay: SANDBOX habilitado (creds publicas de integracion). returnUrl={}/v1/pagos/webpay/retorno"
         else "Webpay: PRODUCCION habilitada. returnUrl={}/v1/pagos/webpay/retorno",
@@ -248,7 +251,8 @@ fun Application.module() {
         webpayPagoService,
         ubicacionService,
         chatService, chatHub, tokenService,
-        configService, configRepository
+        configService, configRepository,
+        reviewService,
     )
 
     // Refresca la config de negocio cada 60s (cambios en app_config sin redeploy).

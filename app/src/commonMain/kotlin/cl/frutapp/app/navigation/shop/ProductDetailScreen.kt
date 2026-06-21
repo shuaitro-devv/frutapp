@@ -43,11 +43,14 @@ import androidx.compose.material.icons.filled.StarHalf
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
@@ -474,9 +477,14 @@ private fun ReviewsSection(producto: Producto, onVerTodas: () -> Unit) {
     // Picker de foto real (Android Photo Picker, sin permisos en Android 13+).
     val fotoPicker = cl.frutapp.app.ui.rememberImagePickerState()
     // null = estamos creando una reseña nueva; con id = estamos editando esa reseña.
-    var editandoId by rememberSaveable(producto.id) { mutableStateOf<Int?>(null) }
-    val autor = TokenStore.user?.name?.takeIf { it.isNotBlank() } ?: "Tú"
+    // id es String (UUID del backend).
+    var editandoId by rememberSaveable(producto.id) { mutableStateOf<String?>(null) }
     val yaResenada = ResenasStore.miResena(producto.id) != null
+    val scope = rememberCoroutineScope()
+    // Hidrata el cache desde el backend al entrar a la pantalla. Idempotente.
+    LaunchedEffect(producto.id) {
+        ResenasStore.cargar(producto.id, TokenStore.user?.id)
+    }
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
         Row(
@@ -506,13 +514,19 @@ private fun ReviewsSection(producto: Producto, onVerTodas: () -> Unit) {
                 onPickFoto = { fotoPicker.pick() },
                 onQuitarFoto = { fotoPicker.limpiar() },
                 onConfirmar = {
-                    val id = editandoId
-                    if (id != null) {
-                        ResenasStore.editar(producto.id, id, estrellas, texto, imagen = fotoPicker.imagen)
-                        showToast("Reseña actualizada")
-                    } else {
-                        ResenasStore.agregar(producto.id, autor, estrellas, texto, imagen = fotoPicker.imagen)
-                        showToast("¡Gracias por tu reseña!")
+                    // Upsert al backend; al volver el ResenasStore reemplaza
+                    // la del usuario en el cache local. La foto adjunta no se
+                    // sube (V1 sin storage de fotos en resenas).
+                    val esEdicion = editandoId != null
+                    val estrellasSnap = estrellas
+                    val textoSnap = texto
+                    scope.launch {
+                        val r = ResenasStore.guardarRemoto(producto.id, estrellasSnap, textoSnap)
+                        if (r != null) {
+                            showToast(if (esEdicion) "Reseña actualizada" else "¡Gracias por tu reseña!")
+                        } else {
+                            showToast("No pudimos guardar tu reseña.")
+                        }
                     }
                     texto = ""
                     estrellas = 5

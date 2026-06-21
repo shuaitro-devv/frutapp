@@ -1,0 +1,109 @@
+package cl.frutapp.backend.modules.reviews
+
+import cl.frutapp.backend.db.dbQuery
+import cl.frutapp.backend.modules.auth.UsersTable
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.innerJoin
+import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.update
+import java.util.UUID
+
+/** Acceso a `producto_resena`. JOIN con `app_user` para devolver el nombre
+ *  del autor sin que la app tenga que mapear por su cuenta. */
+class ReviewRepository {
+
+    /** Upsert manual: si ya existe (productId, userId), update; si no, insert.
+     *  Devuelve el row resultante (id, createdAt fijo desde el primer post). */
+    suspend fun upsert(
+        productId: UUID,
+        userId: UUID,
+        estrellas: Int,
+        texto: String,
+    ): ResenaRow = dbQuery {
+        val now = Clock.System.now()
+        val existente = ProductoResenaTable.selectAll().where {
+            (ProductoResenaTable.productId eq productId) and (ProductoResenaTable.userId eq userId)
+        }.singleOrNull()
+        val id = if (existente != null) {
+            val existenteId = existente[ProductoResenaTable.id]
+            ProductoResenaTable.update({ ProductoResenaTable.id eq existenteId }) {
+                it[ProductoResenaTable.estrellas] = estrellas
+                it[ProductoResenaTable.texto] = texto
+                it[updatedAt] = now
+            }
+            existenteId
+        } else {
+            val nuevoId = UUID.randomUUID()
+            ProductoResenaTable.insert {
+                it[ProductoResenaTable.id] = nuevoId
+                it[ProductoResenaTable.productId] = productId
+                it[ProductoResenaTable.userId] = userId
+                it[ProductoResenaTable.estrellas] = estrellas
+                it[ProductoResenaTable.texto] = texto
+                it[ProductoResenaTable.createdAt] = now
+                it[ProductoResenaTable.updatedAt] = now
+            }
+            nuevoId
+        }
+        // Releer con join para devolver el nombre del autor.
+        cargarPorId(id) ?: error("No se pudo releer la resena recien upserteada.")
+    }
+
+    /** Lista resenas del producto ordenadas por created_at DESC. */
+    suspend fun listarPorProducto(productId: UUID, limite: Int = 50): List<ResenaRow> = dbQuery {
+        (ProductoResenaTable innerJoin UsersTable)
+            .selectAll()
+            .where { ProductoResenaTable.productId eq productId }
+            .orderBy(ProductoResenaTable.createdAt, SortOrder.DESC)
+            .limit(limite)
+            .map { it.toRow() }
+    }
+
+    /** La resena del usuario para este producto, o null si no existe. */
+    suspend fun miResena(productId: UUID, userId: UUID): ResenaRow? = dbQuery {
+        (ProductoResenaTable innerJoin UsersTable)
+            .selectAll()
+            .where {
+                (ProductoResenaTable.productId eq productId) and (ProductoResenaTable.userId eq userId)
+            }
+            .singleOrNull()
+            ?.toRow()
+    }
+
+    /** Helper: cargar por id con JOIN. Privado para mantener la API publica
+     *  enfocada en los dos queries de negocio. */
+    private suspend fun cargarPorId(id: UUID): ResenaRow? = dbQuery {
+        (ProductoResenaTable innerJoin UsersTable)
+            .selectAll()
+            .where { ProductoResenaTable.id eq id }
+            .singleOrNull()
+            ?.toRow()
+    }
+
+    private fun org.jetbrains.exposed.sql.ResultRow.toRow(): ResenaRow = ResenaRow(
+        id = this[ProductoResenaTable.id],
+        productId = this[ProductoResenaTable.productId],
+        userId = this[ProductoResenaTable.userId],
+        autorNombre = this[UsersTable.name],
+        estrellas = this[ProductoResenaTable.estrellas],
+        texto = this[ProductoResenaTable.texto],
+        createdAt = this[ProductoResenaTable.createdAt],
+        updatedAt = this[ProductoResenaTable.updatedAt],
+    )
+
+    data class ResenaRow(
+        val id: UUID,
+        val productId: UUID,
+        val userId: UUID,
+        val autorNombre: String,
+        val estrellas: Int,
+        val texto: String,
+        val createdAt: Instant,
+        val updatedAt: Instant,
+    )
+}
