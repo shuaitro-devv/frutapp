@@ -256,6 +256,9 @@ private fun OrderCard(order: OrderSummaryDto, onClick: () -> Unit, onReorder: ()
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(order.numero, color = FrutAppColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     EstadoChip(order.status, modifier = Modifier.padding(start = 8.dp))
+                    if (order.chatUnread > 0) {
+                        UnreadDot(count = order.chatUnread, modifier = Modifier.padding(start = 6.dp))
+                    }
                 }
                 Text("${order.itemsCount} producto(s)", color = FrutAppColors.InkSoft, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
                 Text(formatClp(order.total), color = FrutAppColors.Brand600, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp))
@@ -271,6 +274,25 @@ private fun OrderCard(order: OrderSummaryDto, onClick: () -> Unit, onReorder: ()
             Icon(Icons.Filled.Replay, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(16.dp))
             Text("Volver a pedir", color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp))
         }
+    }
+}
+
+/** Pill rojo con el conteo de mensajes de chat no leidos. Se reusa entre
+ *  MisPedidos (al lado del numero de pedido) y OrderTracking (al lado del
+ *  boton "Chatear..."). "99+" cuando se pasa de 99 para no romper layout. */
+@Composable
+private fun UnreadDot(count: Int, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .background(Color(0xFFDC2626), RoundedCornerShape(10.dp))
+            .padding(horizontal = 6.dp, vertical = 1.dp)
+    ) {
+        Text(
+            text = if (count > 99) "99+" else count.toString(),
+            color = Color.White,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 

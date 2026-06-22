@@ -101,7 +101,10 @@ data class OrderDto(
     val payments: List<OrderPaymentDto> = emptyList(),
     /** Acciones que el llamante puede ejecutar (estado × sus permisos). Vacío para el
      *  cliente; lo usa el back office para mostrar solo los botones válidos. */
-    val allowedActions: List<String> = emptyList()
+    val allowedActions: List<String> = emptyList(),
+    /** Mensajes de chat NO leidos en este pedido para el rol del que consulta
+     *  (cliente cuando viene de /v1/orders). 0 si no hay o si la API es vieja. */
+    val chatUnread: Int = 0,
 )
 
 @Serializable
@@ -194,7 +197,9 @@ data class OrderSummaryDto(
     val status: String,
     val total: Int,
     val fecha: String,
-    val itemsCount: Int
+    val itemsCount: Int,
+    /** Mensajes de chat NO leidos del cliente en este pedido. 0 si no hay. */
+    val chatUnread: Int = 0,
 )
 
 /** Saldo de FrutCoins (derivado del ledger) + movimientos. */

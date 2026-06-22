@@ -34,7 +34,12 @@ class OrderService(
     /** Hook opcional: fired cuando el cliente aprueba/rechaza el ajuste de peso.
      *  Le avisa al picker via inbox + push que su trabajo se resolvio. Null
      *  en tests y cuando FCM no esta configurado. */
-    private val onAjusteResuelto: ((orderId: java.util.UUID, aprobado: Boolean) -> Unit)? = null
+    private val onAjusteResuelto: ((orderId: java.util.UUID, aprobado: Boolean) -> Unit)? = null,
+    /** Cuenta los mensajes no leidos en un pedido para el rol dado. Default
+     *  devuelve 0 (back-compat: tests sin cablear chat siguen funcionando). */
+    private val chatUnreadOne: (suspend (orderId: java.util.UUID, destinatarioRol: String) -> Int) = { _, _ -> 0 },
+    /** Idem batch para listados (1 query por GROUP BY en vez de N+1). */
+    private val chatUnreadBatch: (suspend (orderIds: List<java.util.UUID>, destinatarioRol: String) -> Map<java.util.UUID, Int>) = { _, _ -> emptyMap() },
 ) {
 
     suspend fun create(userId: UUID, req: CreateOrderRequest): OrderDto {
@@ -189,11 +194,19 @@ class OrderService(
             ?: throw IllegalStateException("Pedido recién creado no encontrado")
     }
 
-    suspend fun list(userId: UUID): List<OrderSummaryDto> = orders.listByUser(userId)
+    suspend fun list(userId: UUID): List<OrderSummaryDto> {
+        val pedidos = orders.listByUser(userId)
+        if (pedidos.isEmpty()) return pedidos
+        // Batch los no-leidos del cliente (rol "cliente" = destinatario_rol
+        // de los mensajes que recibe el cliente). 1 sola query GROUP BY.
+        val unread = chatUnreadBatch(pedidos.map { UUID.fromString(it.id) }, "cliente")
+        return pedidos.map { p -> p.copy(chatUnread = unread[UUID.fromString(p.id)] ?: 0) }
+    }
 
     suspend fun detail(userId: UUID, idStr: String): OrderDto {
         val id = parseUuid(idStr, "Id inválido.")
-        return orders.findDetail(id, userId) ?: throw NotFoundException("Pedido no encontrado.")
+        val dto = orders.findDetail(id, userId) ?: throw NotFoundException("Pedido no encontrado.")
+        return dto.copy(chatUnread = chatUnreadOne(id, "cliente"))
     }
 
     suspend fun frutCoinsOf(userId: UUID): FrutCoinsBalanceDto = frutCoins.balanceAndHistory(userId)

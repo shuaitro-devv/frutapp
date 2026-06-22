@@ -178,6 +178,10 @@ fun Application.module() {
     val notificationDispatcher = NotificationDispatcher(
         orderRepository, deviceTokenRepository, notificationInboxRepository, fcmSender
     )
+    // ChatRepository compartido entre OrderService (contador de no-leidos)
+    // y ChatService (escritura/lectura del chat). Una instancia comun para
+    // no abrir dos pools de query.
+    val chatRepository = cl.frutapp.backend.modules.chat.ChatRepository()
     val orderService = OrderService(
         orderRepository,
         catalogRepository,
@@ -190,7 +194,9 @@ fun Application.module() {
         },
         onAjusteResuelto = { id, aprobado ->
             notificationDispatcher.onAjusteResueltoByCliente(id, aprobado)
-        }
+        },
+        chatUnreadOne = { id, rol -> chatRepository.contarNoLeidos(id, rol) },
+        chatUnreadBatch = { ids, rol -> chatRepository.contarNoLeidosBatch(ids, rol) },
     )
     val adminUserService = AdminUserService(
         UserRepository(), rbacRepository, PasswordResetTokenRepository(), tokenService, emailSender
@@ -224,7 +230,7 @@ fun Application.module() {
     )
     val chatHub = cl.frutapp.backend.modules.chat.ChatHub()
     val chatService = cl.frutapp.backend.modules.chat.ChatService(
-        repo = cl.frutapp.backend.modules.chat.ChatRepository(),
+        repo = chatRepository,
         hub = chatHub,
         notifications = notificationDispatcher,
         storage = storageService,

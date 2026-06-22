@@ -345,12 +345,22 @@ private fun Detail(
                                 }
                                 .padding(12.dp)
                         ) {
-                            Text(
-                                "Chatear con el seleccionador",
-                                color = FrutAppColors.Brand800,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "Chatear con el seleccionador",
+                                    color = FrutAppColors.Brand800,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                // Badge de mensajes no leidos. La query del backend
+                                // cuenta todos los mensajes destinados al cliente sin
+                                // leer en este pedido — al tocar cualquier chat se
+                                // marcan todos como leidos y el badge desaparece.
+                                if (o.chatUnread > 0 && !canRepartidor) {
+                                    ChatUnreadDot(o.chatUnread)
+                                }
+                            }
                         }
                     }
                     if (canRepartidor) {
@@ -367,12 +377,21 @@ private fun Detail(
                                 }
                                 .padding(12.dp)
                         ) {
-                            Text(
-                                "Chatear con el repartidor",
-                                color = FrutAppColors.Brand800,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "Chatear con el repartidor",
+                                    color = FrutAppColors.Brand800,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                // Cuando hay 2 botones (picker + repartidor),
+                                // mostramos el badge solo en este (el ultimo
+                                // contacto vivo del pedido).
+                                if (o.chatUnread > 0) {
+                                    ChatUnreadDot(o.chatUnread)
+                                }
+                            }
                         }
                     }
                 }
@@ -692,6 +711,24 @@ private fun MapaRepartidor(orderId: String, modifier: Modifier = Modifier) {
                 Text("Esperando al repartidor…", color = FrutAppColors.Brand800, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
         }
+    }
+}
+
+/** Badge rojo con el conteo de mensajes de chat no leidos. "99+" cuando se
+ *  pasa de 99 para no romper layout. */
+@Composable
+private fun ChatUnreadDot(count: Int) {
+    Box(
+        modifier = Modifier
+            .background(Color(0xFFDC2626), RoundedCornerShape(10.dp))
+            .padding(horizontal = 6.dp, vertical = 1.dp)
+    ) {
+        Text(
+            text = if (count > 99) "99+" else count.toString(),
+            color = Color.White,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 

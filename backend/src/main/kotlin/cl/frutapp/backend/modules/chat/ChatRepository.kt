@@ -5,7 +5,9 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.count
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import java.util.UUID
@@ -74,6 +76,36 @@ class ChatRepository {
                 leidoEn = row[ChatMensajeTable.leidoEn],
                 createdAt = row[ChatMensajeTable.createdAt],
             )
+        }
+    }
+
+    /** Cantidad de mensajes destinados a [destinatarioRol] en [orderId] sin
+     *  leer. Usado por el endpoint del pedido (cliente) para mostrar badge. */
+    suspend fun contarNoLeidos(orderId: UUID, destinatarioRol: String): Int = dbQuery {
+        ChatMensajeTable.selectAll().where {
+            (ChatMensajeTable.orderId eq orderId) and
+                (ChatMensajeTable.destinatarioRol eq destinatarioRol) and
+                ChatMensajeTable.leidoEn.isNull()
+        }.count().toInt()
+    }
+
+    /** Batch: para un listado de pedidos, devuelve Map<orderId, noLeidos> de
+     *  los mensajes destinados a [destinatarioRol]. Una sola query con GROUP
+     *  BY — escala bien aunque el cliente tenga decenas de pedidos. Pedidos
+     *  sin mensajes pendientes NO aparecen en el map (la app interpreta
+     *  ausencia = 0). */
+    suspend fun contarNoLeidosBatch(orderIds: List<UUID>, destinatarioRol: String): Map<UUID, Int> {
+        if (orderIds.isEmpty()) return emptyMap()
+        return dbQuery {
+            ChatMensajeTable
+                .select(ChatMensajeTable.orderId, ChatMensajeTable.id.count())
+                .where {
+                    (ChatMensajeTable.orderId inList orderIds) and
+                        (ChatMensajeTable.destinatarioRol eq destinatarioRol) and
+                        ChatMensajeTable.leidoEn.isNull()
+                }
+                .groupBy(ChatMensajeTable.orderId)
+                .associate { it[ChatMensajeTable.orderId] to it[ChatMensajeTable.id.count()].toInt() }
         }
     }
 
