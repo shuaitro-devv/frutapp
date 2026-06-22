@@ -52,7 +52,11 @@ data class Producto(
     val brandCategoryId: String? = null,
     /** Disponibilidad operacional del backend (false = agotado). Default true
      *  para que el DemoCatalog mock siga mostrando todo agregable. */
-    val disponible: Boolean = true
+    val disponible: Boolean = true,
+    /** UUID real del producto en el backend (cuando vino de la API). Null si
+     *  el producto se construyo desde el [DemoCatalog] mock — los endpoints
+     *  que requieren UUID (resenas) deben skippearse cuando esto sea null. */
+    val backendId: String? = null,
 )
 
 object DemoCatalog {

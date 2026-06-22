@@ -55,9 +55,11 @@ object ResenasStore {
     fun miResena(productoId: String): Resena? = resenas(productoId).firstOrNull { it.propia }
 
     /** Hidrata el cache desde el backend. Idempotente: si ya se cargo, no
-     *  vuelve a pegar (salvo [force]=true). Falla silenciosa → deja el cache
-     *  como estaba (lista vacia si nunca se hidrato). */
+     *  vuelve a pegar (salvo [force]=true). Skip si [productoId] no parece UUID
+     *  (productos del DemoCatalog usan slug, no se pueden resenar). Falla
+     *  silenciosa → deja el cache como estaba (lista vacia si nunca se hidrato). */
     suspend fun cargar(productoId: String, miUserId: String?, force: Boolean = false) {
+        if (!productoId.parecesUuid()) return
         if (!force && productoId in cargadosBackend) return
         val resp = runCatching { api.listar(productoId) }.getOrNull() ?: return
         val lista = resp.map { it.toUi(miUserId) }
@@ -70,8 +72,9 @@ object ResenasStore {
     /** Crear o actualizar mi resena. Hace POST upsert en backend; al volver
      *  reemplaza la resena local del usuario por la persistida (id estable,
      *  fecha del backend, autorNombre real). Devuelve la Resena resultante
-     *  o null si fallo (la UI puede mostrar toast). */
+     *  o null si fallo o si el productoId no es UUID (DemoCatalog). */
     suspend fun guardarRemoto(productoId: String, estrellas: Int, texto: String): Resena? {
+        if (!productoId.parecesUuid()) return null
         val dto = runCatching { api.guardar(productoId, estrellas, texto) }.getOrNull() ?: return null
         val miUserId = TokenStore.user?.id
         val r = dto.toUi(miUserId)
@@ -91,6 +94,11 @@ object ResenasStore {
         propia = miUserId != null && autorUserId == miUserId,
     )
 }
+
+/** Heuristica: el string parece un UUID si tiene 36 chars con los 4 guiones
+ *  en su posicion. No valida en profundidad — solo descarta slugs y vacios. */
+private fun String.parecesUuid(): Boolean =
+    length == 36 && this[8] == '-' && this[13] == '-' && this[18] == '-' && this[23] == '-'
 
 /** Formato corto "hoy" / "ayer" / "12 jun" para mostrar la fecha de la resena.
  *  No usa Clock.System.now() para evitar el llamado a getEpochMilliseconds en

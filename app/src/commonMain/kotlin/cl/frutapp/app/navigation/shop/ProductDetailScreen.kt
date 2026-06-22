@@ -194,7 +194,7 @@ class ProductDetailScreen(
                         BenefitCard(Icons.Filled.Favorite, "Antioxidantes", Modifier.weight(1f))
                     }
                 }
-                item { ReviewsSection(producto, onVerTodas = { navigator.push(ResenasScreen(producto.id, producto.nombre)) }) }
+                item { ReviewsSection(producto, onVerTodas = { navigator.push(ResenasScreen(producto.backendId ?: producto.id, producto.nombre)) }) }
                 item {
                     SectionTitle("También te puede gustar", modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 10.dp))
                 }
@@ -464,12 +464,12 @@ private fun BenefitCard(icon: ImageVector, label: String, modifier: Modifier = M
 
 @Composable
 private fun ReviewsSection(producto: Producto, onVerTodas: () -> Unit) {
-    val resenas = ResenasStore.resenas(producto.id)
+    val resenas = ResenasStore.resenas(producto.backendId ?: producto.id)
     // Promedio dummy estable por producto (derivado del id). El conteo headline suma las
     // reseñas que el usuario haya agregado en la sesión para que se sienta "vivo".
     val h = abs(producto.id.hashCode())
     val promedio = listOf(4.6, 4.7, 4.8, 4.9)[h % 4]
-    val total = 80 + h % 140 + ResenasStore.extras(producto.id)
+    val total = 80 + h % 140 + ResenasStore.extras(producto.backendId ?: producto.id)
 
     var escribiendo by rememberSaveable(producto.id) { mutableStateOf(false) }
     var estrellas by rememberSaveable(producto.id) { mutableStateOf(5) }
@@ -479,11 +479,14 @@ private fun ReviewsSection(producto: Producto, onVerTodas: () -> Unit) {
     // null = estamos creando una reseña nueva; con id = estamos editando esa reseña.
     // id es String (UUID del backend).
     var editandoId by rememberSaveable(producto.id) { mutableStateOf<String?>(null) }
-    val yaResenada = ResenasStore.miResena(producto.id) != null
+    val yaResenada = ResenasStore.miResena(producto.backendId ?: producto.id) != null
     val scope = rememberCoroutineScope()
     // Hidrata el cache desde el backend al entrar a la pantalla. Idempotente.
-    LaunchedEffect(producto.id) {
-        ResenasStore.cargar(producto.id, TokenStore.user?.id)
+    // Usamos backendId (UUID real); cuando es null (producto del DemoCatalog
+    // mock), ResenasStore skipea solo.
+    val resenasKey = producto.backendId.orEmpty()
+    LaunchedEffect(resenasKey) {
+        if (resenasKey.isNotEmpty()) ResenasStore.cargar(resenasKey, TokenStore.user?.id)
     }
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
@@ -520,8 +523,13 @@ private fun ReviewsSection(producto: Producto, onVerTodas: () -> Unit) {
                     val esEdicion = editandoId != null
                     val estrellasSnap = estrellas
                     val textoSnap = texto
+                    val backendId = producto.backendId
                     scope.launch {
-                        val r = ResenasStore.guardarRemoto(producto.id, estrellasSnap, textoSnap)
+                        if (backendId.isNullOrEmpty()) {
+                            showToast("Este producto no se puede reseñar.")
+                            return@launch
+                        }
+                        val r = ResenasStore.guardarRemoto(backendId, estrellasSnap, textoSnap)
                         if (r != null) {
                             showToast(if (esEdicion) "Reseña actualizada" else "¡Gracias por tu reseña!")
                         } else {

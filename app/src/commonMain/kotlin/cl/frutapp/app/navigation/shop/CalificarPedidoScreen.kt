@@ -94,12 +94,16 @@ class CalificarPedidoScreen(private val items: List<OrderItemDto>) : Screen {
             val mapeados = items.mapNotNull { porImagen[it.imageKey]?.toProducto() }.distinctBy { it.id }
             // Hidratamos las resenas del usuario para cada producto en paralelo;
             // si ya califico antes, precargamos sus estrellas y comentario.
+            // Usamos backendId (UUID); cuando es null (DemoCatalog) el store
+            // skipea solo y nunca se llena. Para el form local sigue siendo
+            // p.id (slug) la key, asi el estado de UI no depende de la red.
             val miUserId = TokenStore.user?.id
-            mapeados.map { p ->
-                async { ResenasStore.cargar(p.id, miUserId) }
+            mapeados.mapNotNull { p ->
+                p.backendId?.let { bid -> async { ResenasStore.cargar(bid, miUserId) } }
             }.awaitAll()
             mapeados.forEach { p ->
-                ResenasStore.miResena(p.id)?.let { mia ->
+                val bid = p.backendId ?: return@forEach
+                ResenasStore.miResena(bid)?.let { mia ->
                     estrellas[p.id] = mia.estrellas
                     if (mia.texto.isNotBlank()) comentarios[p.id] = mia.texto
                 }
@@ -156,11 +160,15 @@ class CalificarPedidoScreen(private val items: List<OrderItemDto>) : Screen {
                                     guardando = true
                                     scope.launch {
                                         // Upsert paralelo: una resena por producto con
-                                        // estrellas > 0. Conteamos exitos para feedback;
-                                        // si alguna falla, el toast lo refleja.
+                                        // estrellas > 0 Y backendId conocido (los del
+                                        // DemoCatalog no se pueden persistir). Conteamos
+                                        // exitos para feedback.
                                         val items = lista.mapNotNull { p ->
                                             val s = estrellas[p.id] ?: 0
-                                            if (s > 0) Triple(p.id, s, comentarios[p.id]?.trim() ?: "") else null
+                                            val bid = p.backendId
+                                            if (s > 0 && !bid.isNullOrEmpty())
+                                                Triple(bid, s, comentarios[p.id]?.trim() ?: "")
+                                            else null
                                         }
                                         val resultados = items.map { (pid, s, txt) ->
                                             async { ResenasStore.guardarRemoto(pid, s, txt) }

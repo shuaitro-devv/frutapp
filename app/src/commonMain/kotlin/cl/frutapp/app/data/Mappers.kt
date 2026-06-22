@@ -131,5 +131,6 @@ fun ProductDto.toProducto(): Producto = Producto(
     categoria = categoriaFor(categoryId),
     imagen = drawableForImageKey(imageKey),
     organico = imageKey in ORGANIC_IMAGE_KEYS,
-    disponible = disponible
+    disponible = disponible,
+    backendId = id,
 )
