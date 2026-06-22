@@ -118,9 +118,22 @@ class ChatWsClient(
         }
     }
 
-    /** Cierra la conexion si esta activa. */
+    /** Cierra la conexion si esta activa (espera al join). Para uso desde
+     *  contextos coroutine. NO llamarlo desde el main thread con runBlocking. */
     suspend fun detener() {
         job?.cancelAndJoin()
+        job = null
+        sesionActiva = null
+        _conectado.value = false
+    }
+
+    /** Cancela el WS sin esperar al join. Pensado para [DisposableEffect.onDispose]
+     *  del ChatScreen, que corre en el main thread y NO puede bloquearse esperando
+     *  que el WS cierre handshake (puede tardar segundos en condiciones de red mala
+     *  y dispara ANR "isn't responding"). El cleanup remoto se completa solo cuando
+     *  la coroutine ve la cancelacion (siguiente await o ping). */
+    fun cerrarRapido() {
+        job?.cancel()
         job = null
         sesionActiva = null
         _conectado.value = false

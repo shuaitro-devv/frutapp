@@ -105,7 +105,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -285,8 +284,9 @@ class ChatScreen(
 
         DisposableEffect(orderId) {
             onDispose {
-                // Cerrar WS cuando la pantalla sale del scope.
-                runBlocking { runCatching { ws.detener() } }
+                // Cerrar el WS sin bloquear el main thread. runBlocking aca
+                // dispara ANR si el cancelAndJoin tarda (red mala / WS colgado).
+                ws.cerrarRapido()
             }
         }
 
