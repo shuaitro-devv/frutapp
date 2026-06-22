@@ -120,16 +120,26 @@ class ChatService(
         // Broadcast realtime a las conexiones del pedido.
         hub.broadcast(orderId, dto)
 
-        // Push FCM al destinatario si no esta conectado. Si esta conectado,
-        // ya recibio el frame por el WS — un push duplicado da ruido.
+        // Notificacion al destinatario: SIEMPRE persistimos en su inbox (para
+        // que aparezca el badge en la campanita y la pantalla de notificaciones
+        // sin importar si estaba conectado al chat o no). Push FCM solo si el
+        // DESTINATARIO especifico NO esta conectado al chat de este pedido
+        // (si lo esta, ya vio el mensaje por WS — push duplicaria).
+        //
+        // Antes el chequeo era hub.conexionesDe(orderId) == 0, que cuenta
+        // CUALQUIER sesion (incluyendo la del autor). Si el picker tenia el
+        // chat abierto y mandaba mensaje al cliente, conexionesDe = 1 → no se
+        // creaba inbox NI push → el cliente no veia nada.
         val destinatarioUserId = quienEsta(orderId, destinatarioReal)
-        if (destinatarioUserId != null && hub.conexionesDe(orderId) == 0) {
+        if (destinatarioUserId != null) {
             val cuerpoBreve = if (texto.isNotEmpty()) texto.take(80) else "Te envió una foto"
+            val destinatarioConectado = hub.usuarioConectado(orderId, destinatarioUserId)
             notifications.onChatMensaje(
                 orderId = orderId,
                 destinatarioUserId = destinatarioUserId,
                 autorRol = autorRol,
                 cuerpoBreve = cuerpoBreve,
+                destinatarioConectado = destinatarioConectado,
             )
         }
         return dto

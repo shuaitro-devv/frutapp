@@ -136,7 +136,7 @@ fun Route.chatRoutes(service: ChatService, hub: ChatHub, tokenService: TokenServ
         if (rol == null) {
             close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Sin acceso")); return@webSocket
         }
-        hub.registrar(orderId, this)
+        hub.registrar(orderId, uid, this)
         val wsJson = Json { ignoreUnknownKeys = true; isLenient = true }
         try {
             // El cliente envia frames "typing" mientras tipea; el server los

@@ -14,12 +14,18 @@ import java.util.UUID
  * Hub en memoria de conexiones WebSocket por pedido.
  *
  * Cada vez que un cliente abre el chat de un pedido, su WS se registra aca
- * (por `orderId`). Cuando alguien envia un mensaje por REST, el ChatService
- * llama a [broadcastMensaje] que empuja el mensaje a TODAS las conexiones
- * de ese pedido (cliente + picker/repartidor que esten conectados).
+ * (por `orderId` Y `userId`). Cuando alguien envia un mensaje por REST, el
+ * ChatService llama a [broadcastMensaje] que empuja el mensaje a TODAS las
+ * conexiones de ese pedido (cliente + picker/repartidor que esten
+ * conectados).
  *
  * Eventos efimeros (typing/leido) se rebroadcastean EXCLUYENDO al autor —
  * no tiene sentido que el que tipea vea "te estas escribiendo".
+ *
+ * El tracking por userId permite preguntar "esta el DESTINATARIO conectado
+ * a este pedido?" para decidir si mandamos push FCM (evita push duplicado
+ * cuando ya esta viendo el mensaje por WS, y al reves: si el autor esta
+ * conectado pero el destinatario no, igual mandamos push al destinatario).
  *
  * Si una conexion esta caida, falla el send y la limpiamos del set para no
  * acumular zombies.
@@ -29,27 +35,36 @@ import java.util.UUID
  * broadcasts entre instancias. Por ahora un solo nodo en Contabo basta.
  */
 class ChatHub {
-    private val sesiones = mutableMapOf<UUID, MutableSet<WebSocketSession>>()
+    private val sesiones = mutableMapOf<UUID, MutableSet<Conexion>>()
     private val mutex = Mutex()
     private val json = Json { encodeDefaults = true }
 
-    suspend fun registrar(orderId: UUID, ws: WebSocketSession) {
+    /** Una conexion activa: WS + el user que la abrio. */
+    private data class Conexion(val ws: WebSocketSession, val userId: UUID)
+
+    suspend fun registrar(orderId: UUID, userId: UUID, ws: WebSocketSession) {
         mutex.withLock {
-            sesiones.getOrPut(orderId) { mutableSetOf() }.add(ws)
+            sesiones.getOrPut(orderId) { mutableSetOf() }.add(Conexion(ws, userId))
         }
     }
 
     suspend fun desregistrar(orderId: UUID, ws: WebSocketSession) {
         mutex.withLock {
-            sesiones[orderId]?.remove(ws)
+            sesiones[orderId]?.removeAll { it.ws === ws }
             if (sesiones[orderId]?.isEmpty() == true) sesiones.remove(orderId)
         }
     }
 
-    /** Cuantas conexiones activas tiene el pedido. Util para decidir si
-     *  mandar push FCM al destinatario (lo mandamos si no esta conectado). */
+    /** Cuantas conexiones activas tiene el pedido (TODAS, incluyendo autor).
+     *  Util para diagnostico / debug. */
     suspend fun conexionesDe(orderId: UUID): Int = mutex.withLock {
         sesiones[orderId]?.size ?: 0
+    }
+
+    /** True si [userId] tiene al menos una sesion activa en el chat de
+     *  [orderId]. Usado para decidir si mandar push FCM al destinatario. */
+    suspend fun usuarioConectado(orderId: UUID, userId: UUID): Boolean = mutex.withLock {
+        sesiones[orderId]?.any { it.userId == userId } == true
     }
 
     /** Push de mensaje nuevo a TODAS las conexiones del pedido. */
@@ -105,19 +120,19 @@ class ChatHub {
         val snapshot = mutex.withLock { sesiones[orderId]?.toList().orEmpty() }
         if (snapshot.isEmpty()) return
         val payload = json.encodeToString(WsChatPush.serializer(), push)
-        val muertos = mutableListOf<WebSocketSession>()
-        for (ws in snapshot) {
-            if (ws === excluir) continue
+        val muertas = mutableListOf<Conexion>()
+        for (con in snapshot) {
+            if (con.ws === excluir) continue
             try {
-                ws.send(Frame.Text(payload))
+                con.ws.send(Frame.Text(payload))
             } catch (e: Throwable) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                muertos.add(ws)
+                muertas.add(con)
             }
         }
-        if (muertos.isNotEmpty()) {
+        if (muertas.isNotEmpty()) {
             mutex.withLock {
-                sesiones[orderId]?.removeAll(muertos.toSet())
+                sesiones[orderId]?.removeAll(muertas.toSet())
                 if (sesiones[orderId]?.isEmpty() == true) sesiones.remove(orderId)
             }
         }

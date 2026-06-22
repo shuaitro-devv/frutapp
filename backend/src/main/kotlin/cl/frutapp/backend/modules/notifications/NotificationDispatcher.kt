@@ -239,16 +239,19 @@ class NotificationDispatcher(
     }
 
     /**
-     * Chat in-app: el destinatario NO esta conectado al WS y recibe un push
-     * para que abra la app y vea el mensaje. Llamado solo cuando el ChatHub
-     * detecta cero conexiones del orderId (si estuviera conectado, el mensaje
-     * ya viajo por el WS y un push duplicaria el aviso).
+     * Chat in-app. SIEMPRE persiste en el inbox del destinatario (para que
+     * aparezca el badge en la campanita y el item en la pantalla de
+     * notificaciones, sin importar si estaba conectado al chat).
+     *
+     * FCM solo si [destinatarioConectado]=false (si estaba viendo el chat,
+     * el mensaje le llego por WS y el push duplicaria el aviso).
      */
     fun onChatMensaje(
         orderId: java.util.UUID,
         destinatarioUserId: java.util.UUID,
         autorRol: String,
         cuerpoBreve: String,
+        destinatarioConectado: Boolean,
     ) {
         scope.launch {
             runCatching {
@@ -266,6 +269,7 @@ class NotificationDispatcher(
                     body = cuerpoBreve,
                     data = """{"orderId":"$orderId","type":"chat_mensaje","autorRol":"$autorRol"}"""
                 )
+                if (destinatarioConectado) return@launch
                 if (fcm == null) return@launch
                 val tokens = deviceTokens.listByUser(destinatarioUserId)
                 tokens.forEach { row ->
