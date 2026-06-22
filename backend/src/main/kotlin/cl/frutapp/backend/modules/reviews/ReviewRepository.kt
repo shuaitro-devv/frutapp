@@ -18,7 +18,9 @@ import java.util.UUID
 class ReviewRepository {
 
     /** Upsert manual: si ya existe (productId, userId), update; si no, insert.
-     *  Devuelve el row resultante (id, createdAt fijo desde el primer post). */
+     *  Devuelve el row resultante (id, createdAt fijo desde el primer post).
+     *  La relectura va en la MISMA dbQuery para no anidar newSuspendedTransaction
+     *  (anidarlas con Exposed + suspended transactions tira IllegalStateException). */
     suspend fun upsert(
         productId: UUID,
         userId: UUID,
@@ -50,8 +52,18 @@ class ReviewRepository {
             }
             nuevoId
         }
-        // Releer con join para devolver el nombre del autor.
-        cargarPorId(id) ?: error("No se pudo releer la resena recien upserteada.")
+        // Releer en LA MISMA transaccion para devolver el nombre del autor sin
+        // anidar dbQuery — el JOIN va inline.
+        ProductoResenaTable.join(
+            UsersTable,
+            org.jetbrains.exposed.sql.JoinType.INNER,
+            onColumn = ProductoResenaTable.userId,
+            otherColumn = UsersTable.id,
+        )
+            .selectAll()
+            .where { ProductoResenaTable.id eq id }
+            .single()
+            .toRow()
     }
 
     /** Lista resenas del producto ordenadas por created_at DESC. */
@@ -81,21 +93,6 @@ class ReviewRepository {
             .where {
                 (ProductoResenaTable.productId eq productId) and (ProductoResenaTable.userId eq userId)
             }
-            .singleOrNull()
-            ?.toRow()
-    }
-
-    /** Helper: cargar por id con JOIN. Privado para mantener la API publica
-     *  enfocada en los dos queries de negocio. */
-    private suspend fun cargarPorId(id: UUID): ResenaRow? = dbQuery {
-        ProductoResenaTable.join(
-            UsersTable,
-            org.jetbrains.exposed.sql.JoinType.INNER,
-            onColumn = ProductoResenaTable.userId,
-            otherColumn = UsersTable.id,
-        )
-            .selectAll()
-            .where { ProductoResenaTable.id eq id }
             .singleOrNull()
             ?.toRow()
     }
