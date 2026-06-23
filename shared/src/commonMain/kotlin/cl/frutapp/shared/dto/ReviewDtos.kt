@@ -11,6 +11,9 @@ data class ResenaDto(
     val autorUserId: String,
     val estrellas: Int,    // 1..5
     val texto: String,
+    /** URL presignada de la imagen adjunta, o null si la resena es solo texto.
+     *  El backend la firma cada vez que la devuelve (no se persiste). */
+    val imagenUrl: String? = null,
     val createdAt: String, // ISO
     val updatedAt: String, // ISO
 )

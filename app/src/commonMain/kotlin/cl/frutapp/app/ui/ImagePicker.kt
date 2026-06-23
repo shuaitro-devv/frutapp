@@ -13,6 +13,9 @@ import androidx.compose.ui.graphics.ImageBitmap
  */
 expect class ImagePickerState {
     val imagen: ImageBitmap?
+    /** Bytes originales de la imagen elegida (sin recortar/recomprimir). Para
+     *  uploads multipart al backend (resenas). Null si todavia no se eligio. */
+    val bytes: ByteArray?
     fun pick()
     fun limpiar()
 }

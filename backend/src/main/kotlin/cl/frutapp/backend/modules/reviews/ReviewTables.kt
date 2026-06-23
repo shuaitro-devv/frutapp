@@ -11,6 +11,7 @@ internal object ProductoResenaTable : Table("producto_resena") {
     val userId = uuid("user_id")
     val estrellas = integer("estrellas")
     val texto = text("texto")
+    val imageKey = text("image_key").nullable()
     val createdAt = timestamp("created_at")
     val updatedAt = timestamp("updated_at")
 

@@ -14,30 +14,40 @@ import androidx.compose.ui.platform.LocalContext
 
 actual class ImagePickerState internal constructor(
     private val imagenState: MutableState<ImageBitmap?>,
+    private val bytesState: MutableState<ByteArray?>,
     private val onPick: () -> Unit
 ) {
     actual val imagen: ImageBitmap? get() = imagenState.value
+    actual val bytes: ByteArray? get() = bytesState.value
     actual fun pick() = onPick()
-    actual fun limpiar() { imagenState.value = null }
+    actual fun limpiar() {
+        imagenState.value = null
+        bytesState.value = null
+    }
 }
 
 @Composable
 actual fun rememberImagePickerState(): ImagePickerState {
     val context = LocalContext.current
     val imagenState = remember { mutableStateOf<ImageBitmap?>(null) }
+    val bytesState = remember { mutableStateOf<ByteArray?>(null) }
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
             runCatching {
+                // Bytes raw para el upload multipart al backend.
+                val raw = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                // Bitmap decodificado para el preview en pantalla.
                 val source = ImageDecoder.createSource(context.contentResolver, uri)
                 val bitmap = ImageDecoder.decodeBitmap(source)
                 imagenState.value = bitmap.asImageBitmap()
+                bytesState.value = raw
             }
         }
     }
     return remember(launcher) {
-        ImagePickerState(imagenState) {
+        ImagePickerState(imagenState, bytesState) {
             launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }
     }

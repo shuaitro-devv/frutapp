@@ -237,6 +237,7 @@ fun Application.module() {
     )
     val reviewService = cl.frutapp.backend.modules.reviews.ReviewService(
         repo = cl.frutapp.backend.modules.reviews.ReviewRepository(),
+        storage = storageService,
     )
     environment.log.info(
         if (webpayConfig.esSandbox) "Webpay: SANDBOX habilitado (creds publicas de integracion). returnUrl={}/v1/pagos/webpay/retorno"

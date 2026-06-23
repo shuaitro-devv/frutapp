@@ -16,8 +16,10 @@ data class Resena(
     val texto: String,
     /** True si la escribió el usuario actual (se puede editar). */
     val propia: Boolean = false,
-    /** Foto local seleccionada por el usuario (no sube al backend en V1). Solo
-     *  vive el proceso; al cargar desde el backend nunca tiene imagen. */
+    /** URL presignada de la foto adjunta a la resena, o null si es solo texto. */
+    val imagenUrl: String? = null,
+    /** Foto local recien seleccionada (opcional, antes del upsert al backend).
+     *  Cuando se carga del backend siempre es null — la foto va por [imagenUrl]. */
     val imagen: ImageBitmap? = null
 )
 
@@ -72,10 +74,22 @@ object ResenasStore {
     /** Crear o actualizar mi resena. Hace POST upsert en backend; al volver
      *  reemplaza la resena local del usuario por la persistida (id estable,
      *  fecha del backend, autorNombre real). Devuelve la Resena resultante
-     *  o null si fallo o si el productoId no es UUID (DemoCatalog). */
-    suspend fun guardarRemoto(productoId: String, estrellas: Int, texto: String): Resena? {
+     *  o null si fallo o si el productoId no es UUID (DemoCatalog).
+     *
+     *  [imagenBytes] != null sube nueva foto (reemplaza si habia).
+     *  [removerImagen]=true borra la foto actual (sin reemplazo).
+     *  Ambos en default: la foto existente se mantiene. */
+    suspend fun guardarRemoto(
+        productoId: String,
+        estrellas: Int,
+        texto: String,
+        imagenBytes: ByteArray? = null,
+        removerImagen: Boolean = false,
+    ): Resena? {
         if (!productoId.parecesUuid()) return null
-        val dto = runCatching { api.guardar(productoId, estrellas, texto) }.getOrNull() ?: return null
+        val dto = runCatching {
+            api.guardar(productoId, estrellas, texto, imagenBytes, removerImagen)
+        }.getOrNull() ?: return null
         val miUserId = TokenStore.user?.id
         val r = dto.toUi(miUserId)
         val st = resenas(productoId)
@@ -92,6 +106,7 @@ object ResenasStore {
         fecha = fechaCorta(createdAt),
         texto = texto,
         propia = miUserId != null && autorUserId == miUserId,
+        imagenUrl = imagenUrl,
     )
 }
 

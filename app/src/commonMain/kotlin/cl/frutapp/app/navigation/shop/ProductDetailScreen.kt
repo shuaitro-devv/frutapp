@@ -518,18 +518,24 @@ private fun ReviewsSection(producto: Producto, onVerTodas: () -> Unit) {
                 onQuitarFoto = { fotoPicker.limpiar() },
                 onConfirmar = {
                     // Upsert al backend; al volver el ResenasStore reemplaza
-                    // la del usuario en el cache local. La foto adjunta no se
-                    // sube (V1 sin storage de fotos en resenas).
+                    // la del usuario en el cache local. Si hay foto adjunta,
+                    // va como multipart y queda persistida en MinIO.
                     val esEdicion = editandoId != null
                     val estrellasSnap = estrellas
                     val textoSnap = texto
+                    val bytesSnap = fotoPicker.bytes
                     val backendId = producto.backendId
                     scope.launch {
                         if (backendId.isNullOrEmpty()) {
                             showToast("Este producto no se puede reseñar.")
                             return@launch
                         }
-                        val r = ResenasStore.guardarRemoto(backendId, estrellasSnap, textoSnap)
+                        val r = ResenasStore.guardarRemoto(
+                            productoId = backendId,
+                            estrellas = estrellasSnap,
+                            texto = textoSnap,
+                            imagenBytes = bytesSnap,
+                        )
                         if (r != null) {
                             showToast(if (esEdicion) "Reseña actualizada" else "¡Gracias por tu reseña!")
                         } else {
@@ -744,12 +750,26 @@ internal fun ReviewCard(r: Resena, onEditar: (() -> Unit)? = null) {
         if (r.texto.isNotBlank()) {
             Text(r.texto, color = FrutAppColors.Ink, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
         }
-        r.imagen?.let { bmp ->
+        // Foto adjunta: prioriza imagenUrl (persistida en MinIO); si la resena
+        // se acaba de crear localmente y aun no se persistio, cae al ImageBitmap
+        // local (caso transitorio del form).
+        val urlAdjunta = r.imagenUrl
+        if (urlAdjunta != null) {
+            cl.frutapp.app.ui.components.RemoteImage(
+                url = urlAdjunta,
+                contentDescription = "Foto del producto",
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .fillMaxWidth()
+                    .height(160.dp)
+                    .clip(RoundedCornerShape(10.dp))
+            )
+        } else r.imagen?.let { bmp ->
             Image(
                 bitmap = bmp,
                 contentDescription = "Foto del producto",
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.padding(top = 8.dp).fillMaxWidth().height(140.dp).clip(RoundedCornerShape(10.dp))
+                modifier = Modifier.padding(top = 8.dp).fillMaxWidth().height(160.dp).clip(RoundedCornerShape(10.dp))
             )
         }
         if (onEditar != null) {
