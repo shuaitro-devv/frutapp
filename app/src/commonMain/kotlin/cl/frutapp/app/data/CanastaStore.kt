@@ -1,6 +1,11 @@
 package cl.frutapp.app.data
 
 import androidx.compose.runtime.mutableStateListOf
+import cl.frutapp.app.data.remote.BasketApi
+import cl.frutapp.shared.dto.ActualizarCanastaRequest
+import cl.frutapp.shared.dto.CanastaDto
+import cl.frutapp.shared.dto.CrearCanastaRequest
+import cl.frutapp.shared.dto.NuevoCanastaItem
 
 /** Un ítem dentro de una canasta — guarda el producto + cantidad + gramaje (igual que CartItem). */
 data class CanastaItem(
@@ -16,11 +21,13 @@ data class CanastaItem(
 
 /**
  * Una canasta del usuario o un template FrutApp.
- * - `esTemplate=true` → es una de las 4 sugeridas; no se edita ni se elimina (solo se "copia").
- * - `recordatorioMensual` → toggle "Pídenos avisarte cuando toque pedirla" (mockup, modo A).
+ * - `esTemplate=true` → es una de las 4 sugeridas; no se edita ni elimina.
+ * - `recordatorioMensual` → toggle "Pídenos avisarte cuando toque pedirla".
+ * - `id` es String: UUID del backend cuando es del usuario, "tpl-<slug>" cuando
+ *   es template local.
  */
 data class Canasta(
-    val id: Int,
+    val id: String,
     val nombre: String,
     val emoji: String,
     val items: List<CanastaItem>,
@@ -32,66 +39,120 @@ data class Canasta(
 }
 
 /**
- * Canastas del usuario (dummy, en memoria por sesión) + 4 templates FrutApp sugeridos.
- * En producción: vendrían del backend cruzando con historial de compras.
+ * Canastas del usuario, cableadas al backend (V35). Templates locales se
+ * componen on-demand desde [DemoCatalog]. La fuente de verdad para canastas
+ * del usuario es `/v1/baskets`; el cache local refleja lo del backend para
+ * que las pantallas Compose lo lean sincronicamente.
  */
 object CanastaStore {
-    /** Canastas creadas por el usuario (editables). */
+    /** Canastas del usuario, hidratadas desde el backend. Las pantallas leen
+     *  directamente — al cambiar el state, recomponen automaticamente. */
     val items = mutableStateListOf<Canasta>()
 
-    private var nextId = 1
+    private val api = BasketApi()
 
-    /** 4 templates fijos de FrutApp. Mauricio dijo "golazo" sobre la canasta familiar. */
+    /** Catalogo (para mapear product.id ↔ slug en los items que vienen del
+     *  backend). Lo setea la app temprano (CatalogStore) y se reusa. */
+    var catalogoResolver: ((String) -> Producto?)? = null
+
     val templates: List<Canasta> by lazy { construirTemplates() }
 
-    fun get(id: Int): Canasta? = items.firstOrNull { it.id == id } ?: templates.firstOrNull { it.id == id }
+    fun get(id: String): Canasta? =
+        items.firstOrNull { it.id == id } ?: templates.firstOrNull { it.id == id }
 
-    fun crear(nombre: String, emoji: String, items: List<CanastaItem>): Canasta {
-        val nueva = Canasta(id = nextId++, nombre = nombre.ifBlank { "Mi canasta" }, emoji = emoji.ifBlank { "🧺" }, items = items)
-        this.items.add(0, nueva)
-        return nueva
+    /** Hidrata desde el backend. Idempotente: pisa lo que haya en cache. */
+    suspend fun cargar() {
+        val resp = runCatching { api.listar() }.getOrNull() ?: return
+        val mapeadas = resp.map { it.toUi() }
+        items.clear()
+        items.addAll(mapeadas)
     }
 
-    fun actualizar(id: Int, nombre: String? = null, emoji: String? = null, items: List<CanastaItem>? = null, recordatorioMensual: Boolean? = null) {
-        val i = this.items.indexOfFirst { it.id == id }
-        if (i < 0) return
-        val cur = this.items[i]
-        this.items[i] = cur.copy(
-            nombre = nombre ?: cur.nombre,
-            emoji = emoji ?: cur.emoji,
-            items = items ?: cur.items,
-            recordatorioMensual = recordatorioMensual ?: cur.recordatorioMensual
+    /** Crea una canasta en backend; al volver agrega al cache local arriba. */
+    suspend fun crear(nombre: String, emoji: String, items: List<CanastaItem>): Canasta? {
+        val req = CrearCanastaRequest(
+            nombre = nombre.ifBlank { "Mi canasta" },
+            emoji = emoji.ifBlank { "🧺" },
+            recordatorioMensual = false,
+            items = items.mapNotNull { it.toRequestItem() },
         )
+        val dto = runCatching { api.crear(req) }.getOrNull() ?: return null
+        val ui = dto.toUi()
+        this.items.add(0, ui)
+        return ui
     }
 
-    fun eliminar(id: Int) {
-        items.removeAll { it.id == id }
+    /** PUT del header / items. Cualquier null se ignora (no se manda al backend). */
+    suspend fun actualizar(
+        id: String,
+        nombre: String? = null,
+        emoji: String? = null,
+        items: List<CanastaItem>? = null,
+        recordatorioMensual: Boolean? = null,
+    ): Canasta? {
+        val req = ActualizarCanastaRequest(
+            nombre = nombre,
+            emoji = emoji,
+            recordatorioMensual = recordatorioMensual,
+            items = items?.mapNotNull { it.toRequestItem() },
+        )
+        val dto = runCatching { api.actualizar(id, req) }.getOrNull() ?: return null
+        val ui = dto.toUi()
+        val idx = this.items.indexOfFirst { it.id == id }
+        if (idx >= 0) this.items[idx] = ui else this.items.add(0, ui)
+        return ui
     }
 
-    /** Copiar un template a las canastas del usuario (devuelve el id nuevo). */
-    fun copiarTemplate(template: Canasta): Canasta {
-        return crear(nombre = template.nombre, emoji = template.emoji, items = template.items)
+    suspend fun eliminar(id: String): Boolean {
+        val ok = runCatching { api.eliminar(id) }.isSuccess
+        if (ok) items.removeAll { it.id == id }
+        return ok
     }
 
-    /** Agregar un producto a una canasta existente (si ya está, suma cantidad). */
-    fun agregarProducto(canastaId: Int, producto: Producto, cantidad: Int = 1, gramos: Int? = null) {
-        val i = items.indexOfFirst { it.id == canastaId }
-        if (i < 0) return
-        val cur = items[i]
-        val itemExistente = cur.items.indexOfFirst { it.producto.id == producto.id && it.gramos == gramos }
-        val nuevosItems = if (itemExistente >= 0) {
-            cur.items.toMutableList().also {
-                it[itemExistente] = it[itemExistente].copy(cantidad = it[itemExistente].cantidad + cantidad)
+    /** Copia un template a las canastas del usuario (POST al backend). */
+    suspend fun copiarTemplate(template: Canasta): Canasta? =
+        crear(template.nombre, template.emoji, template.items)
+
+    /** Agrega un producto a una canasta del usuario (PUT con la lista nueva). */
+    suspend fun agregarProducto(canastaId: String, producto: Producto, cantidad: Int = 1, gramos: Int? = null): Boolean {
+        val canasta = items.firstOrNull { it.id == canastaId } ?: return false
+        val idx = canasta.items.indexOfFirst { it.producto.id == producto.id && it.gramos == gramos }
+        val nuevos = if (idx >= 0) {
+            canasta.items.toMutableList().also {
+                it[idx] = it[idx].copy(cantidad = it[idx].cantidad + cantidad)
             }
         } else {
-            cur.items + CanastaItem(producto, cantidad, gramos)
+            canasta.items + CanastaItem(producto, cantidad, gramos)
         }
-        items[i] = cur.copy(items = nuevosItems)
+        return actualizar(canastaId, items = nuevos) != null
     }
 
     fun reset() {
         items.clear()
-        nextId = 1
+    }
+
+    private fun CanastaItem.toRequestItem(): NuevoCanastaItem? {
+        // El backend espera UUID; si el producto no tiene backendId (DemoCatalog),
+        // lo skipeamos silenciosamente (no se puede persistir).
+        val pid = producto.backendId ?: return null
+        return NuevoCanastaItem(productoId = pid, cantidad = cantidad, gramos = gramos)
+    }
+
+    private fun CanastaDto.toUi(): Canasta {
+        val resolver = catalogoResolver
+        val itemsUi = items.mapNotNull { dto ->
+            val prod = resolver?.invoke(dto.productoId)
+            if (prod == null) null
+            else CanastaItem(producto = prod, cantidad = dto.cantidad, gramos = dto.gramos)
+        }
+        return Canasta(
+            id = id,
+            nombre = nombre,
+            emoji = emoji,
+            items = itemsUi,
+            esTemplate = false,
+            recordatorioMensual = recordatorioMensual,
+        )
     }
 
     private fun construirTemplates(): List<Canasta> {
@@ -100,7 +161,7 @@ object CanastaStore {
 
         return listOf(
             Canasta(
-                id = -1, esTemplate = true, nombre = "Canasta Asado", emoji = "🔥",
+                id = "tpl-asado", esTemplate = true, nombre = "Canasta Asado", emoji = "🔥",
                 items = listOf(
                     CanastaItem(p("papa"), 1, 1000),
                     CanastaItem(p("tomate"), 1, 1000),
@@ -111,7 +172,7 @@ object CanastaStore {
                 )
             ),
             Canasta(
-                id = -2, esTemplate = true, nombre = "Canasta Fitness", emoji = "💪",
+                id = "tpl-fitness", esTemplate = true, nombre = "Canasta Fitness", emoji = "💪",
                 items = listOf(
                     CanastaItem(p("palta-hass"), 1, 500),
                     CanastaItem(p("lechuga"), 2),
@@ -121,7 +182,7 @@ object CanastaStore {
                 )
             ),
             Canasta(
-                id = -3, esTemplate = true, nombre = "Canasta Niños", emoji = "👶",
+                id = "tpl-ninos", esTemplate = true, nombre = "Canasta Niños", emoji = "👶",
                 items = listOf(
                     CanastaItem(p("platano"), 1, 1000),
                     CanastaItem(p("manzana-roja"), 1, 1000),
@@ -131,7 +192,7 @@ object CanastaStore {
                 )
             ),
             Canasta(
-                id = -4, esTemplate = true, nombre = "Canasta Mediterránea", emoji = "🍅",
+                id = "tpl-mediterranea", esTemplate = true, nombre = "Canasta Mediterránea", emoji = "🍅",
                 items = listOf(
                     CanastaItem(p("tomate"), 1, 1000),
                     CanastaItem(p("cebolla"), 1, 500),

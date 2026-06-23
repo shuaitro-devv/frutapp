@@ -62,7 +62,7 @@ import org.jetbrains.compose.resources.painterResource
  * Preview + share de una canasta como imagen — mismo patrón que CompartirHuellaScreen.
  * El receptor del mensaje ve la imagen con el listado de productos + total + branding.
  */
-class CompartirCanastaScreen(private val canastaId: Int) : Screen {
+class CompartirCanastaScreen(private val canastaId: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow

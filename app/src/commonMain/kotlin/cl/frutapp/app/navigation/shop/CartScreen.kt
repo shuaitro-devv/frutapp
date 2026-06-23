@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -135,14 +136,22 @@ class CartScreen : Screen {
             }
 
             if (mostrarSelectorCanasta) {
+                val scopeCanasta = androidx.compose.runtime.rememberCoroutineScope()
                 SelectorCanastaCart(
                     onDismiss = { mostrarSelectorCanasta = false },
                     onSeleccionar = { canastaId ->
-                        CartStore.items.forEach { item ->
-                            cl.frutapp.app.data.CanastaStore.agregarProducto(canastaId, item.producto, item.cantidad, item.gramos)
-                        }
-                        cl.frutapp.app.ui.showToast("Productos agregados a la canasta")
                         mostrarSelectorCanasta = false
+                        scopeCanasta.launch {
+                            var exitos = 0
+                            CartStore.items.forEach { item ->
+                                val ok = cl.frutapp.app.data.CanastaStore.agregarProducto(canastaId, item.producto, item.cantidad, item.gramos)
+                                if (ok) exitos++
+                            }
+                            cl.frutapp.app.ui.showToast(
+                                if (exitos == CartStore.items.size) "Productos agregados a la canasta"
+                                else "Agregados $exitos de ${CartStore.items.size}"
+                            )
+                        }
                     },
                     onNueva = {
                         mostrarSelectorCanasta = false
@@ -159,7 +168,7 @@ class CartScreen : Screen {
 @Composable
 private fun SelectorCanastaCart(
     onDismiss: () -> Unit,
-    onSeleccionar: (Int) -> Unit,
+    onSeleccionar: (String) -> Unit,
     onNueva: () -> Unit
 ) {
     androidx.compose.material3.ModalBottomSheet(

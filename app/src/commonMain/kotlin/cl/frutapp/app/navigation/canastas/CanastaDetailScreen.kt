@@ -58,6 +58,7 @@ import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
 
@@ -65,10 +66,11 @@ import org.jetbrains.compose.resources.painterResource
  * Detalle de una canasta: editable (si no es template), comprar = cargar al carrito, share,
  * toggle de recordatorio mensual y eliminar (si es propia).
  */
-class CanastaDetailScreen(private val canastaId: Int) : Screen {
+class CanastaDetailScreen(private val canastaId: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
         val canasta = CanastaStore.get(canastaId)
 
         if (canasta == null) {
@@ -110,7 +112,7 @@ class CanastaDetailScreen(private val canastaId: Int) : Screen {
                                     val nuevos = canasta.items.map {
                                         if (it === item) it.copy(cantidad = it.cantidad + 1) else it
                                     }
-                                    CanastaStore.actualizar(canasta.id, items = nuevos)
+                                    scope.launch { CanastaStore.actualizar(canasta.id, items = nuevos) }
                                 },
                                 onDecrement = {
                                     val nuevos = canasta.items.mapNotNull {
@@ -120,7 +122,7 @@ class CanastaDetailScreen(private val canastaId: Int) : Screen {
                                             else -> null
                                         }
                                     }
-                                    CanastaStore.actualizar(canasta.id, items = nuevos)
+                                    scope.launch { CanastaStore.actualizar(canasta.id, items = nuevos) }
                                 }
                             )
                         }
@@ -151,7 +153,7 @@ class CanastaDetailScreen(private val canastaId: Int) : Screen {
                         onClick = {
                             // Si es template, copiarla a "Mis canastas" primero para que quede
                             // editable y no se pierda al modificarla en el carrito.
-                            if (canasta.esTemplate) CanastaStore.copiarTemplate(canasta)
+                            if (canasta.esTemplate) scope.launch { CanastaStore.copiarTemplate(canasta) }
                             CartStore.clear()
                             canasta.items.forEach { CartStore.add(it.producto, it.cantidad, it.gramos) }
                             showToast("Canasta cargada en el carrito")
@@ -174,10 +176,16 @@ class CanastaDetailScreen(private val canastaId: Int) : Screen {
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier
                                 .clickable {
-                                    CanastaStore.eliminar(canasta.id)
                                     confirmandoEliminar = false
-                                    showToast("Canasta eliminada")
-                                    navigator.pop()
+                                    scope.launch {
+                                        val ok = CanastaStore.eliminar(canasta.id)
+                                        if (ok) {
+                                            showToast("Canasta eliminada")
+                                            navigator.pop()
+                                        } else {
+                                            showToast("No pudimos eliminar la canasta.")
+                                        }
+                                    }
                                 }
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
                         )
@@ -331,6 +339,7 @@ private fun StepBtn(icon: androidx.compose.ui.graphics.vector.ImageVector, onCli
 
 @Composable
 private fun RecordatorioToggle(canasta: Canasta) {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     Row(
         modifier = Modifier.fillMaxWidth()
             .background(FrutAppColors.Cream, RoundedCornerShape(14.dp))
@@ -344,7 +353,7 @@ private fun RecordatorioToggle(canasta: Canasta) {
         }
         Switch(
             checked = canasta.recordatorioMensual,
-            onCheckedChange = { CanastaStore.actualizar(canasta.id, recordatorioMensual = it) },
+            onCheckedChange = { v -> scope.launch { CanastaStore.actualizar(canasta.id, recordatorioMensual = v) } },
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
                 checkedTrackColor = FrutAppColors.Brand400,

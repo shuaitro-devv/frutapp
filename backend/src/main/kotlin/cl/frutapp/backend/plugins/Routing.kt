@@ -31,6 +31,10 @@ import cl.frutapp.backend.modules.chat.ChatService
 import cl.frutapp.backend.modules.chat.chatRoutes
 import cl.frutapp.backend.modules.reviews.ReviewService
 import cl.frutapp.backend.modules.reviews.reviewRoutes
+import cl.frutapp.backend.modules.rewards.RewardService
+import cl.frutapp.backend.modules.rewards.rewardRoutes
+import cl.frutapp.backend.modules.baskets.BasketService
+import cl.frutapp.backend.modules.baskets.basketRoutes
 import cl.frutapp.backend.modules.auth.TokenService
 import cl.frutapp.backend.modules.orders.OrderService
 import cl.frutapp.backend.modules.orders.orderRoutes
@@ -59,6 +63,8 @@ fun Application.configureRouting(
     configService: ConfigService,
     configRepository: ConfigRepository,
     reviewService: ReviewService,
+    rewardService: RewardService,
+    basketService: BasketService,
 ) {
     routing {
         healthRoutes()
@@ -78,5 +84,7 @@ fun Application.configureRouting(
         ubicacionRoutes(ubicacionService)
         chatRoutes(chatService, chatHub, tokenService)
         reviewRoutes(reviewService)
+        rewardRoutes(rewardService)
+        basketRoutes(basketService)
     }
 }

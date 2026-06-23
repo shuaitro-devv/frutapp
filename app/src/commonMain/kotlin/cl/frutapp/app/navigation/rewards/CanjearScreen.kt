@@ -29,7 +29,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
+import kotlin.random.Random
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -53,10 +56,12 @@ import cl.frutapp.app.ui.theme.FrutAppColors
 /**
  * Confirmación de canje de recompensa por FrutCoins. Dos estados:
  *  - PreConfirmacion: muestra el costo + balance actual + botón "Confirmar canje"
- *  - Confirmado: muestra código de cupón mock + balance actualizado + "Volver"
+ *  - Confirmado: muestra el código de cupón devuelto por el backend + balance
+ *    actualizado + "Volver"
  *
- * Mientras el backend no tenga POST /v1/frutcoins/redeem, el descuento es solo cliente
- * (RewardsStore.spend). Cuando exista el endpoint, llamamos antes del spend local.
+ * El canje real va por RewardsStore.canjearRemoto → POST /v1/frutcoins/redeem.
+ * Idempotencia: generamos un UUID v4 al entrar al composable y lo reusamos
+ * en cada reintento (red mala etc).
  */
 class CanjearScreen(
     private val recompensaTitulo: String,
@@ -66,13 +71,14 @@ class CanjearScreen(
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val clipboard = LocalClipboardManager.current
+        val scope = rememberCoroutineScope()
         var confirmado by remember { mutableStateOf(false) }
-        // Código de cupón mock derivado del usuario + recompensa — estable mientras dure
-        // el composable. Cuando haya backend, lo devuelve la respuesta del redeem.
-        val codigoCupon = remember(recompensaTitulo) {
-            val base = (TokenStore.user?.name?.substringBefore(' ')?.uppercase()?.take(4)) ?: "FRUT"
-            "$base-${recompensaTitulo.filter { it.isLetter() }.uppercase().take(3)}-${recompensaCosto}"
-        }
+        var canjeando by remember { mutableStateOf(false) }
+        var codigoCupon by remember { mutableStateOf("") }
+        // Key estable para idempotencia: si el usuario toca "Confirmar" y el
+        // POST se reintenta (red mala, app reabierta), el backend nos devuelve
+        // el mismo cupon en vez de duplicar el debito.
+        val idempotencyKey = remember(recompensaTitulo, recompensaCosto) { uuidV4Random() }
         val saldoTrasCanje = (RewardsStore.balance - recompensaCosto).coerceAtLeast(0)
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
@@ -102,9 +108,24 @@ class CanjearScreen(
                         costo = recompensaCosto,
                         balance = RewardsStore.balance,
                         saldoTrasCanje = saldoTrasCanje,
+                        canjeando = canjeando,
                         onConfirmar = {
-                            RewardsStore.spend(recompensaCosto)
-                            confirmado = true
+                            if (canjeando) return@PreConfirmacion
+                            canjeando = true
+                            scope.launch {
+                                val cupon = RewardsStore.canjearRemoto(
+                                    monto = recompensaCosto,
+                                    recompensa = recompensaTitulo,
+                                    idempotencyKey = idempotencyKey,
+                                )
+                                canjeando = false
+                                if (cupon != null) {
+                                    codigoCupon = cupon.codigo
+                                    confirmado = true
+                                } else {
+                                    showToast("No pudimos canjear ahora. Vuelve a intentarlo.")
+                                }
+                            }
                         },
                         onCancelar = { navigator.pop() }
                     )
@@ -131,6 +152,7 @@ private fun ColumnScope.PreConfirmacion(
     costo: Int,
     balance: Int,
     saldoTrasCanje: Int,
+    canjeando: Boolean,
     onConfirmar: () -> Unit,
     onCancelar: () -> Unit
 ) {
@@ -175,10 +197,28 @@ private fun ColumnScope.PreConfirmacion(
     }
 
     Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 14.dp)) {
-        FrutButtonPrimary(text = "Confirmar canje", onClick = onConfirmar)
+        FrutButtonPrimary(
+            text = if (canjeando) "Canjeando…" else "Confirmar canje",
+            enabled = !canjeando,
+            onClick = onConfirmar,
+        )
         Spacer(Modifier.height(8.dp))
-        FrutButtonOutline(text = "Cancelar", onClick = onCancelar)
+        FrutButtonOutline(text = "Cancelar", enabled = !canjeando, onClick = onCancelar)
     }
+}
+
+/** Genera un UUID v4 como String (8-4-4-4-12 hex). Ligero, sin depender de
+ *  java.util.UUID en commonMain. Usado como idempotency_key del canje. */
+private fun uuidV4Random(): String {
+    val bytes = ByteArray(16)
+    Random.nextBytes(bytes)
+    // version 4
+    bytes[6] = ((bytes[6].toInt() and 0x0F) or 0x40).toByte()
+    // variante 10xx
+    bytes[8] = ((bytes[8].toInt() and 0x3F) or 0x80).toByte()
+    fun seg(from: Int, to: Int): String =
+        bytes.copyOfRange(from, to).joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
+    return "${seg(0,4)}-${seg(4,6)}-${seg(6,8)}-${seg(8,10)}-${seg(10,16)}"
 }
 
 @Composable

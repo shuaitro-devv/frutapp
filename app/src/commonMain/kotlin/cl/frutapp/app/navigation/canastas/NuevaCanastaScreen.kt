@@ -41,6 +41,7 @@ import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.FrutTextField
 import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
+import kotlinx.coroutines.launch
 
 private val EMOJIS_CANASTA = listOf("🧺", "🏠", "🔥", "💪", "👶", "🍅", "🌿", "🍎", "🥗", "🍇", "🎉", "🎄")
 
@@ -100,15 +101,25 @@ class NuevaCanastaScreen(
                     }
                 }
 
+                val scope = androidx.compose.runtime.rememberCoroutineScope()
+                var creando by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
                 Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp)) {
                     FrutButtonPrimary(
-                        text = "Crear canasta",
-                        enabled = nombre.isNotBlank(),
+                        text = if (creando) "Creando…" else "Crear canasta",
+                        enabled = nombre.isNotBlank() && !creando,
                         onClick = {
-                            val c = CanastaStore.crear(nombre = nombre.trim(), emoji = emoji, items = itemsIniciales)
-                            showToast("¡Canasta creada!")
-                            // Navegar al detalle de la canasta recién creada (reemplazando esta).
-                            navigator.replace(CanastaDetailScreen(c.id))
+                            if (creando) return@FrutButtonPrimary
+                            creando = true
+                            scope.launch {
+                                val c = CanastaStore.crear(nombre = nombre.trim(), emoji = emoji, items = itemsIniciales)
+                                creando = false
+                                if (c != null) {
+                                    showToast("¡Canasta creada!")
+                                    navigator.replace(CanastaDetailScreen(c.id))
+                                } else {
+                                    showToast("No pudimos guardar la canasta.")
+                                }
+                            }
                         }
                     )
                 }

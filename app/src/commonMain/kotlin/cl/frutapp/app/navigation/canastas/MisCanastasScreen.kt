@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,7 +37,11 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.Canasta
 import cl.frutapp.app.data.CanastaStore
+import cl.frutapp.app.data.DemoCatalog
+import cl.frutapp.app.data.Producto
 import cl.frutapp.app.data.formatClp
+import cl.frutapp.app.data.remote.CatalogApi
+import cl.frutapp.app.data.toProducto
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.theme.FrutAppColors
 
@@ -45,6 +50,20 @@ class MisCanastasScreen : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+
+        // Hidrata el cache desde el backend al entrar. Antes carga el catalogo
+        // para que el resolver (productoId UUID → Producto UI) este listo
+        // cuando llegue la lista de canastas con sus items.
+        LaunchedEffect(Unit) {
+            val productos = runCatching { CatalogApi().products() }.getOrNull()
+                ?.map { it.toProducto() }
+                ?: DemoCatalog.productos
+            val porBackendId: Map<String, Producto> = productos.mapNotNull { p ->
+                p.backendId?.let { it to p }
+            }.toMap()
+            CanastaStore.catalogoResolver = { uuid -> porBackendId[uuid] }
+            CanastaStore.cargar()
+        }
 
         Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
             Column(modifier = Modifier.fillMaxSize()) {

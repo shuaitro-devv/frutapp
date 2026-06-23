@@ -102,6 +102,7 @@ class ProductDetailScreen(
         var cantidad by remember { mutableStateOf(editing?.cantidad ?: 1) }
         val favorito = FavoritesStore.isFavorite(producto.id)
         var mostrarSelector by remember { mutableStateOf(false) }
+        val scopeContent = rememberCoroutineScope()
 
         val totalSel = if (esKg) (producto.precioClp * gramos / 1000.0).toInt() * cantidad
         else producto.precioClp * cantidad
@@ -261,9 +262,11 @@ class ProductDetailScreen(
                 SelectorCanasta(
                     onDismiss = { mostrarSelector = false },
                     onSeleccionar = { canastaId ->
-                        CanastaStore.agregarProducto(canastaId, producto, cantidad, if (esKg) gramos else null)
-                        showToast("Agregado a la canasta")
                         mostrarSelector = false
+                        scopeContent.launch {
+                            val ok = CanastaStore.agregarProducto(canastaId, producto, cantidad, if (esKg) gramos else null)
+                            showToast(if (ok) "Agregado a la canasta" else "No pudimos agregar.")
+                        }
                     },
                     onNueva = {
                         mostrarSelector = false
@@ -279,7 +282,7 @@ class ProductDetailScreen(
 @Composable
 private fun SelectorCanasta(
     onDismiss: () -> Unit,
-    onSeleccionar: (Int) -> Unit,
+    onSeleccionar: (String) -> Unit,
     onNueva: () -> Unit
 ) {
     androidx.compose.material3.ModalBottomSheet(
