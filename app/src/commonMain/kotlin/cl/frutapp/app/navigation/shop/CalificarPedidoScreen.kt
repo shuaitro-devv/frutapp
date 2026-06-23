@@ -151,6 +151,12 @@ class CalificarPedidoScreen(private val items: List<OrderItemDto>) : Screen {
                                 modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                             )
                             lista.forEach { p ->
+                                // Si ya hay resena persistida con foto, la
+                                // pasamos para preview (el usuario ve "asi
+                                // quedo lo que mandaste antes"). El picker
+                                // local nueva pisa si elige otra foto.
+                                val imagenPersistida = p.backendId
+                                    ?.let { ResenasStore.miResena(it)?.imagenUrl }
                                 ProductoCalificable(
                                     producto = p,
                                     estrellas = estrellas[p.id] ?: 0,
@@ -158,6 +164,7 @@ class CalificarPedidoScreen(private val items: List<OrderItemDto>) : Screen {
                                     comentario = comentarios[p.id] ?: "",
                                     onComentario = { comentarios[p.id] = it },
                                     fotos = fotos,
+                                    imagenUrlExistente = imagenPersistida,
                                 )
                             }
                             Spacer(Modifier.height(20.dp))
@@ -224,16 +231,17 @@ private fun ProductoCalificable(
     comentario: String,
     onComentario: (String) -> Unit,
     fotos: SnapshotStateMap<String, ByteArray>,
+    imagenUrlExistente: String?,
 ) {
     // Picker propio de cada card. El padre mantiene el mapa de bytes por
     // producto.id; este Composable solo lee/escribe esa entry y dibuja el
-    // preview cuando hay bytes.
+    // preview cuando hay bytes. Si no hay foto nueva pero ya existe una
+    // persistida en backend, la mostramos via RemoteImage.
     val picker = rememberImagePickerState()
     LaunchedEffect(picker.bytes) {
         val b = picker.bytes
         if (b != null) fotos[producto.id] = b
     }
-    val foto = picker.imagen ?: fotos[producto.id]?.let { null }
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 14.dp)
             .background(FrutAppColors.Brand50, RoundedCornerShape(16.dp)).padding(14.dp)
@@ -287,45 +295,67 @@ private fun ProductoCalificable(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val bmp = picker.imagen
-            if (bmp != null) {
-                Image(
-                    bitmap = bmp,
-                    contentDescription = "Foto adjunta",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(56.dp).background(Color.Black, RoundedCornerShape(10.dp))
-                        .border(1.dp, FrutAppColors.Brand200, RoundedCornerShape(10.dp))
-                )
-                Spacer(Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Foto lista para enviar", color = FrutAppColors.Brand800, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Cambia o quita si fue equivocado", color = FrutAppColors.InkSoft, fontSize = 11.sp)
-                }
-                Box(
-                    modifier = Modifier.size(36.dp).clickable {
-                        picker.limpiar()
-                        fotos.remove(producto.id)
-                    },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Filled.Close, "Quitar foto", tint = FrutAppColors.InkSoft)
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(10.dp))
-                        .border(1.dp, FrutAppColors.Brand200, RoundedCornerShape(10.dp))
-                        .clickable { picker.pick() }
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    Icon(
-                        Icons.Filled.AddPhotoAlternate,
-                        contentDescription = null,
-                        tint = FrutAppColors.Brand600,
-                        modifier = Modifier.size(20.dp)
+            when {
+                bmp != null -> {
+                    Image(
+                        bitmap = bmp,
+                        contentDescription = "Foto adjunta",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(56.dp).background(Color.Black, RoundedCornerShape(10.dp))
+                            .border(1.dp, FrutAppColors.Brand200, RoundedCornerShape(10.dp))
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Adjuntar foto (opcional)", color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Foto lista para enviar", color = FrutAppColors.Brand800, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Cambia o quita si fue equivocado", color = FrutAppColors.InkSoft, fontSize = 11.sp)
+                    }
+                    Box(
+                        modifier = Modifier.size(36.dp).clickable {
+                            picker.limpiar()
+                            fotos.remove(producto.id)
+                        },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Filled.Close, "Quitar foto", tint = FrutAppColors.InkSoft)
+                    }
+                }
+                imagenUrlExistente != null -> {
+                    cl.frutapp.app.ui.components.RemoteImage(
+                        url = imagenUrlExistente,
+                        contentDescription = "Foto enviada",
+                        modifier = Modifier.size(56.dp).background(Color.Black, RoundedCornerShape(10.dp))
+                            .border(1.dp, FrutAppColors.Brand200, RoundedCornerShape(10.dp))
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Foto enviada", color = FrutAppColors.Brand800, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Tap aquí para reemplazarla", color = FrutAppColors.InkSoft, fontSize = 11.sp)
+                    }
+                    Box(
+                        modifier = Modifier.size(36.dp).clickable { picker.pick() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Filled.AddPhotoAlternate, "Reemplazar foto", tint = FrutAppColors.Brand600)
+                    }
+                }
+                else -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(10.dp))
+                            .border(1.dp, FrutAppColors.Brand200, RoundedCornerShape(10.dp))
+                            .clickable { picker.pick() }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        Icon(
+                            Icons.Filled.AddPhotoAlternate,
+                            contentDescription = null,
+                            tint = FrutAppColors.Brand600,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Adjuntar foto (opcional)", color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }
