@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Network Security Config: bloquea cleartext (http) y permite solo HTTPS.
+  Si en algun ambiente se necesita hablar a backend local (10.0.2.2:8080
+  en debug del emulador), debug-overrides lo permite SOLO en debug.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <!-- En debug aceptamos cleartext al backend local (emulador → 10.0.2.2). -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

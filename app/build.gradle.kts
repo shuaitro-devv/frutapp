@@ -162,7 +162,24 @@ android {
             buildConfigField("String", "API_BASE_URL", "\"https://frutapp-api.grandline.cl\"")
         }
         release {
-            isMinifyEnabled = false
+            // R8 ofusca (renombra clases/metodos) + tree-shake (elimina codigo
+            // no usado). Sube la barra del reverse engineering: una APK
+            // decompilada con jadx pasa de leer codigo Kotlin claro a un grafo
+            // ofuscado. NO es invulnerable (un atacante motivado con Frida
+            // burla esto), pero detiene el casual.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            // TEMPORAL: el google-services.json solo tiene registrado el
+            // package `cl.frutapp.app.debug`. Hasta que registremos en Firebase
+            // Console el package no-debug (cl.frutapp.app), reusamos el suffix
+            // .debug para que FCM funcione tambien en release. Cuando se quiera
+            // publicar en Play Store, quitar este suffix y agregar la app en
+            // Firebase Console + bajar nuevo google-services.json.
+            applicationIdSuffix = ".debug"
             buildConfigField("String", "API_BASE_URL", "\"https://frutapp-api.grandline.cl\"")
             signingConfigs.findByName("release")?.let { signingConfig = it }
         }
