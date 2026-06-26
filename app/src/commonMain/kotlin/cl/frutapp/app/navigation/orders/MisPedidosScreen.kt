@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ShoppingBasket
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -136,6 +137,18 @@ class MisPedidosScreen : Screen {
                                         showToast(r.toastMessage())
                                         if (r.huboItems()) navigator.push(CartScreen())
                                     }
+                                },
+                                onGuardarCanasta = {
+                                    // Fetch async + mapeo a catalogo + abrir NuevaCanastaScreen.
+                                    // El cliente decide nombre/emoji y guarda al backend.
+                                    scope.launch {
+                                        val detalle = runCatching { OrderApi().get(o.id) }.getOrNull()
+                                        val itemsCanasta = if (detalle != null)
+                                            cl.frutapp.app.data.pedidoToCanastaItems(detalle.items)
+                                        else emptyList()
+                                        if (itemsCanasta.isEmpty()) showToast("No pudimos cargar el pedido")
+                                        else navigator.push(cl.frutapp.app.navigation.canastas.NuevaCanastaScreen(itemsIniciales = itemsCanasta))
+                                    }
                                 }
                             )
                         }
@@ -237,7 +250,12 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit, modifier: Modifi
 }
 
 @Composable
-private fun OrderCard(order: OrderSummaryDto, onClick: () -> Unit, onReorder: () -> Unit) {
+private fun OrderCard(
+    order: OrderSummaryDto,
+    onClick: () -> Unit,
+    onReorder: () -> Unit,
+    onGuardarCanasta: () -> Unit,
+) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)
             .background(Color.White, RoundedCornerShape(16.dp))
@@ -267,12 +285,24 @@ private fun OrderCard(order: OrderSummaryDto, onClick: () -> Unit, onReorder: ()
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onReorder)
+            modifier = Modifier.fillMaxWidth()
                 .padding(start = 68.dp, end = 14.dp, top = 4.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Filled.Replay, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(16.dp))
-            Text("Volver a pedir", color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp))
+            Row(
+                modifier = Modifier.clickable(onClick = onReorder).padding(end = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Replay, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(16.dp))
+                Text("Volver a pedir", color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp))
+            }
+            Row(
+                modifier = Modifier.clickable(onClick = onGuardarCanasta),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.ShoppingBasket, contentDescription = null, tint = FrutAppColors.Brand600, modifier = Modifier.size(16.dp))
+                Text("Guardar canasta", color = FrutAppColors.Brand600, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 6.dp))
+            }
         }
     }
 }

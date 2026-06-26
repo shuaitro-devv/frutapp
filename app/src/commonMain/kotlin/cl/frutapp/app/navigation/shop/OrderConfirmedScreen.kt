@@ -25,11 +25,17 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.Park
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.ShoppingBasket
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -44,12 +50,17 @@ import cl.frutapp.app.data.HuellaVerdeStore
 import cl.frutapp.app.data.formatClp
 import cl.frutapp.app.data.fulfillmentLabel
 import cl.frutapp.app.data.paymentMethodLabel
+import cl.frutapp.app.data.pedidoToCanastaItems
+import cl.frutapp.app.data.remote.OrderApi
+import cl.frutapp.app.navigation.canastas.NuevaCanastaScreen
 import cl.frutapp.app.navigation.rewards.FrutCoinsScreen
 import cl.frutapp.app.navigation.rewards.HuellaVerdeScreen
 import cl.frutapp.shared.dto.OrderPaymentDto
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
+import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
+import kotlinx.coroutines.launch
 import frutapp.app.generated.resources.Res
 import frutapp.app.generated.resources.mascota_cajita
 import org.jetbrains.compose.resources.painterResource
@@ -179,10 +190,35 @@ class OrderConfirmedScreen(
                     }
                 }
 
+                val scope = rememberCoroutineScope()
+                var guardandoCanasta by remember { mutableStateOf(false) }
                 Column(modifier = Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     FrutButtonPrimary(
                         text = "Ver mi pedido",
                         onClick = { navigator.replace(OrderTrackingScreen(orderId = orderId)) }
+                    )
+                    // CTA outline para guardar el pedido recien hecho como canasta:
+                    // el cliente acaba de armar un combo, este es el momento de
+                    // maxima intencion para guardarlo. Fetch async + mapeo al
+                    // catalogo + navegar a NuevaCanastaScreen con items precargados.
+                    FrutButtonOutline(
+                        text = if (guardandoCanasta) "Cargando…" else "Guardar como canasta",
+                        leadingIcon = Icons.Filled.ShoppingBasket,
+                        enabled = !guardandoCanasta,
+                        onClick = {
+                            if (guardandoCanasta) return@FrutButtonOutline
+                            guardandoCanasta = true
+                            scope.launch {
+                                val dto = runCatching { OrderApi().get(orderId) }.getOrNull()
+                                val itemsCanasta = if (dto != null) pedidoToCanastaItems(dto.items) else emptyList()
+                                guardandoCanasta = false
+                                if (itemsCanasta.isEmpty()) {
+                                    showToast("No pudimos cargar los productos del pedido.")
+                                } else {
+                                    navigator.push(NuevaCanastaScreen(itemsIniciales = itemsCanasta))
+                                }
+                            }
+                        }
                     )
                     FrutButtonOutline(text = "Seguir comprando", onClick = { navigator.popUntilRoot() })
                     Spacer(Modifier.height(20.dp))
