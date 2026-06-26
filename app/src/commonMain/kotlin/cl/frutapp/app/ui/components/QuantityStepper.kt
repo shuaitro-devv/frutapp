@@ -72,6 +72,10 @@ fun QuantityStepper(
     val addScale = remember { Animatable(1f) }
     var addJob by remember { mutableStateOf<Job?>(null) }
     var added by remember { mutableStateOf(false) }
+    // Debounce: ignora taps mas seguidos que [DEBOUNCE_MS]. Evita sumar 20
+    // unidades sin querer por spam y baja la presion sobre el sistema de
+    // Toast/animaciones (mismo problema que causaba el rectangulo negro).
+    var ultimoTapMs by remember { mutableStateOf(0L) }
 
     if (quantity <= 0) {
         Box(
@@ -80,10 +84,10 @@ fun QuantityStepper(
                 .scale(addScale.value)
                 .background(if (added) FrutAppColors.Brand600 else FrutAppColors.Brand400, CircleShape)
                 .clickable {
+                    val ahora = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                    if (ahora - ultimoTapMs < DEBOUNCE_MS) return@clickable
+                    ultimoTapMs = ahora
                     onAdd()
-                    // showToast removido: spammeo del "+" hacia rectangulos
-                    // negros (bug de Toast nativo en Android 13+). Feedback
-                    // queda via animation + check icon.
                     addJob?.cancel()
                     addJob = scope.launch {
                         added = true
@@ -110,7 +114,12 @@ fun QuantityStepper(
                 .background(FrutAppColors.Brand400, RoundedCornerShape(size / 2)),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            StepBtn(Icons.Default.Remove, "Quitar uno", size) { onDecrement() }
+            StepBtn(Icons.Default.Remove, "Quitar uno", size) {
+                val ahora = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                if (ahora - ultimoTapMs < DEBOUNCE_MS) return@StepBtn
+                ultimoTapMs = ahora
+                onDecrement()
+            }
             Text(
                 "$quantity",
                 color = Color.White,
@@ -119,6 +128,9 @@ fun QuantityStepper(
                 modifier = Modifier.padding(horizontal = 3.dp)
             )
             StepBtn(Icons.Default.Add, "Agregar uno", size) {
+                val ahora = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                if (ahora - ultimoTapMs < DEBOUNCE_MS) return@StepBtn
+                ultimoTapMs = ahora
                 onIncrement()
                 addJob?.cancel()
                 addJob = scope.launch {
@@ -129,6 +141,11 @@ fun QuantityStepper(
         }
     }
 }
+
+/** Tiempo minimo entre taps consecutivos del stepper, en ms. 80ms es
+ *  imperceptible para humanos (taps deliberados van a ~200ms+) pero
+ *  filtra el spam de doble-clic accidental y el spammeo "para probar". */
+private const val DEBOUNCE_MS = 80L
 
 @Composable
 private fun StepBtn(icon: ImageVector, desc: String, size: Dp, onClick: () -> Unit) {
