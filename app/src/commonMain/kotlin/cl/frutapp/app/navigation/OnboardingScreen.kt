@@ -113,6 +113,11 @@ class OnboardingScreen(private val desdeSplash: Boolean = true) : Screen {
         val esUltima = pagerState.currentPage == PAGINAS.lastIndex
 
         val terminar = {
+            // Marcar como visto cuando el user lo cierra (Saltar o terminando
+            // las 3 slides). Solo persistimos si vino desde Splash (primer
+            // arranque); si lo abre manualmente desde Perfil para reverlo,
+            // no lo "consumimos" otra vez (ya estaba marcado).
+            if (desdeSplash) cl.frutapp.app.data.OnboardingStore.markShown()
             if (desdeSplash) navigator.replace(LoginScreen()) else navigator.pop()
         }
 

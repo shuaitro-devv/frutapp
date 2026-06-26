@@ -74,7 +74,10 @@ class SplashScreen : Screen {
                 // limpia pendingEmail y lo lleva a Login.
                 !TokenStore.isLoggedIn && pending != null ->
                     goOnce { navigator.replace(VerifyCodeScreen(email = pending)) }
-                // Sin sesión y sin limbo → onboarding (intro), que al terminar lleva a Login.
+                // Sin sesión y sin limbo: si ya vio el onboarding en este
+                // device, salteamos directo a Login. Si no, mostramos el intro.
+                !TokenStore.isLoggedIn && cl.frutapp.app.data.OnboardingStore.shown ->
+                    goOnce { navigator.replace(cl.frutapp.app.navigation.auth.LoginScreen()) }
                 !TokenStore.isLoggedIn -> goOnce { navigator.replace(OnboardingScreen()) }
                 // Con sesión pero sin huella disponible → Home segun rol (cliente, picker, repartidor).
                 !BiometricAuth.isAvailable() -> goOnce { navigator.replace(homeForUser(TokenStore.user)) }
