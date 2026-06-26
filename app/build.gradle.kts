@@ -167,12 +167,24 @@ android {
             // decompilada con jadx pasa de leer codigo Kotlin claro a un grafo
             // ofuscado. NO es invulnerable (un atacante motivado con Frida
             // burla esto), pero detiene el casual.
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            // R8 minify DESACTIVADO temporalmente: rompia render de Compose
+            // (FAB del bottom nav con cuadrado negro, animaciones parpadeando)
+            // porque las reglas Proguard no cubren todos los callsites de
+            // Compose runtime. Iteracion pendiente — mientras tanto la
+            // proteccion real viene de:
+            //  1) Firma con keystore propio (sin la llave nadie reemplaza la
+            //     APK instalada por una modificada).
+            //  2) Network Security Config (HTTPS-only, sin user CAs en release).
+            //  3) Manifest: allowBackup=false, usesCleartextTraffic=false.
+            //  4) buildType release con isDebuggable=false (default).
+            // Para volver a activar R8: poner isMinifyEnabled=true y descomentar
+            // proguardFiles. Iterar reglas viendo logcat al primer crash.
+            isMinifyEnabled = false
+            isShrinkResources = false
+            // proguardFiles(
+            //     getDefaultProguardFile("proguard-android-optimize.txt"),
+            //     "proguard-rules.pro"
+            // )
             // TEMPORAL: el google-services.json solo tiene registrado el
             // package `cl.frutapp.app.debug`. Hasta que registremos en Firebase
             // Console el package no-debug (cl.frutapp.app), reusamos el suffix
