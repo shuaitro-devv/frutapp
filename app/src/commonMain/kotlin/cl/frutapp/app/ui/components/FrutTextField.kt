@@ -16,11 +16,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import cl.frutapp.app.ui.theme.FrutAppColors
 import cl.frutapp.app.ui.theme.FrutAppShapes
 
@@ -39,9 +42,16 @@ fun FrutTextField(
     keyboardType: KeyboardType = KeyboardType.Text,
     capitalization: KeyboardCapitalization = KeyboardCapitalization.None,
     isError: Boolean = false,
-    errorText: String? = null
+    errorText: String? = null,
+    /** Si != null, fuerza esa accion en el teclado (Next/Done/Send). Default
+     *  null: usa el comportamiento del sistema (Done normalmente). */
+    imeAction: ImeAction? = null,
+    /** Callback cuando el usuario toca el boton del teclado configurado por
+     *  [imeAction]. Si es null y [imeAction]=Done, oculta el teclado. */
+    onImeAction: (() -> Unit)? = null,
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     OutlinedTextField(
         value = value,
@@ -71,7 +81,16 @@ fun FrutTextField(
         visualTransformation = if (isPassword && !passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(
             keyboardType = if (isPassword) KeyboardType.Password else keyboardType,
-            capitalization = capitalization
+            capitalization = capitalization,
+            imeAction = imeAction ?: ImeAction.Default,
+        ),
+        keyboardActions = KeyboardActions(
+            onDone = {
+                onImeAction?.invoke() ?: keyboardController?.hide()
+            },
+            onSend = { onImeAction?.invoke() },
+            onGo = { onImeAction?.invoke() },
+            onNext = { onImeAction?.invoke() },
         ),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = FrutAppColors.Brand400,

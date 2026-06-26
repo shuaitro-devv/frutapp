@@ -16,7 +16,14 @@ import androidx.compose.ui.geometry.Rect
  * que reporta su [Rect] (en coordenadas de ventana) acá.
  */
 object CoachmarkStore {
-    private const val KEY_SHOWN = "coachmark_home_shown_v1"
+    /** Prefijo de la key; el sufijo es el user_id del usuario logueado para
+     *  que cada cuenta tenga su propia marca de "ya vi el tour". Antes era
+     *  global por dispositivo y los usuarios secundarios nunca lo veían. */
+    private const val KEY_SHOWN_PREFIX = "coachmark_home_shown_v1_"
+    /** Key heredada (global por dispositivo). La leemos para back-compat: si
+     *  el usuario ya cerró el tour antes de este cambio, no le aparece otra
+     *  vez en su primera sesión nueva. */
+    private const val KEY_LEGACY = "coachmark_home_shown_v1"
 
     var currentStep by mutableStateOf(-1)
         private set
@@ -24,15 +31,30 @@ object CoachmarkStore {
     /** Coordenadas (window bounds) de cada elemento registrado, indexado por su key. */
     val targets = mutableStateMapOf<String, Rect>()
 
+    /** Construye la key para el usuario actual. Si no hay user logueado (raro,
+     *  el Home solo se renderiza con sesion activa), cae a la key legacy. */
+    private fun shownKey(): String {
+        val uid = TokenStore.user?.id
+        return if (uid.isNullOrBlank()) KEY_LEGACY else KEY_SHOWN_PREFIX + uid
+    }
+
+    /** Limpia el flag in-memory `shownEsteProceso` al cambiar de usuario. La
+     *  pantalla de Login (o el logout) lo llama; sin esto, si el usuario A
+     *  cierra el tour y despues el usuario B loguea en el mismo proceso, el
+     *  flag de A bloqueaba el tour de B. */
+    fun resetMemoriaProceso() {
+        shownEsteProceso = false
+    }
+
     /**
-     * Marca si ya se mostró alguna vez en este dispositivo. Lectura DIRECTA cada vez
-     * a [SessionStorage] (no cacheamos): si la inicialización del object ocurriera antes
-     * de que [SessionStorage.init] termine, un `mutableStateOf(getString())` cacheado
-     * quedaría en `false` para siempre en ese proceso y el tour reaparecería en cada
-     * cold start aunque ya estuviera marcado.
+     * Marca si ya se mostró alguna vez para el USUARIO actual. Lectura
+     * directa a [SessionStorage] cada vez (sin caching). Si la key del usuario
+     * no esta seteada, fallback a la key legacy global — asi devices con el
+     * tour cerrado antes del cambio no lo ven repetirse al primer login.
      */
     val shown: Boolean
-        get() = SessionStorage.getString(KEY_SHOWN) == "1"
+        get() = SessionStorage.getString(shownKey()) == "1" ||
+            SessionStorage.getString(KEY_LEGACY) == "1"
 
     /**
      * Defensa secundaria contra fallo de persist: si SessionStorage falla por algún
@@ -71,7 +93,7 @@ object CoachmarkStore {
 
     private fun markShown() {
         shownEsteProceso = true
-        SessionStorage.putString(KEY_SHOWN, "1")
+        SessionStorage.putString(shownKey(), "1")
     }
 
     /**
@@ -104,11 +126,13 @@ object CoachmarkStore {
             kotlin.math.abs(a.bottom - b.bottom) < eps
     }
 
-    /** Reset completo — al pedir "Ver tutorial" de nuevo desde Perfil. */
+    /** Reset completo — al pedir "Ver tutorial" de nuevo desde Perfil.
+     *  Solo borra la marca del usuario actual; otros usuarios del mismo
+     *  device mantienen su estado. */
     fun reset() {
         currentStep = -1
         shownEsteProceso = false
         targets.clear()
-        SessionStorage.remove(KEY_SHOWN)
+        SessionStorage.remove(shownKey())
     }
 }

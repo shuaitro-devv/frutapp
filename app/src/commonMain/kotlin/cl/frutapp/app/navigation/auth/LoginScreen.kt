@@ -51,6 +51,39 @@ class LoginScreen : Screen {
         var password by remember { mutableStateOf("") }
         var loading by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
+        // Handler extraido para reusar entre el boton "Ingresar" y el Enter
+        // del teclado en el campo password. Guard de loading evita doble-submit.
+        val iniciarLogin: () -> Unit = handler@{
+            if (loading) return@handler
+            if (email.isBlank() || password.isBlank()) return@handler
+            error = null
+            loading = true
+            scope.launch {
+                runCatching { AuthApi().login(LoginRequest(email = email.trim(), password = password)) }
+                    .onSuccess { resp ->
+                        TokenStore.save(resp.accessToken, resp.refreshToken, resp.user)
+                        // Reset del flag in-memory del coachmark: el usuario
+                        // que loguea ahora puede ser distinto del anterior; sin
+                        // esto, el flag del anterior bloquearia el tour del nuevo.
+                        cl.frutapp.app.data.CoachmarkStore.resetMemoriaProceso()
+                        navigator.replace(homeForUser(resp.user))
+                    }
+                    .onFailure { e ->
+                        cl.frutapp.app.ui.ErrorReporter.report(screen = "Login", action = "login", error = e)
+                        val msg = e.message.orEmpty().lowercase()
+                        error = when {
+                            msg.contains("verifica tu correo") || msg.contains("verifica el correo") ->
+                                "Verifica tu correo: revisa tu inbox y haz clic en el botón del mail para activar la cuenta."
+                            msg.contains("429") || msg.contains("too many") ->
+                                "Demasiados intentos. Espera un momento y vuelve a intentar."
+                            msg.contains("401") || msg.contains("unauthorized") || msg.contains("422") ->
+                                "Correo o contraseña incorrectos."
+                            else -> cl.frutapp.app.ui.mensajeAmigable(e, "iniciar sesión")
+                        }
+                    }
+                loading = false
+            }
+        }
 
         AuthScaffold {
             AuthHeaderText(
@@ -63,14 +96,17 @@ class LoginScreen : Screen {
                     onValueChange = { email = it },
                     label = "Correo electrónico o teléfono",
                     leadingIcon = Icons.Default.Person,
-                    keyboardType = KeyboardType.Email
+                    keyboardType = KeyboardType.Email,
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Next,
                 )
                 FrutTextField(
                     value = password,
                     onValueChange = { password = it },
                     label = "Contraseña",
                     leadingIcon = Icons.Default.Lock,
-                    isPassword = true
+                    isPassword = true,
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                    onImeAction = { iniciarLogin() },
                 )
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                     FrutButtonGhost(text = "¿Olvidaste tu contraseña?", onClick = { navigator.push(RecoverPasswordScreen()) })
@@ -81,35 +117,7 @@ class LoginScreen : Screen {
                 FrutButtonPrimary(
                     text = if (loading) "Ingresando…" else "Ingresar",
                     enabled = !loading,
-                    onClick = {
-                        error = null
-                        loading = true
-                        scope.launch {
-                            runCatching { AuthApi().login(LoginRequest(email = email.trim(), password = password)) }
-                                .onSuccess { resp ->
-                                    TokenStore.save(resp.accessToken, resp.refreshToken, resp.user)
-                                    navigator.replace(homeForUser(resp.user))
-                                }
-                                .onFailure { e ->
-                                    cl.frutapp.app.ui.ErrorReporter.report(screen = "Login", action = "login", error = e)
-                                    // El backend embebe el detalle en el body del 401 (ej. "Verifica tu correo
-                                    // para iniciar sesión." vs credencial cualquiera). Chequeamos PRIMERO los
-                                    // mensajes específicos del body antes del genérico 401 — sino siempre cae
-                                    // en "Correo o contraseña incorrectos" y el usuario pierde el hint útil.
-                                    val msg = e.message.orEmpty().lowercase()
-                                    error = when {
-                                        msg.contains("verifica tu correo") || msg.contains("verifica el correo") ->
-                                            "Verifica tu correo: revisa tu inbox y haz clic en el botón del mail para activar la cuenta."
-                                        msg.contains("429") || msg.contains("too many") ->
-                                            "Demasiados intentos. Espera un momento y vuelve a intentar."
-                                        msg.contains("401") || msg.contains("unauthorized") || msg.contains("422") ->
-                                            "Correo o contraseña incorrectos."
-                                        else -> cl.frutapp.app.ui.mensajeAmigable(e, "iniciar sesión")
-                                    }
-                                }
-                            loading = false
-                        }
-                    }
+                    onClick = iniciarLogin
                 )
                 FrutButtonOutline(text = "Crear cuenta", onClick = { navigator.push(RegisterScreen()) })
             }
