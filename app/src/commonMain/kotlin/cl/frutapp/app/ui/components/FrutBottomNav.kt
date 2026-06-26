@@ -136,10 +136,19 @@ private fun CartButton(selected: Boolean, onClick: () -> Unit, modifier: Modifie
     val gapPx = with(LocalDensity.current) { 14.dp.roundToPx() }
 
     Box(modifier = modifier.size(72.dp), contentAlignment = Alignment.TopEnd) {
+        // Antes habia `.shadow(10.dp, CircleShape)` que en algunos devices con
+        // release build se rendereaba como un rectangulo NEGRO (la shadow
+        // no respetaba el clip del CircleShape al pintar el spread). Reemplazado
+        // por un Box exterior mas grande con background blanco circular: actua
+        // como "halo" que separa el FAB del bottom nav sin shadow problematica.
+        Box(
+            modifier = Modifier
+                .size(76.dp)
+                .background(Color.White, CircleShape),
+        )
         Box(
             modifier = Modifier
                 .size(72.dp)
-                .shadow(10.dp, CircleShape)
                 .border(4.dp, Color.White, CircleShape)
                 .background(if (selected || menuOpen) FrutAppColors.Brand600 else FrutAppColors.Brand400, CircleShape)
                 .pointerInput(Unit) {

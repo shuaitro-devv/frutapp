@@ -35,7 +35,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -53,9 +52,11 @@ import kotlinx.coroutines.launch
  *
  * @param size diámetro del botón `+` en estado vacío. Default 36.dp; OfferCard pasa
  *   34.dp para mantener proporción con cards más chicas.
- * @param showAddedToast si true, muestra un toast 'Agregado al carrito' la primera
- *   vez que `quantity` pasa de 0 a >0. Útil cuando la card no tiene otro feedback;
- *   ProductCard ya tiene el flash de check.
+ * @param showAddedToast IGNORADO desde el fix del rectangulo negro: el Toast
+ *   nativo de Android, spammeado rapido en spam de "+", se renderiza como
+ *   un rectangulo negro parpadeante (bug conocido del sistema en Android 13+).
+ *   El feedback visual ya esta cubierto por el flash de check + animation del
+ *   boton. Parametro queda por compatibilidad de llamadas.
  */
 @Composable
 fun QuantityStepper(
@@ -80,7 +81,9 @@ fun QuantityStepper(
                 .background(if (added) FrutAppColors.Brand600 else FrutAppColors.Brand400, CircleShape)
                 .clickable {
                     onAdd()
-                    if (showAddedToast) showToast("Agregado al carrito")
+                    // showToast removido: spammeo del "+" hacia rectangulos
+                    // negros (bug de Toast nativo en Android 13+). Feedback
+                    // queda via animation + check icon.
                     addJob?.cancel()
                     addJob = scope.launch {
                         added = true
