@@ -85,7 +85,23 @@ object CoachmarkStore {
     }
 
     fun registerTarget(key: String, rect: Rect) {
-        targets[key] = rect
+        // Solo updateamos si el rect cambio "de verdad" (mas de medio pixel en
+        // cualquier dimension). Sin esto, onGloballyPositioned dispara cada
+        // frame con sub-pixeles distintos por densidad — mutableStateMapOf ve
+        // un cambio, recompone todo lo que observa `targets`, y eso vuelve a
+        // disparar onGloballyPositioned → loop de flicker.
+        val anterior = targets[key]
+        if (anterior == null || !aproximadamenteIgual(anterior, rect)) {
+            targets[key] = rect
+        }
+    }
+
+    private fun aproximadamenteIgual(a: Rect, b: Rect): Boolean {
+        val eps = 0.5f
+        return kotlin.math.abs(a.left - b.left) < eps &&
+            kotlin.math.abs(a.top - b.top) < eps &&
+            kotlin.math.abs(a.right - b.right) < eps &&
+            kotlin.math.abs(a.bottom - b.bottom) < eps
     }
 
     /** Reset completo — al pedir "Ver tutorial" de nuevo desde Perfil. */
