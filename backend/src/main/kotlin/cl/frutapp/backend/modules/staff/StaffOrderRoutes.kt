@@ -210,6 +210,10 @@ fun Route.staffOrderRoutes(staffOrders: StaffOrderService, catalogService: Catal
             }
 
             // POST /v1/staff/orders/dispatch/{id}/delivered -> ENTREGADO
+            // Body: { codigo: "1234" } — el codigo que el cliente le dice al
+            // repartidor cara a cara. El backend valida match contra el
+            // delivery_code guardado al take. Pedidos pre-V36 sin codigo
+            // aceptan codigo null (back-compat).
             post("/dispatch/{id}/delivered") {
                 if (!call.hasPermission("order:deliver")) {
                     call.respond(HttpStatusCode.Forbidden)
@@ -217,7 +221,8 @@ fun Route.staffOrderRoutes(staffOrders: StaffOrderService, catalogService: Catal
                 }
                 val repartidorId = call.userId()
                 val orderId = call.orderIdParam()
-                staffOrders.deliveredDispatch(repartidorId, orderId, call.eventContext())
+                val body = runCatching { call.receive<cl.frutapp.shared.dto.ConfirmarEntregaRequest>() }.getOrNull()
+                staffOrders.deliveredDispatch(repartidorId, orderId, body?.codigo, call.eventContext())
                 call.respond(HttpStatusCode.NoContent)
             }
         }

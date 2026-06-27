@@ -697,10 +697,14 @@ class StaffOrderService(
         )
     }
 
-    /** Tomar despacho atomicamente. Status pasa de STOCK_CONFIRMADO a EN_DESPACHO. */
+    /** Tomar despacho atomicamente. Status pasa de STOCK_CONFIRMADO a EN_DESPACHO.
+     *  Genera el delivery_code en la misma transaccion (V36): el cliente lo
+     *  vera en su tracking y se lo dira al repartidor cara a cara para
+     *  confirmar la entrega. */
     suspend fun takeDispatch(repartidorId: UUID, orderId: UUID, context: EventContext): StaffTakeResult {
         val now = Clock.System.now()
         val rescateThreshold = now.minus(STUCK_DISPATCH_THRESHOLD)
+        val nuevoCodigo = generarDeliveryCode()
         val ok = dbQuery {
             val location = pickerHomeLocation(repartidorId)
             val updated = OrdersTable.update({
@@ -719,6 +723,9 @@ class StaffOrderService(
                 it[status] = STATUS_EN_DESPACHO
                 it[assignedAt] = now
                 it[updatedAt] = now
+                // Generamos nuevo codigo cada take. En rescate de stuck dispatch
+                // el cliente vera el nuevo en su proximo polling (cada 8s).
+                it[OrdersTable.deliveryCode] = nuevoCodigo
             }
             if (updated > 0) {
                 recordHistory(orderId, fromStatus = STATUS_STOCK_CONFIRMADO, toStatus = STATUS_EN_DESPACHO,
@@ -735,8 +742,39 @@ class StaffOrderService(
         return StaffTakeResult(ok = true, orderId = orderId.toString())
     }
 
-    /** Marcar despacho como ENTREGADO. Status pasa de EN_DESPACHO a ENTREGADO. */
-    suspend fun deliveredDispatch(repartidorId: UUID, orderId: UUID, context: EventContext) {
+    /** Marcar despacho como ENTREGADO. Status pasa de EN_DESPACHO a ENTREGADO.
+     *  El repartidor DEBE enviar [codigoEntregado] = el codigo de 4 digitos que
+     *  el cliente le dijo cara a cara. Si no matchea el guardado en BD → 400.
+     *  Pedidos pre-V36 sin codigo guardado aceptan codigoEntregado null (no
+     *  forzamos retroactivo). */
+    suspend fun deliveredDispatch(
+        repartidorId: UUID,
+        orderId: UUID,
+        codigoEntregado: String?,
+        context: EventContext,
+    ) {
+        // Leer codigo guardado primero (transaccion read-only chica) para
+        // poder devolver mensaje de error util sin tocar otros campos.
+        val codigoGuardado = dbQuery {
+            OrdersTable.select(OrdersTable.deliveryCode)
+                .where {
+                    (OrdersTable.id eq orderId) and
+                    (OrdersTable.assignedRepartidorId eq repartidorId) and
+                    (OrdersTable.status eq STATUS_EN_DESPACHO)
+                }
+                .singleOrNull()?.get(OrdersTable.deliveryCode)
+        }
+        // Si la fila tiene codigo guardado, el repartidor lo debe enviar.
+        if (codigoGuardado != null) {
+            val limpio = codigoEntregado?.trim()
+            if (limpio.isNullOrEmpty()) {
+                throw ValidationException("Pídele al cliente el código de entrega.")
+            }
+            if (limpio != codigoGuardado) {
+                throw ValidationException("Código incorrecto. Pídeselo de nuevo al cliente.")
+            }
+        }
+
         val now = Clock.System.now()
         val ok = dbQuery {
             val updated = OrdersTable.update({
@@ -760,6 +798,12 @@ class StaffOrderService(
         // Push al cliente: "Pedido entregado".
         notifications?.onOrderTransition(orderId, OrderStatus.EN_DESPACHO, OrderStatus.ENTREGADO)
     }
+
+    /** Codigo de 4 digitos (1000-9999) para el handshake fisico de entrega.
+     *  Random uniforme — sin riesgo de exposicion: solo se ve en la app del
+     *  cliente y en BD; nunca lo loggeamos. */
+    private fun generarDeliveryCode(): String =
+        kotlin.random.Random.nextInt(1000, 10000).toString()
 
     private suspend fun materializeDispatchSummaries(rows: List<ResultRow>, currentRepartidorId: UUID): List<StaffDispatchSummaryDto> {
         if (rows.isEmpty()) return emptyList()

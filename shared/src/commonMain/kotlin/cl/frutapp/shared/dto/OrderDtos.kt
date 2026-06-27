@@ -105,6 +105,11 @@ data class OrderDto(
     /** Mensajes de chat NO leidos en este pedido para el rol del que consulta
      *  (cliente cuando viene de /v1/orders). 0 si no hay o si la API es vieja. */
     val chatUnread: Int = 0,
+    /** Codigo de entrega de 4 digitos. Solo poblado para el cliente del pedido
+     *  cuando status=EN_DESPACHO. El cliente se lo dice al repartidor cara a
+     *  cara y el backend lo valida al confirmar entrega. NULL para todos los
+     *  demas casos (otros status, endpoints staff, pedidos pre-V36). */
+    val deliveryCode: String? = null,
 )
 
 @Serializable
@@ -200,6 +205,14 @@ data class OrderSummaryDto(
     val itemsCount: Int,
     /** Mensajes de chat NO leidos del cliente en este pedido. 0 si no hay. */
     val chatUnread: Int = 0,
+)
+
+/** Body para POST /v1/staff/orders/dispatch/{id}/delivered. El repartidor
+ *  envia el codigo que el cliente le dijo cara a cara; el backend valida
+ *  contra el delivery_code guardado al EN_DESPACHO. */
+@Serializable
+data class ConfirmarEntregaRequest(
+    val codigo: String,
 )
 
 /** Saldo de FrutCoins (derivado del ledger) + movimientos. */

@@ -1,5 +1,6 @@
 package cl.frutapp.app.data.remote
 
+import cl.frutapp.shared.dto.ConfirmarEntregaRequest
 import cl.frutapp.shared.dto.StaffDispatchDetailDto
 import cl.frutapp.shared.dto.StaffDispatchSummaryDto
 import cl.frutapp.shared.dto.StaffTakeResult
@@ -8,6 +9,9 @@ import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 
 /**
  * Endpoints del repartidor (Nivel 3). Protegidos por JWT con permisos
@@ -48,8 +52,14 @@ class StaffDispatchApi(
     suspend fun take(orderId: String): StaffTakeResult =
         client.post("$baseUrl/v1/staff/orders/dispatch/$orderId/take").body()
 
-    /** Marcar como ENTREGADO. */
-    suspend fun delivered(orderId: String) {
-        client.post("$baseUrl/v1/staff/orders/dispatch/$orderId/delivered")
+    /** Marcar como ENTREGADO. El [codigo] de 4 digitos lo dice el cliente
+     *  cara a cara al repartidor; el backend valida match con el delivery_code
+     *  guardado al EN_DESPACHO. Si no coincide → ValidationException con
+     *  mensaje "Codigo incorrecto" (el repartidor reintenta sin perder estado). */
+    suspend fun delivered(orderId: String, codigo: String) {
+        client.post("$baseUrl/v1/staff/orders/dispatch/$orderId/delivered") {
+            contentType(ContentType.Application.Json)
+            setBody(ConfirmarEntregaRequest(codigo = codigo))
+        }
     }
 }

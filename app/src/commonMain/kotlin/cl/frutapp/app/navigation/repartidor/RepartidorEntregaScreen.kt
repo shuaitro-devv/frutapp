@@ -1,6 +1,7 @@
 package cl.frutapp.app.navigation.repartidor
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -90,7 +91,11 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
             }
             return
         }
-        val codigoDemo = "4821" // En real, el cliente lo dice y el repartidor lo tipea.
+        // El repartidor tipea aca los 4 digitos que el cliente le dice cara
+        // a cara. El backend valida match contra el delivery_code generado al
+        // EN_DESPACHO; si no coincide, devuelve 400 "Codigo incorrecto" y
+        // mostramos el error sin transicionar el pedido.
+        var codigoInput by remember { mutableStateOf("") }
         var entregando by remember { mutableStateOf(false) }
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
             Row(
@@ -119,9 +124,9 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
                 InstruccionesCard()
                 Spacer(Modifier.height(14.dp))
                 Text("Código de verificación", color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                Text("Pide al receptor el código de 4 dígitos", color = FrutAppColors.InkSoft, fontSize = 12.sp)
+                Text("Pídele al cliente el código de 4 dígitos que ve en su app", color = FrutAppColors.InkSoft, fontSize = 12.sp)
                 Spacer(Modifier.height(10.dp))
-                CodigoBoxes(codigo = codigoDemo)
+                CodigoInputBoxes(codigo = codigoInput, onCodigo = { codigoInput = it })
                 Spacer(Modifier.height(14.dp))
                 AccionCard(icon = Icons.Filled.CameraAlt, titulo = "Tomar foto", sub = "Toma foto al paquete entregado", onClick = { showToast("Cámara - Próximamente") })
                 Spacer(Modifier.height(8.dp))
@@ -139,15 +144,20 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
                 FrutButtonOutline(text = "Problema", onClick = { navigator.push(RepartidorIncidenciaScreen(pedidoId)) }, modifier = Modifier.weight(1f))
                 FrutButtonPrimary(
                     text = if (entregando) "Confirmando..." else "Confirmar entrega",
+                    enabled = !entregando && codigoInput.length == 4,
                     onClick = {
                         if (entregando) return@FrutButtonPrimary
+                        if (codigoInput.length != 4) {
+                            showToast("Pídele al cliente el código de 4 dígitos.")
+                            return@FrutButtonPrimary
+                        }
                         if (!esBackendReal) {
                             navigator.popUntilRoot()
                             return@FrutButtonPrimary
                         }
                         entregando = true
                         scope.launch {
-                            runCatching { dispatchApi.delivered(pedidoId) }
+                            runCatching { dispatchApi.delivered(pedidoId, codigoInput) }
                                 .onSuccess {
                                     showToast("¡Entrega confirmada! 🌿")
                                     navigator.popUntilRoot()
@@ -210,6 +220,53 @@ private fun CodigoBoxes(codigo: String) {
                 Text("$digito", color = FrutAppColors.Brand800, fontSize = 28.sp, fontWeight = FontWeight.Bold)
             }
         }
+    }
+}
+
+/** 4 cajas editables que reflejan el codigo que el repartidor escribe. El
+ *  TextField real es invisible (alpha 0 sobre las cajas), asi el teclado
+ *  funciona pero el render sigue siendo el de las cajas grandes. */
+@Composable
+private fun CodigoInputBoxes(codigo: String, onCodigo: (String) -> Unit) {
+    androidx.compose.foundation.layout.Box {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            repeat(4) { i ->
+                val digito = codigo.getOrNull(i)?.toString() ?: ""
+                val activa = i == codigo.length
+                Box(
+                    modifier = Modifier.weight(1f).height(64.dp)
+                        .background(Color.White, RoundedCornerShape(12.dp))
+                        .border(
+                            width = if (activa) 2.dp else 1.dp,
+                            color = if (activa) FrutAppColors.Brand600 else FrutAppColors.Brand200,
+                            shape = RoundedCornerShape(12.dp),
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(digito, color = FrutAppColors.Brand800, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        // TextField invisible que captura el teclado. Solo digitos, max 4.
+        androidx.compose.foundation.text.BasicTextField(
+            value = codigo,
+            onValueChange = { nuevo ->
+                val limpio = nuevo.filter { it.isDigit() }.take(4)
+                onCodigo(limpio)
+            },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+                imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .alpha(0f),
+            textStyle = androidx.compose.ui.text.TextStyle(color = Color.Transparent),
+        )
     }
 }
 

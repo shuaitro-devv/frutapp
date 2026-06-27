@@ -32,6 +32,11 @@ object OrdersTable : Table("customer_order") {
     val assignedPickerId = uuid("assigned_picker_id").nullable()
     val assignedRepartidorId = uuid("assigned_repartidor_id").nullable()
     val assignedAt = timestamp("assigned_at").nullable()
+    // V36: codigo de entrega de 4 digitos. Se genera al EN_DESPACHO; el cliente
+    // lo ve en su app y se lo dice al repartidor cara a cara. El repartidor lo
+    // envia en /delivered y el backend valida match antes de transicionar a
+    // ENTREGADO.
+    val deliveryCode = text("delivery_code").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

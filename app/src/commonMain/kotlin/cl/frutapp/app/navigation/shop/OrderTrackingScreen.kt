@@ -261,6 +261,14 @@ private fun Detail(
             }
         }
 
+        // Codigo de entrega: visible solo cuando el pedido esta EN_DESPACHO.
+        // El cliente DEBE darselo al repartidor cara a cara para confirmar la
+        // entrega — sin esto, el repartidor no puede marcar entregado.
+        val codigoEntrega = o.deliveryCode
+        if (o.status == "EN_DESPACHO" && !codigoEntrega.isNullOrBlank()) {
+            CodigoEntregaCard(codigo = codigoEntrega, modifier = Modifier.padding(top = 14.dp))
+        }
+
         // Hero: mapa con tracking del repartidor cuando EN_DESPACHO; imagen
         // ilustrativa para el resto de los estados. Gated por feature.mapa_repartidor.
         // Si la flag esta apagada, mostramos siempre la imagen.
@@ -728,6 +736,58 @@ private fun ChatUnreadDot(count: Int) {
             color = Color.White,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+/** Card destacada con el codigo de 4 digitos que el cliente debe darle al
+ *  repartidor cara a cara para confirmar la entrega. Sin esto el repartidor
+ *  no puede marcar entregado. */
+@Composable
+private fun CodigoEntregaCard(codigo: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(FrutAppColors.AmberSoft, RoundedCornerShape(18.dp))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("🔐", fontSize = 18.sp)
+            Text(
+                "Tu código de entrega",
+                color = FrutAppColors.AmberCoin,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 6.dp),
+            )
+        }
+        Row(
+            modifier = Modifier.padding(top = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            codigo.forEach { c ->
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(Color.White, RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        c.toString(),
+                        color = FrutAppColors.AmberCoin,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+        Text(
+            "Dáselo al repartidor cuando llegue para confirmar la entrega.",
+            color = FrutAppColors.InkSoft,
+            fontSize = 12.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.padding(top = 10.dp),
         )
     }
 }

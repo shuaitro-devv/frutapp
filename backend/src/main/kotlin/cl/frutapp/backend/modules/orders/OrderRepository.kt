@@ -198,10 +198,11 @@ class OrderRepository {
         toOrderDto(row, itemsOf(id), paymentsOf(id))
     }
 
-    /** Sin filtro de usuario (back office). */
+    /** Sin filtro de usuario (back office). No expone delivery_code (solo el
+     *  cliente del pedido debe verlo). */
     suspend fun findById(id: UUID): OrderDto? = dbQuery {
         val row = OrdersTable.selectAll().where { OrdersTable.id eq id }.singleOrNull() ?: return@dbQuery null
-        toOrderDto(row, itemsOf(id), paymentsOf(id))
+        toOrderDto(row, itemsOf(id), paymentsOf(id), incluirDeliveryCode = false)
     }
 
     suspend fun listByUser(userId: UUID): List<OrderSummaryDto> = dbQuery {
@@ -679,7 +680,12 @@ class OrderRepository {
         sustitutoImageKey = r[OrderItemsTable.sustitutoImageKey]
     )
 
-    private fun toOrderDto(r: ResultRow, items: List<OrderItemDto>, payments: List<OrderPaymentDto>) = OrderDto(
+    private fun toOrderDto(
+        r: ResultRow,
+        items: List<OrderItemDto>,
+        payments: List<OrderPaymentDto>,
+        incluirDeliveryCode: Boolean = true,
+    ) = OrderDto(
         id = r[OrdersTable.id].toString(),
         numero = r[OrdersTable.numero],
         status = r[OrdersTable.status],
@@ -695,7 +701,13 @@ class OrderRepository {
         items = items,
         fulfillmentType = r[OrdersTable.fulfillmentType],
         sucursal = r[OrdersTable.sucursal],
-        payments = payments
+        payments = payments,
+        // Solo exponemos el codigo cuando el caller es el cliente del pedido
+        // Y el pedido esta EN_DESPACHO. En otros casos (back office, repartidor
+        // mirando detalle, status diferente) va null. Asi el repartidor esta
+        // OBLIGADO a pedirselo al cliente cara a cara para confirmar.
+        deliveryCode = if (incluirDeliveryCode && r[OrdersTable.status] == "EN_DESPACHO")
+            r[OrdersTable.deliveryCode] else null,
     )
 
     companion object {
