@@ -543,7 +543,13 @@ class BackendIntegrationTest {
         val orderId = createOrderStockConfirmado()
 
         staff.takeDispatch(repartidorId, orderId, EventContext.EMPTY)
-        staff.deliveredDispatch(repartidorId, orderId, EventContext.EMPTY)
+        // V36: takeDispatch genera delivery_code. Lo leemos de BD para pasarlo
+        // al delivered (simula al repartidor pidiendoselo al cliente cara a cara).
+        val codigo = dbQuery {
+            OrdersTable.selectAll().where { OrdersTable.id eq orderId }
+                .first()[OrdersTable.deliveryCode]
+        }
+        staff.deliveredDispatch(repartidorId, orderId, codigo, EventContext.EMPTY)
 
         val status = dbQuery {
             OrdersTable.selectAll().where { OrdersTable.id eq orderId }
@@ -572,7 +578,11 @@ class BackendIntegrationTest {
         val orderId = createOrderStockConfirmado()
 
         staff.takeDispatch(repartidorId, orderId, EventContext(ipAddress = "10.0.0.5", userAgent = "RepartoTest/1.0"))
-        staff.deliveredDispatch(repartidorId, orderId, EventContext.EMPTY)
+        val codigo = dbQuery {
+            OrdersTable.selectAll().where { OrdersTable.id eq orderId }
+                .first()[OrdersTable.deliveryCode]
+        }
+        staff.deliveredDispatch(repartidorId, orderId, codigo, EventContext.EMPTY)
 
         val eventos = dbQuery {
             UserEventTable.selectAll()
