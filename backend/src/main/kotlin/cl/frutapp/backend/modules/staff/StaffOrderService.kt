@@ -924,7 +924,12 @@ class StaffOrderService(
         const val STATUS_ESPERANDO_AJUSTE = "ESPERANDO_AJUSTE_CLIENTE"
         const val STATUS_EN_DESPACHO = "EN_DESPACHO"
         const val STATUS_ENTREGADO = "ENTREGADO"
-        val COLA_LIBRE_STATUSES = listOf(STATUS_CREADO, STATUS_PAGADO)
+        // Solo PAGADO: el picker NO debe ver pedidos en CREADO — esos estan
+        // esperando confirmacion de pago (Webpay abierto sin completar). Bug
+        // reportado por el usuario: hizo pedido con Webpay + volvio atras sin
+        // pagar y el picker igual lo veia en la cola. Antes del webpay real,
+        // CREADO se saltaba a PAGADO automatico y este filtro daba lo mismo.
+        val COLA_LIBRE_STATUSES = listOf(STATUS_PAGADO)
         // Estados >= STOCK_CONFIRMADO que cuentan como "completados" para el tab
         // "Listos hoy" del picker. ESPERANDO_AJUSTE no esta acá porque todavia
         // espera resolucion del cliente; FACTURADO no esta hoy en el flujo demo
