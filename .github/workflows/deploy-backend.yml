@@ -69,15 +69,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
+      # Reemplaza docker/metadata-action@v5 (fallaba con HTTP 500 sirviendo la
+      # respuesta HTML "Unicorn!" de GitHub, ver runs 29538219448 y 29539865515).
+      # Calculamos los tags/labels a mano — sin llamadas al API de GitHub, no
+      # hay dependencias externas que puedan tumbar el step.
+      - name: Compute image tags and labels
         id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix=
-            type=raw,value=latest,enable={{is_default_branch}}
+        run: |
+          IMG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          SHA_SHORT="${GITHUB_SHA:0:7}"
+          BRANCH="${GITHUB_REF_NAME}"
+          {
+            echo "tags<<EOF"
+            echo "${IMG}:${BRANCH}"
+            echo "${IMG}:${SHA_SHORT}"
+            if [ "${BRANCH}" = "main" ]; then echo "${IMG}:latest"; fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "labels<<EOF"
+            echo "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}"
+            echo "org.opencontainers.image.revision=${GITHUB_SHA}"
+            echo "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
