@@ -98,4 +98,9 @@ class OrderApi(
     /** El cliente rechaza items con delta grande: se descartan, el resto sigue. */
     suspend fun rechazarAjuste(orderId: String): OrderDto =
         client.post("$baseUrl/v1/orders/$orderId/rechazar-ajuste").body()
+
+    /** Cancela el propio pedido (solo si esta en CREADO — pago Webpay abandonado). */
+    suspend fun cancelar(orderId: String) {
+        client.post("$baseUrl/v1/orders/$orderId/cancelar")
+    }
 }

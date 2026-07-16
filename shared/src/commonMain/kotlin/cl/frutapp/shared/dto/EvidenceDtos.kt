@@ -13,7 +13,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class OrderItemEvidenceDto(
     val id: String,
-    val orderItemId: String,
+    /** null cuando la foto es del pedido completo (entrega del repartidor). */
+    val orderItemId: String? = null,
     val url: String,
     val comentario: String? = null,
     val uploadedAt: String,

@@ -51,6 +51,8 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.isUuidLike
 import cl.frutapp.app.data.remote.StaffDispatchApi
+import cl.frutapp.app.data.remote.StaffEvidenceApi
+import cl.frutapp.app.platform.rememberSelectorImagenes
 import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
@@ -97,6 +99,38 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
         // mostramos el error sin transicionar el pedido.
         var codigoInput by remember { mutableStateOf("") }
         var entregando by remember { mutableStateOf(false) }
+        // Foto del paquete: opcional; el repartidor la saca antes de confirmar
+        // la entrega para dejar evidencia de que dejo el paquete al cliente.
+        // "Cargando" bloquea el boton mientras corre el multipart al backend;
+        // "Adjuntada" cambia la card a estado exitoso.
+        var fotoSubida by remember { mutableStateOf(false) }
+        var subiendoFoto by remember { mutableStateOf(false) }
+        val evidenceApi = remember { StaffEvidenceApi() }
+        val selectorFoto = rememberSelectorImagenes { bytes ->
+            if (subiendoFoto) return@rememberSelectorImagenes
+            // Fixture mock (pedidoId no es UUID): simulamos el flujo sin
+            // pegarle al backend, si no el POST /staff/dispatches/{id}/evidence
+            // devuelve 400 "orderId inválido" y confunde al repartidor de demo.
+            if (!esBackendReal) {
+                fotoSubida = true
+                showToast("Foto adjuntada.")
+                return@rememberSelectorImagenes
+            }
+            subiendoFoto = true
+            scope.launch {
+                runCatching { evidenceApi.subirEntrega(pedidoId, bytes, comentario = null) }
+                    .onSuccess {
+                        fotoSubida = true
+                        showToast("Foto adjuntada.")
+                    }
+                    .onFailure { e ->
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        ErrorReporter.report(screen = "RepartidorEntrega", action = "upload_evidence", error = e)
+                        showToast(mensajeAmigable(e, "subir la foto"))
+                    }
+                subiendoFoto = false
+            }
+        }
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
             Row(
                 modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 6.dp, vertical = 8.dp),
@@ -128,7 +162,17 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
                 Spacer(Modifier.height(10.dp))
                 CodigoInputBoxes(codigo = codigoInput, onCodigo = { codigoInput = it })
                 Spacer(Modifier.height(14.dp))
-                AccionCard(icon = Icons.Filled.CameraAlt, titulo = "Tomar foto", sub = "Toma foto al paquete entregado", onClick = { showToast("Cámara - Próximamente") })
+                AccionCard(
+                    icon = if (fotoSubida) Icons.Filled.Check else Icons.Filled.CameraAlt,
+                    titulo = when {
+                        subiendoFoto -> "Subiendo foto..."
+                        fotoSubida -> "Foto adjuntada"
+                        else -> "Tomar foto"
+                    },
+                    sub = if (fotoSubida) "El cliente vera la foto en su tracking"
+                          else "Toma foto al paquete entregado",
+                    onClick = { if (!subiendoFoto) selectorFoto.camara() },
+                )
                 Spacer(Modifier.height(8.dp))
                 AccionCard(icon = Icons.Filled.Draw, titulo = "Firma del receptor", sub = "Solicitar firma en la pantalla", onClick = { showToast("Firma - Próximamente") })
                 Spacer(Modifier.height(12.dp))

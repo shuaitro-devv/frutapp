@@ -63,8 +63,10 @@ import cl.frutapp.app.ui.components.AvatarImage
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.StaffActionsSheet
+import cl.frutapp.app.ui.openUrl
 import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
+import cl.frutapp.app.navigation.shop.ChatScreen
 
 /**
  * repartidor-03 — En camino. Hero verde con ETA, mapa con ruta, cards de cliente y
@@ -126,6 +128,18 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
         }
         var menuAbierto by remember { mutableStateOf(false) }
         var dialogoCancelar by remember { mutableStateOf(false) }
+        val abrirChat = {
+            navigator.push(ChatScreen(
+                orderId = pedidoId,
+                destinatarioRol = "cliente",
+                tituloContraparte = "Cliente del pedido",
+            ))
+        }
+        val llamarCliente = {
+            val tel = despacho.telefono
+            if (tel.isNullOrBlank()) showToast("El cliente no registró un teléfono")
+            else openUrl("tel:$tel")
+        }
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
             Row(
                 modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 6.dp, vertical = 8.dp),
@@ -143,13 +157,7 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
                 if (chatHabilitado && esBackendReal) {
                     Row(
                         modifier = Modifier
-                            .clickable {
-                                navigator.push(cl.frutapp.app.navigation.shop.ChatScreen(
-                                    orderId = pedidoId,
-                                    destinatarioRol = "cliente",
-                                    tituloContraparte = "Cliente del pedido",
-                                ))
-                            }
+                            .clickable { abrirChat() }
                             .padding(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -168,7 +176,7 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
                 Spacer(Modifier.height(12.dp))
                 MapaConRuta(kmRestantes = 1.8)
                 Spacer(Modifier.height(12.dp))
-                ClienteEntregaCard(despacho = despacho)
+                ClienteEntregaCard(despacho = despacho, onLlamar = llamarCliente, onChat = abrirChat)
                 Spacer(Modifier.height(10.dp))
                 DireccionCard(direccion = "${despacho.direccion}, Depto 54", subdireccion = "Ñuñoa, Santiago")
                 Spacer(Modifier.height(10.dp))
@@ -190,8 +198,14 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
                     onPausar = { showToast("Entrega pausada - Próximamente") },
                     onReportar = { navigator.push(RepartidorIncidenciaScreen(pedidoId)) },
                     onCambiarDireccion = { showToast("Cambiar dirección - Próximamente") },
-                    onLlamarCliente = { showToast("Llamar - Próximamente") },
-                    onChatCliente = { showToast("Chat - Próximamente") },
+                    onLlamarCliente = {
+                        menuAbierto = false
+                        llamarCliente()
+                    },
+                    onChatCliente = {
+                        menuAbierto = false
+                        abrirChat()
+                    },
                     onHistorial = { showToast("Historial - Próximamente") },
                     onCancelar = { dialogoCancelar = true }
                 ),
@@ -304,7 +318,7 @@ private fun Pin(icon: ImageVector, label: String) {
 }
 
 @Composable
-private fun ClienteEntregaCard(despacho: DespachoItem) {
+private fun ClienteEntregaCard(despacho: DespachoItem, onLlamar: () -> Unit, onChat: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp))
             .border(1.dp, FrutAppColors.Brand100, RoundedCornerShape(14.dp)).padding(14.dp),
@@ -323,15 +337,15 @@ private fun ClienteEntregaCard(despacho: DespachoItem) {
             Text(despacho.cliente, color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ContactBtn(icon = Icons.Filled.Phone)
-            ContactBtn(icon = Icons.AutoMirrored.Filled.Chat)
+            ContactBtn(icon = Icons.Filled.Phone, onClick = onLlamar)
+            ContactBtn(icon = Icons.AutoMirrored.Filled.Chat, onClick = onChat)
         }
     }
 }
 
 @Composable
-private fun ContactBtn(icon: ImageVector) {
-    Box(modifier = Modifier.size(36.dp).background(FrutAppColors.Brand50, CircleShape).clickable { }, contentAlignment = Alignment.Center) {
+private fun ContactBtn(icon: ImageVector, onClick: () -> Unit) {
+    Box(modifier = Modifier.size(36.dp).background(FrutAppColors.Brand50, CircleShape).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
         Icon(icon, null, tint = FrutAppColors.Brand600, modifier = Modifier.size(17.dp))
     }
 }

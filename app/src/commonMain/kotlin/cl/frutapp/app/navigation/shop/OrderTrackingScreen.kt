@@ -55,12 +55,16 @@ import cl.frutapp.app.data.paymentMethodLabel
 import cl.frutapp.app.data.pedidoToCanastaItems
 import cl.frutapp.app.data.reorderIntoCart
 import cl.frutapp.app.data.toastMessage
+import androidx.compose.material3.AlertDialog
 import cl.frutapp.app.data.remote.OrderApi
+import cl.frutapp.app.data.remote.PagoApi
 import cl.frutapp.app.navigation.canastas.NuevaCanastaScreen
 import cl.frutapp.app.ui.components.FrutBottomNav
+import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.FrutTab
 import cl.frutapp.app.ui.components.SkeletonBox
+import cl.frutapp.app.ui.mensajeAmigable
 import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
 import cl.frutapp.shared.dto.OrderDto
@@ -172,7 +176,41 @@ class OrderTrackingScreen(private val orderId: String) : Screen {
                                     navigator.push(NuevaCanastaScreen(itemsIniciales = items))
                                 }
                             }
-                        }
+                        },
+                        onReanudarPago = {
+                            // Reintenta el flujo Webpay contra el mismo orderId.
+                            // El backend valida que sigue en CREADO y sin tx activa
+                            // reciente (< 10 min). Sino tira 409 y mostramos toast.
+                            scope.launch {
+                                runCatching { PagoApi().iniciar(o.id) }
+                                    .onSuccess { res ->
+                                        navigator.push(
+                                            PagoWebpayScreen(
+                                                orderId = o.id,
+                                                token = res.token,
+                                                urlFormPost = res.urlFormPost,
+                                            )
+                                        )
+                                    }
+                                    .onFailure { e ->
+                                        if (e is kotlinx.coroutines.CancellationException) throw e
+                                        showToast(mensajeAmigable(e, "retomar el pago"))
+                                    }
+                            }
+                        },
+                        onConfirmarCancelar = {
+                            scope.launch {
+                                runCatching { OrderApi().cancelar(o.id) }
+                                    .onSuccess {
+                                        showToast("Pedido cancelado")
+                                        navigator.popUntilRoot()
+                                    }
+                                    .onFailure { e ->
+                                        if (e is kotlinx.coroutines.CancellationException) throw e
+                                        showToast(mensajeAmigable(e, "cancelar el pedido"))
+                                    }
+                            }
+                        },
                     )
                 }
 
@@ -246,9 +284,12 @@ private fun Detail(
     onEvidenciaClick: (cl.frutapp.shared.dto.OrderItemEvidenceDto) -> Unit,
     onReorder: () -> Unit,
     onCalificar: () -> Unit,
-    onGuardarCanasta: () -> Unit
+    onGuardarCanasta: () -> Unit,
+    onReanudarPago: () -> Unit = {},
+    onConfirmarCancelar: () -> Unit = {},
 ) {
     val pasos = pasosFor(o.status)
+    var mostrarConfirmarCancelar by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     Column(modifier = modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -301,8 +342,34 @@ private fun Detail(
             }
         }
 
+        // Card pago pendiente: visible cuando el pedido esta en CREADO. Es el
+        // caso "abriste Webpay y volviste sin pagar". Le damos al cliente 2
+        // opciones concretas para desatascarse en vez de dejar el pedido
+        // huerfano (el backend lo auto-cancela pasado el timeout igual, pero
+        // esto es mas rapido para el UX). onReanudarPago vuelve a pegarle a
+        // /pagos/webpay/iniciar y abrir la WebView.
+        if (o.status == "CREADO") {
+            PagoPendienteCard(
+                onRetomar = onReanudarPago,
+                onCancelar = { mostrarConfirmarCancelar = true },
+                modifier = Modifier.padding(top = 16.dp),
+            )
+        }
+
         Text("Estado del pedido", color = FrutAppColors.Brand800, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
         pasos.forEachIndexed { i, paso -> TimelineStep(paso, isLast = i == pasos.lastIndex) }
+
+        // Foto(s) del paquete entregado, subidas por el repartidor al confirmar
+        // la entrega. Van separadas de las fotos por-item del picker: es evidencia
+        // del pedido completo, no de un producto. Se filtran por orderItemId=null.
+        val fotosEntrega = evidencias.filter { it.orderItemId == null }
+        if (fotosEntrega.isNotEmpty()) {
+            FotosEntregaCard(
+                fotos = fotosEntrega,
+                onFotoClick = onEvidenciaClick,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+        }
 
         // Lista de items del pedido. Muestra items rechazados (SIN_STOCK) tachados
         // con badge "No disponible" para que el cliente recuerde por que el total
@@ -450,12 +517,89 @@ private fun Detail(
         }
         Spacer(Modifier.height(20.dp))
     }
+
+    if (mostrarConfirmarCancelar) {
+        AlertDialog(
+            onDismissRequest = { mostrarConfirmarCancelar = false },
+            title = { Text("¿Cancelar pedido?", color = FrutAppColors.Brand800, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "Vas a cancelar el pedido ${o.numero}. Si querías pagarlo, mejor toca “Retomar pago”.",
+                    color = FrutAppColors.InkSoft,
+                    fontSize = 14.sp,
+                )
+            },
+            confirmButton = {
+                FrutButtonPrimary(
+                    text = "Sí, cancelar",
+                    onClick = {
+                        mostrarConfirmarCancelar = false
+                        onConfirmarCancelar()
+                    },
+                )
+            },
+            dismissButton = {
+                FrutButtonOutline(
+                    text = "Volver",
+                    onClick = { mostrarConfirmarCancelar = false },
+                )
+            },
+        )
+    }
 }
 
 @Composable
 private fun Centered(text: String) {
     Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
         Text(text, color = FrutAppColors.InkMuted, fontSize = 14.sp)
+    }
+}
+
+/** Card destacada para pedidos en CREADO (Webpay abandonado). Le da al
+ *  cliente 2 opciones concretas para no dejar el pedido huerfano. */
+@Composable
+private fun PagoPendienteCard(
+    onRetomar: () -> Unit,
+    onCancelar: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(FrutAppColors.AmberSoft, RoundedCornerShape(16.dp))
+            .padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("⏳", fontSize = 20.sp)
+            Text(
+                "Pago pendiente",
+                color = FrutAppColors.AmberCoin,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        Text(
+            "Tu pedido queda reservado un rato más. Retoma el pago para que tu Seleccionador de Frescura pueda armarlo.",
+            color = FrutAppColors.InkSoft,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            FrutButtonOutline(
+                text = "Cancelar",
+                onClick = onCancelar,
+                modifier = Modifier.weight(1f),
+            )
+            FrutButtonPrimary(
+                text = "Retomar pago",
+                onClick = onRetomar,
+                modifier = Modifier.weight(1.4f),
+            )
+        }
     }
 }
 
@@ -577,8 +721,45 @@ private fun ProductosResumen(
     }
 }
 
+/** Fotos del paquete que subio el repartidor al confirmar la entrega. Vive
+ *  aparte de las fotos por-item del picker: aca es evidencia del pedido
+ *  completo. Se ven grandes (thumbs de 90dp) porque son la prueba de que el
+ *  paquete llego. */
 @Composable
-private fun EvidenciaThumb(ev: cl.frutapp.shared.dto.OrderItemEvidenceDto, onClick: () -> Unit) {
+private fun FotosEntregaCard(
+    fotos: List<cl.frutapp.shared.dto.OrderItemEvidenceDto>,
+    onFotoClick: (cl.frutapp.shared.dto.OrderItemEvidenceDto) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(FrutAppColors.Cream, RoundedCornerShape(14.dp))
+            .padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.PhotoCamera, null, tint = FrutAppColors.Brand600, modifier = Modifier.size(16.dp))
+            Text(
+                "Foto de la entrega",
+                color = FrutAppColors.Brand800,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 6.dp),
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            fotos.forEach { ev -> EvidenciaThumb(ev = ev, size = 90.dp, onClick = { onFotoClick(ev) }) }
+        }
+    }
+}
+
+@Composable
+private fun EvidenciaThumb(
+    ev: cl.frutapp.shared.dto.OrderItemEvidenceDto,
+    size: androidx.compose.ui.unit.Dp = 54.dp,
+    onClick: () -> Unit,
+) {
     var bytes by remember(ev.url) { mutableStateOf<ByteArray?>(null) }
     LaunchedEffect(ev.url) {
         runCatching { cl.frutapp.app.platform.Imagenes.descargar(ev.url) }
@@ -587,7 +768,7 @@ private fun EvidenciaThumb(ev: cl.frutapp.shared.dto.OrderItemEvidenceDto, onCli
     val img = bytes?.let { cl.frutapp.app.platform.decodeImagen(it) }
     Box(
         modifier = Modifier
-            .size(54.dp)
+            .size(size)
             .background(FrutAppColors.Brand50, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
@@ -597,7 +778,7 @@ private fun EvidenciaThumb(ev: cl.frutapp.shared.dto.OrderItemEvidenceDto, onCli
                 bitmap = img,
                 contentDescription = "Foto del item",
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(54.dp)
+                modifier = Modifier.size(size)
             )
         } else {
             Icon(

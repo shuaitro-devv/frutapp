@@ -15,6 +15,9 @@ import cl.frutapp.shared.dto.OrderSummaryDto
 import cl.frutapp.shared.dto.TransitionRequest
 import java.util.UUID
 import kotlin.random.Random
+import kotlin.time.Duration.Companion.minutes
+import kotlinx.datetime.Clock
+import org.slf4j.LoggerFactory
 
 /**
  * Lógica de pedidos. TODO el cálculo vive acá (fuente de verdad): re-precia desde el
@@ -41,6 +44,7 @@ class OrderService(
     /** Idem batch para listados (1 query por GROUP BY en vez de N+1). */
     private val chatUnreadBatch: (suspend (orderIds: List<java.util.UUID>, destinatarioRol: String) -> Map<java.util.UUID, Int>) = { _, _ -> emptyMap() },
 ) {
+    private val autoCancelLog = LoggerFactory.getLogger("OrderService.autoCancel")
 
     suspend fun create(userId: UUID, req: CreateOrderRequest): OrderDto {
         if (req.items.isEmpty()) throw ValidationException("El carrito está vacío.")
@@ -210,6 +214,43 @@ class OrderService(
     }
 
     suspend fun frutCoinsOf(userId: UUID): FrutCoinsBalanceDto = frutCoins.balanceAndHistory(userId)
+
+    /**
+     * El cliente cancela su propio pedido. Solo permitido si status=CREADO
+     * (esperando pago Webpay). Una vez pagado (PAGADO en adelante) el flujo
+     * es cancelado por operacion (back office o auto-cancel de picker
+     * con rescate). Ownership: el pedido debe ser del [userId] que llama.
+     */
+    suspend fun cancelarPropio(userId: UUID, idStr: String) {
+        val id = parseUuid(idStr, "Id inválido.")
+        val dto = orders.findDetail(id, userId)
+            ?: throw NotFoundException("Pedido no encontrado.")
+        if (dto.status != OrderStatus.CREADO.name) {
+            throw ValidationException("Este pedido ya no puede cancelarse (estado ${dto.status}).")
+        }
+        applyStep(id, OrderStatus.CREADO, OrderStatus.CANCELADO, OrderActor.CLIENTE, userId, "cliente_cancelo")
+    }
+
+    /**
+     * Job periodico: cancela pedidos en CREADO con antiguedad > PEDIDO_TIMEOUT_MIN.
+     * Cubre el caso "cliente abrio Webpay y volvio atras sin pagar" — sin esto el
+     * pedido queda huerfano indefinidamente. Actor SISTEMA en el history.
+     * Devuelve la cantidad de pedidos cancelados (para telemetria/log).
+     */
+    suspend fun autoCancelExpirados(): Int {
+        val umbral = Clock.System.now() - BusinessConfig.PEDIDO_TIMEOUT_MIN.minutes
+        val expirados = orders.listCreadosAntesDe(umbral)
+        var cancelados = 0
+        expirados.forEach { id ->
+            runCatching {
+                applyStep(id, OrderStatus.CREADO, OrderStatus.CANCELADO,
+                    OrderActor.SISTEMA, null, "auto_cancel_timeout_${BusinessConfig.PEDIDO_TIMEOUT_MIN}m")
+            }
+                .onSuccess { cancelados++ }
+                .onFailure { autoCancelLog.warn("auto-cancel de pedido {} fallo (se reintentara en el proximo tick)", id, it) }
+        }
+        return cancelados
+    }
 
     /** Avance de estado del back office, validando la máquina de estados.
      *  [actorUserId] es el UUID del usuario que dispara la transicion (admin/operador

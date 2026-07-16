@@ -15,6 +15,8 @@ object BusinessConfig {
     private const val DEF_FRUTCOIN_VALOR_CLP = 1
     private const val DEF_FRUTCOINS_MAX_PORC_PAGO = 0.20
     private const val DEF_PESO_TOLERANCIA_PORC = 0.10
+    private const val DEF_PEDIDO_TIMEOUT_MIN = 30
+    private const val DEF_PEDIDO_AUTOCANCEL_JOB_EVERY_MIN = 5
 
     // --- Envío ---
     // coerceAtLeast(0): si un admin compromised setea negativo, el costo se clampa
@@ -38,6 +40,21 @@ object BusinessConfig {
     // cobrariamos delta sin consultar). 0 desactiva la tolerancia (siempre pregunta).
     val PESO_TOLERANCIA_PORC: Double get() =
         ConfigCache.double("peso_tolerancia_porc", DEF_PESO_TOLERANCIA_PORC).coerceIn(0.0, 1.0)
+
+    // --- Pedido CREADO (esperando pago Webpay) ---
+    // Cuanto tiempo dejamos un pedido en CREADO antes de auto-cancelarlo.
+    // Cubre el caso "abro Webpay, vuelvo atras sin pagar" — sin esto el pedido
+    // queda huerfano para siempre. coerceIn(5..1440): 5min minimo (para que el
+    // cliente alcance a completar el flujo Webpay real, ~10min de sesion), y
+    // 24h maximo (mas alla es basura acumulada).
+    val PEDIDO_TIMEOUT_MIN: Int get() =
+        ConfigCache.int("pedido_timeout_min", DEF_PEDIDO_TIMEOUT_MIN).coerceIn(5, 1440)
+    /** Frecuencia con la que el job de auto-cancel escanea CREADO expirados.
+     *  coerceIn(1..60): al menos 1 vez por minuto (evita quedar dormido si un
+     *  operador setea 0), maximo 1 vez por hora. */
+    val PEDIDO_AUTOCANCEL_JOB_EVERY_MIN: Int get() =
+        ConfigCache.int("pedido_autocancel_job_every_min", DEF_PEDIDO_AUTOCANCEL_JOB_EVERY_MIN)
+            .coerceIn(1, 60)
 
     // --- Catálogos habilitados (estáticos por ahora) ---
     val MEDIOS_PAGO = listOf("TARJETA", "DEBITO", "WEBPAY", "MERCADO_PAGO", "EFECTIVO", "FRUTCOINS", "TRANSFERENCIA")

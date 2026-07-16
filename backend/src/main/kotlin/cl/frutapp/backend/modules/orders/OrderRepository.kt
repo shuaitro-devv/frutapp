@@ -586,6 +586,17 @@ class OrderRepository {
             ?.let { it[OrdersTable.numero] to it[OrdersTable.pickupLocationId] }
     }
 
+    /** Pedidos en CREADO creados antes de [umbral]. Usado por el job de
+     *  auto-cancel — los pedidos que quedan asi son Webpay abandonados
+     *  (cliente abrio el flujo y volvio atras sin pagar). */
+    suspend fun listCreadosAntesDe(umbral: kotlinx.datetime.Instant): List<UUID> = dbQuery {
+        OrdersTable.select(OrdersTable.id).where {
+            (OrdersTable.status eq "CREADO") and
+                (OrdersTable.createdAt.less(umbral)) and
+                OrdersTable.deletedAt.isNull()
+        }.map { it[OrdersTable.id] }
+    }
+
     /** Pedidos activos (no borrados) con su estado, para el auto-avance de demo. */
     suspend fun listActive(): List<Pair<UUID, OrderStatus>> = dbQuery {
         OrdersTable.selectAll().where { OrdersTable.deletedAt.isNull() }

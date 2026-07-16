@@ -62,13 +62,58 @@ class EvidenceService(
         return insertarYResponder(orderId, orderItemId, pickerId, bytes, contentType, comentario, context, "staff.evidence_uploaded")
     }
 
+    /** El repartidor sube UNA foto del paquete entregado. Distinto del picker:
+     *  es evidencia del pedido completo, no de un item. Valida que el pedido
+     *  este EN_DESPACHO y asignado a este repartidor — sino, se rechaza. */
+    suspend fun uploadAsRepartidor(
+        repartidorId: UUID,
+        orderId: UUID,
+        bytes: ByteArray,
+        contentType: String,
+        comentario: String?,
+        context: EventContext
+    ): OrderItemEvidenceDto {
+        validarImagen(bytes, contentType)
+        validarComentario(comentario)
+        val puedeSubir = dbQuery {
+            OrdersTable.selectAll().where {
+                (OrdersTable.id eq orderId) and
+                (OrdersTable.assignedRepartidorId eq repartidorId) and
+                (OrdersTable.status eq "EN_DESPACHO")
+            }.any()
+        }
+        if (!puedeSubir) throw ValidationException("Este pedido no está en despacho o no es tuyo.")
+        val evidenceId = UUID.randomUUID()
+        val key = "evidence/$orderId/delivery/$evidenceId.jpg"
+        storage.subir(key, bytes, contentType)
+        val row = repo.insertOrderLevel(orderId, key, comentario, repartidorId)
+        events.logSafely(
+            eventType = "staff.delivery_evidence_uploaded",
+            userId = repartidorId,
+            entityType = "customer_order",
+            entityId = orderId,
+            payload = buildJsonObject {
+                put("evidenceId", JsonPrimitive(row.id.toString()))
+                if (comentario != null) put("comentario", JsonPrimitive(comentario))
+            },
+            context = context
+        )
+        return OrderItemEvidenceDto(
+            id = row.id.toString(),
+            orderItemId = null,
+            url = storage.urlFirmada(row.imageKey),
+            comentario = row.comentario,
+            uploadedAt = row.uploadedAt
+        )
+    }
+
     /** Lista las evidencias de un pedido para el cliente (tracking). El
      *  caller (route) ya verifica ownership del pedido por el clienteId. */
     suspend fun listByOrder(orderId: UUID): List<OrderItemEvidenceDto> =
         repo.listByOrder(orderId).map { row ->
             OrderItemEvidenceDto(
                 id = row.id.toString(),
-                orderItemId = row.orderItemId.toString(),
+                orderItemId = row.orderItemId?.toString(),
                 url = storage.urlFirmada(row.imageKey),
                 comentario = row.comentario,
                 uploadedAt = row.uploadedAt
@@ -114,7 +159,7 @@ class EvidenceService(
         )
         return OrderItemEvidenceDto(
             id = row.id.toString(),
-            orderItemId = row.orderItemId.toString(),
+            orderItemId = row.orderItemId?.toString(),
             url = storage.urlFirmada(row.imageKey),
             comentario = row.comentario,
             uploadedAt = row.uploadedAt

@@ -40,6 +40,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
+import cl.frutapp.app.ui.shareText
 import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
 import kotlin.math.abs
@@ -108,7 +109,21 @@ class PickerVoucherScreen(
             ) {
                 FrutButtonOutline(
                     text = "Compartir",
-                    onClick = { showToast("Compartir - Próximamente") },
+                    onClick = {
+                        // Voucher en texto plano: lo que el picker manda por Whatsapp
+                        // al repartidor cuando el pedido queda listo para retirar.
+                        // Deja constancia de destino, contenido y estado sin depender
+                        // de que la otra parte tenga la app.
+                        val texto = buildString {
+                            appendLine("🧺 Voucher FrutApp")
+                            appendLine("Pedido: $pedidoId")
+                            appendLine("Destino: ${data.destino} · ${data.sector}")
+                            appendLine("Items: ${data.totalItems} productos · $completos completos")
+                            if (incidencias > 0) appendLine("Incidencias: $incidencias")
+                            append("Retira en Bodega FrutApp.")
+                        }
+                        shareText(texto)
+                    },
                     modifier = Modifier.weight(1f)
                 )
                 FrutButtonPrimary(

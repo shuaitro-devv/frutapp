@@ -64,7 +64,9 @@ import cl.frutapp.app.ui.components.AvatarImage
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.StaffActionsSheet
+import cl.frutapp.app.navigation.shop.ChatScreen
 import cl.frutapp.app.ui.mensajeAmigable
+import cl.frutapp.app.ui.openUrl
 import cl.frutapp.app.ui.showToast
 import cl.frutapp.app.ui.theme.FrutAppColors
 import kotlinx.coroutines.launch
@@ -120,6 +122,19 @@ class RepartidorDetalleScreen(private val pedidoId: String) : Screen {
         var menuAbierto by remember { mutableStateOf(false) }
         var dialogoCancelar by remember { mutableStateOf(false) }
         var verItemsAbierto by remember { mutableStateOf(false) }
+        val abrirChat = {
+            if (!esBackendReal) showToast("Chat disponible con pedidos reales")
+            else navigator.push(ChatScreen(
+                orderId = pedidoId,
+                destinatarioRol = "cliente",
+                tituloContraparte = "Cliente del pedido",
+            ))
+        }
+        val llamarCliente = {
+            val tel = despacho.telefono
+            if (tel.isNullOrBlank()) showToast("El cliente no registró un teléfono")
+            else openUrl("tel:$tel")
+        }
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
             TopBar(estado = "Listo para retiro", onBack = { navigator.pop() }, onMenu = { menuAbierto = true })
             Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp)) {
@@ -132,7 +147,7 @@ class RepartidorDetalleScreen(private val pedidoId: String) : Screen {
                     StatCard(icon = Icons.Filled.Route, valor = "${despacho.kmDistancia} km", label = "Distancia", modifier = Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(12.dp))
-                ClienteCard(despacho = despacho)
+                ClienteCard(despacho = despacho, onLlamar = llamarCliente, onChat = abrirChat)
                 Spacer(Modifier.height(12.dp))
                 RetiroCard()
                 Spacer(Modifier.height(12.dp))
@@ -187,8 +202,14 @@ class RepartidorDetalleScreen(private val pedidoId: String) : Screen {
                     onPausar = { showToast("Entrega pausada - Próximamente"); navigator.popUntilRoot() },
                     onReportar = { navigator.push(RepartidorIncidenciaScreen(pedidoId)) },
                     onCambiarDireccion = { showToast("Solicitar cambio de dirección - Próximamente") },
-                    onLlamarCliente = { showToast("Llamar al cliente - Próximamente") },
-                    onChatCliente = { showToast("Abrir chat - Próximamente") },
+                    onLlamarCliente = {
+                        menuAbierto = false
+                        llamarCliente()
+                    },
+                    onChatCliente = {
+                        menuAbierto = false
+                        abrirChat()
+                    },
                     onHistorial = { showToast("Ver historial - Próximamente") },
                     onCancelar = { dialogoCancelar = true }
                 ),
@@ -306,7 +327,7 @@ private fun StatCard(icon: ImageVector, valor: String, label: String, modifier: 
 }
 
 @Composable
-private fun ClienteCard(despacho: DespachoItem) {
+private fun ClienteCard(despacho: DespachoItem, onLlamar: () -> Unit, onChat: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -328,17 +349,17 @@ private fun ClienteCard(despacho: DespachoItem) {
                 Text(despacho.cliente, color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 Text("${despacho.direccion}, ${despacho.sector}", color = FrutAppColors.InkSoft, fontSize = 12.sp)
             }
-            ContactoBtn(icon = Icons.Filled.Phone)
+            ContactoBtn(icon = Icons.Filled.Phone, onClick = onLlamar)
             Spacer(Modifier.width(6.dp))
-            ContactoBtn(icon = Icons.AutoMirrored.Filled.Chat)
+            ContactoBtn(icon = Icons.AutoMirrored.Filled.Chat, onClick = onChat)
         }
     }
 }
 
 @Composable
-private fun ContactoBtn(icon: ImageVector) {
+private fun ContactoBtn(icon: ImageVector, onClick: () -> Unit) {
     Box(
-        modifier = Modifier.size(38.dp).background(FrutAppColors.Brand50, CircleShape).clickable { },
+        modifier = Modifier.size(38.dp).background(FrutAppColors.Brand50, CircleShape).clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) { Icon(icon, null, tint = FrutAppColors.Brand600, modifier = Modifier.size(18.dp)) }
 }

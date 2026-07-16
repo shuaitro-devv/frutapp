@@ -49,6 +49,31 @@ class StaffEvidenceApi(
         }
         return response.body<UploadEvidenceResponse>().evidencia
     }
+
+    /** Repartidor sube UNA foto del paquete entregado. La evidencia queda
+     *  ligada al pedido completo (orderItemId = null en el DTO de respuesta). */
+    suspend fun subirEntrega(orderId: String, bytes: ByteArray, comentario: String?): OrderItemEvidenceDto {
+        val ct = contentTypeImagen(bytes)
+        val ext = if (ct == "image/png") "png" else "jpg"
+        val response = client.post("$baseUrl/v1/staff/dispatches/$orderId/evidence") {
+            setBody(MultiPartFormDataContent(
+                formData {
+                    append(
+                        key = "archivo",
+                        value = bytes,
+                        headers = Headers.build {
+                            append(HttpHeaders.ContentType, ct)
+                            append(HttpHeaders.ContentDisposition, "filename=\"entrega.$ext\"")
+                        }
+                    )
+                    if (!comentario.isNullOrBlank()) {
+                        append("comentario", comentario)
+                    }
+                }
+            ))
+        }
+        return response.body<UploadEvidenceResponse>().evidencia
+    }
 }
 
 /** Endpoint cliente: lista evidencias del propio pedido. Va en otro client

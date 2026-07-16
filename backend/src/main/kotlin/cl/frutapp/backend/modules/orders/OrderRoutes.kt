@@ -45,6 +45,13 @@ fun Route.orderRoutes(orderService: OrderService) {
             post("/{id}/rechazar-ajuste") {
                 call.respond(orderService.rechazarAjuste(call.userId(), call.parameters["id"].orEmpty()))
             }
+            // El cliente cancela su propio pedido — solo si esta en CREADO
+            // (Webpay abandonado). Los pedidos en CREADO tambien se auto-cancelan
+            // pasado el timeout (ver BusinessConfig.PEDIDO_TIMEOUT_MIN).
+            post("/{id}/cancelar") {
+                orderService.cancelarPropio(call.userId(), call.parameters["id"].orEmpty())
+                call.respond(HttpStatusCode.NoContent)
+            }
         }
 
         get("/v1/frutcoins") {

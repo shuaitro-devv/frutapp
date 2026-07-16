@@ -78,6 +78,48 @@ fun Route.evidenceRoutes(service: EvidenceService) {
             call.respond(HttpStatusCode.Created, cl.frutapp.shared.dto.UploadEvidenceResponse(evidencia = dto))
         }
 
+        // Repartidor sube UNA foto del paquete al confirmar la entrega.
+        // Gated por `order:dispatch` (mismo permiso con el que toma/reporta).
+        // El service valida que el pedido este EN_DESPACHO y asignado a este
+        // repartidor.
+        post("/v1/staff/dispatches/{orderId}/evidence") {
+            if (!call.hasPermission("order:dispatch")) {
+                call.respond(HttpStatusCode.Forbidden); return@post
+            }
+            val repartidorId = call.userId()
+            val orderId = call.parameters["orderId"]?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+                ?: throw ValidationException("orderId inválido.")
+            var bytes: ByteArray? = null
+            var contentType: String? = null
+            var comentario: String? = null
+            call.receiveMultipart().forEachPart { part ->
+                when (part) {
+                    is PartData.FileItem -> {
+                        contentType = part.contentType?.toString() ?: "application/octet-stream"
+                        bytes = part.provider().readBytes()
+                    }
+                    is PartData.FormItem -> {
+                        if (part.name == "comentario") comentario = part.value.takeIf { it.isNotBlank() }
+                    }
+                    else -> Unit
+                }
+                part.dispose()
+            }
+            val b = bytes ?: run {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Falta el archivo"))
+                return@post
+            }
+            val dto = service.uploadAsRepartidor(
+                repartidorId = repartidorId,
+                orderId = orderId,
+                bytes = b,
+                contentType = contentType ?: "application/octet-stream",
+                comentario = comentario,
+                context = call.eventContext()
+            )
+            call.respond(HttpStatusCode.Created, cl.frutapp.shared.dto.UploadEvidenceResponse(evidencia = dto))
+        }
+
         get("/v1/orders/{orderId}/evidence") {
             val clienteId = call.userId()
             val orderId = call.parameters["orderId"]?.let { runCatching { UUID.fromString(it) }.getOrNull() }

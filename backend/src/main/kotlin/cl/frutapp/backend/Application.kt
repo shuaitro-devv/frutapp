@@ -292,6 +292,20 @@ fun Application.module() {
         environment.log.info("Storage: sin MinIO → avatar deshabilitado (define STORAGE_ENDPOINT/ACCESS_KEY/SECRET_KEY)")
     }
 
+    // Job de auto-cancel de pedidos CREADO (Webpay abandonado). Corre siempre
+    // (no gated) — es limpieza operativa, no demo. Cadencia y timeout se leen
+    // de app_config (BusinessConfig.PEDIDO_AUTOCANCEL_JOB_EVERY_MIN /
+    // PEDIDO_TIMEOUT_MIN) asi que un admin puede tunearlos sin redeploy.
+    launch {
+        while (true) {
+            val everyMin = cl.frutapp.backend.config.BusinessConfig.PEDIDO_AUTOCANCEL_JOB_EVERY_MIN
+            delay(everyMin.toLong() * 60_000L)
+            runCatching { orderService.autoCancelExpirados() }
+                .onSuccess { n -> if (n > 0) environment.log.info("Auto-cancel: {} pedidos CREADO expirados", n) }
+                .onFailure { environment.log.warn("Auto-cancel falló", it) }
+        }
+    }
+
     // Demo: auto-avance de pedidos (gated por env DEMO_AUTO_ADVANCE). En producción real = false.
     val demoAutoAdvance = environment.config.propertyOrNull("demo.autoAdvance")?.getString().toBoolean()
     if (demoAutoAdvance) {

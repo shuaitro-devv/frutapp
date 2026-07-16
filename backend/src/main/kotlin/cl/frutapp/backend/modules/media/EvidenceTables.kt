@@ -18,7 +18,9 @@ import org.jetbrains.exposed.sql.kotlin.datetime.timestamp
  */
 internal object OrderItemEvidenceTable : Table("order_item_evidence") {
     val id = uuid("id")
-    val orderItemId = uuid("order_item_id")
+    // Nullable desde V38: null significa "foto del pedido completo" (entrega
+    // del repartidor). NOT NULL sigue siendo foto del picker asociada a item.
+    val orderItemId = uuid("order_item_id").nullable()
     val orderId = uuid("order_id")
     val imageKey = text("image_key")
     val comentario = text("comentario").nullable()
