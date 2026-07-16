@@ -21,9 +21,11 @@ fun Application.configureCors() {
         // pasa por aca; este whitelist sirve para herramientas web internas.
         allowHost("frutapp.grandline.cl", schemes = listOf("https"))
         allowHost("frutapp-api.grandline.cl", schemes = listOf("https"))
+        allowHost("frutapp-admin.grandline.cl", schemes = listOf("https"))  // back-office web
         allowHost("frutapp-storage.grandline.cl", schemes = listOf("https"))
         allowHost("grandline.cl", schemes = listOf("https"))
         allowHost("localhost:9999")  // landing dev local
+        allowHost("localhost:9998")  // back-office dev local
         allowHost("localhost:8080")  // backend dev local
         allowHeader(HttpHeaders.Authorization)
         allowHeader(HttpHeaders.ContentType)
