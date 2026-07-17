@@ -1,0 +1,80 @@
+name: Release APK
+
+# Dispara al pushear un tag "v*" (ej: v0.1.0, v0.2.0-rc1). Compila el APK release
+# frutapp (firmado con el keystore del proyecto reconstruido desde secrets), crea
+# un GitHub Release con notas auto-generadas y adjunta el APK como asset.
+#
+# Uso:
+#   git tag v0.1.0 && git push origin v0.1.0
+# En el celu, se descarga desde:
+#   https://github.com/shuaitro-devv/frutapp/releases/latest/download/FrutApp-<tag>.apk
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag para el release (ej: v0.1.0). Debe existir en el repo.'
+        required: true
+
+permissions:
+  contents: write  # Necesario para crear el Release + subir assets.
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # Reconstruye el keystore.jks desde el secret base64 y genera
+      # keystore.properties con las 3 credenciales. Ambos archivos se colocan
+      # donde el build.gradle.kts espera (rootProject.file(...)).
+      - name: Restore signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_STORE_PASSWORD: ${{ secrets.KEYSTORE_STORE_PASSWORD }}
+          KEYSTORE_KEY_ALIAS: ${{ secrets.KEYSTORE_KEY_ALIAS }}
+          KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
+        run: |
+          mkdir -p keystore
+          echo "$KEYSTORE_BASE64" | base64 -d > keystore/frutapp-release.jks
+          cat > keystore.properties <<EOF
+          storeFile=keystore/frutapp-release.jks
+          storePassword=$KEYSTORE_STORE_PASSWORD
+          keyAlias=$KEYSTORE_KEY_ALIAS
+          keyPassword=$KEYSTORE_KEY_PASSWORD
+          EOF
+
+      - name: Build release APK
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleFrutappRelease --no-daemon --console=plain
+
+      # El nombre del asset incluye el tag para que sea claro en la UI de
+      # Releases y para links directos por versión.
+      - name: Rename APK with tag
+        id: rename
+        run: |
+          TAG="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
+          SRC=app/build/outputs/apk/frutapp/release/FrutApp-release.apk
+          DST=FrutApp-${TAG}.apk
+          cp "$SRC" "$DST"
+          echo "asset=$DST" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release and upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.rename.outputs.tag }}
+          name: FrutApp ${{ steps.rename.outputs.tag }}
+          generate_release_notes: true
+          files: ${{ steps.rename.outputs.asset }}
