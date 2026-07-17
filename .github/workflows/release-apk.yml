@@ -38,6 +38,12 @@ jobs:
       # Reconstruye el keystore.jks desde el secret base64 y genera
       # keystore.properties con las 3 credenciales. Ambos archivos se colocan
       # donde el build.gradle.kts espera (rootProject.file(...)).
+      #
+      # Robustez: al copiar el base64 desde Notepad al input de GH puede
+      # colarse whitespace/newlines que rompen `base64 -d` (Tag number over
+      # 30 is not supported). Strippeamos TODO whitespace antes de decodear
+      # y verificamos con keytool ANTES del assemble — si falla, fallamos
+      # con mensaje claro en vez de 4 min despues.
       - name: Restore signing keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -46,7 +52,14 @@ jobs:
           KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
         run: |
           mkdir -p keystore
-          echo "$KEYSTORE_BASE64" | base64 -d > keystore/frutapp-release.jks
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > keystore/frutapp-release.jks
+          SIZE=$(stat -c '%s' keystore/frutapp-release.jks)
+          echo "Keystore decodeado: ${SIZE} bytes"
+          if ! keytool -list -keystore keystore/frutapp-release.jks -storepass "$KEYSTORE_STORE_PASSWORD" -alias "$KEYSTORE_KEY_ALIAS" > /dev/null 2>&1; then
+            echo "::error::Keystore corrupto o credenciales incorrectas. Revisar KEYSTORE_BASE64/STORE_PASSWORD/KEY_ALIAS."
+            exit 1
+          fi
+          echo "Keystore validado con keytool."
           cat > keystore.properties <<EOF
           storeFile=keystore/frutapp-release.jks
           storePassword=$KEYSTORE_STORE_PASSWORD
