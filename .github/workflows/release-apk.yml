@@ -24,6 +24,10 @@ permissions:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    # Los secrets del keystore viven en environment 'dev' (mismo scope que
+    # deploy-backend). Sin declarar el environment, los secrets llegan vacios
+    # al step de restore y el build muere al firmar.
+    environment: dev
     steps:
       - name: Checkout
         uses: actions/checkout@v4
