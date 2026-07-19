@@ -124,10 +124,17 @@ fun Application.module() {
 
     configureSerialization()
     configureCors()
-    configureRequestSizeLimit()
     configureRateLimit()
     configureStatusPages()
     configureMonitoring()
+    // RequestSizeLimit se instala DESPUES de Monitoring: Monitoring setea el
+    // attribute CallStartTime que otros plugins downstream leen. Si nuestro
+    // plugin cortaba el pipeline en fase Setup (antes de Monitoring), el
+    // attribute no existia y los handlers siguientes (CallFailed hook)
+    // tiraban IllegalStateException que StatusPages convertia en 400 con
+    // "Solicitud invalida.", enmascarando el 413 real. Con este orden el
+    // attribute ya esta seteado cuando nuestro hook responde 413.
+    configureRequestSizeLimit()
     configureDatabases()
     configureWebSocketsPlugin()
 
