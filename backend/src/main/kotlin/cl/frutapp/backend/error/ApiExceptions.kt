@@ -24,6 +24,13 @@ class UnauthorizedException(message: String = "Credenciales inválidas") :
 class NotFoundException(message: String = "Recurso no encontrado") :
     ApiException(HttpStatusCode.NotFound, "not_found", message)
 
+/** 413 cuando el body del request supera el limite global (RequestSizeLimit
+ *  plugin). Se tira desde el hook onCall para que StatusPages responda con
+ *  el status/code adecuado sin nosotros tocar el pipeline de Ktor (que
+ *  requeria un intercept + finish que rompia CallStartTime downstream). */
+class PayloadTooLargeException(message: String = "Request body demasiado grande.") :
+    ApiException(HttpStatusCode.PayloadTooLarge, "payload_too_large", message)
+
 /** 409 especifico para cuando el snapshot del config del cliente quedo desactualizado
  *  respecto al cache del backend (alguien edito el pricing entre que el cliente abrio
  *  el carrito y aprieta pagar). Lleva los nuevos valores para que la app re-pinte
