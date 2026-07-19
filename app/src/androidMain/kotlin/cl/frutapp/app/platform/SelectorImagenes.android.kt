@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.core.content.FileProvider
 import androidx.compose.ui.platform.LocalContext
@@ -32,12 +33,18 @@ actual fun rememberSelectorImagenes(onImagen: (ByteArray) -> Unit): SelectorImag
     // la foto a pixel-full. Usamos FileProvider sobre cache para que la app no
     // necesite permiso WRITE_EXTERNAL_STORAGE. El archivo lo creamos al lanzar
     // y lo leemos al recibir el callback.
-    var ultimoCamaraUri: Uri? = null
+    //
+    // ultimoCamaraUri VA en remember { mutableStateOf } — sin eso, cada
+    // recomposicion crea una var local nueva y el callback termina leyendo una
+    // caja distinta a la que escribio onCamara. La foto salia bien pero
+    // onImagen jamas se disparaba (bug reportado por el usuario en el celu:
+    // "sigue sin verse la preview").
+    val ultimoCamaraUri = remember { mutableStateOf<Uri?>(null) }
     val launcherCamara = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture(),
     ) { ok ->
         if (ok) {
-            ultimoCamaraUri?.let { uri ->
+            ultimoCamaraUri.value?.let { uri ->
                 leerBytes(context, uri)?.let(onImagen)
             }
         }
@@ -51,7 +58,7 @@ actual fun rememberSelectorImagenes(onImagen: (ByteArray) -> Unit): SelectorImag
             },
             onCamara = {
                 val (file, uri) = crearArchivoCamara(context)
-                ultimoCamaraUri = uri
+                ultimoCamaraUri.value = uri
                 launcherCamara.launch(uri)
                 // file queda en cache; al proximo `cache` cleanup el sistema lo borra.
             },
