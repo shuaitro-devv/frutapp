@@ -72,10 +72,15 @@ fun FirmaCaptureOverlay(
     var tick by remember { mutableIntStateOf(0) }
     var canvasSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize(0, 0)) }
     val hayFirma = tick > 0 && paths.isNotEmpty()
+    // Fondo del overlay: opaco solido para que el bottom bar del
+    // RepartidorEntrega (Problema / Confirmar entrega) NO se transparente y
+    // confunda al repartidor sobre que botones estan activos. Blanco para
+    // que los FrutButtons (outline verde + primary) se lean bien sin
+    // personalizacion extra. Bloquea 100% de los clicks del layer inferior.
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
+            .background(FrutAppColors.Background)
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
@@ -86,13 +91,13 @@ fun FirmaCaptureOverlay(
         ) {
             Text(
                 "Firma del receptor",
-                color = Color.White,
+                color = FrutAppColors.Brand800,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
             )
             Text(
                 "Pídele al cliente que firme aquí abajo con el dedo.",
-                color = Color.White.copy(alpha = 0.85f),
+                color = FrutAppColors.InkSoft,
                 fontSize = 13.sp,
                 modifier = Modifier.padding(top = 4.dp),
             )
