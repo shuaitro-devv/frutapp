@@ -162,10 +162,14 @@ fun SustitucionModal(
                 subtitulo = if (alternativas.isEmpty() && !loadingAlt) "Sin alternativas disponibles." else "Elige una alternativa equivalente disponible."
             ) {
                 when {
-                    loadingAlt -> Box(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        contentAlignment = Alignment.Center
-                    ) { CircularProgressIndicator(color = FrutAppColors.Brand400) }
+                    loadingAlt -> Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        repeat(3) {
+                            cl.frutapp.app.ui.components.SkeletonBox(
+                                Modifier.fillMaxWidth().padding(vertical = 4.dp).height(56.dp),
+                                androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                            )
+                        }
+                    }
                     errorAlt -> Column(modifier = Modifier.padding(top = 8.dp)) {
                         Text(
                             "No pudimos cargar las alternativas. Revisa la conexión.",

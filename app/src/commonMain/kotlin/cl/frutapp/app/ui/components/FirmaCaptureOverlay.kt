@@ -71,7 +71,12 @@ fun FirmaCaptureOverlay(
     // borramos todo. Solo se lee dentro del Canvas para restringir el scope.
     var tick by remember { mutableIntStateOf(0) }
     var canvasSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize(0, 0)) }
-    val hayFirma = tick > 0 && paths.isNotEmpty()
+    // Requerimos canvasSize > 0 para habilitar Guardar: si la Box no midio
+    // todavia (celu lento + doble tap muy rapido), renderizarFirmaPng con 0x0
+    // devolvia un PNG 1x1 que pasaba todos los checks y quedaba como "firma
+    // legal" del receptor.
+    val hayFirma = tick > 0 && paths.isNotEmpty() &&
+        canvasSize.width > 0 && canvasSize.height > 0
     // Fondo del overlay: opaco solido para que el bottom bar del
     // RepartidorEntrega (Problema / Confirmar entrega) NO se transparente y
     // confunda al repartidor sobre que botones estan activos. Blanco para
@@ -112,17 +117,20 @@ fun FirmaCaptureOverlay(
                     .pointerInput(Unit) {
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
-                            // Empieza un trazo nuevo con el punto de "down".
+                            // Trackeamos SOLO el dedo que hizo el down inicial:
+                            // multi-touch (dos dedos + palma apoyada) queda
+                            // ignorado, evitando trazos con saltos raros o
+                            // firmas cortadas por el otro pointer.
+                            val downId = down.id
                             val path = Path().apply { moveTo(down.position.x, down.position.y) }
                             val puntos = mutableListOf(down.position)
                             paths.add(path)
                             puntosPorTrazo.add(puntos)
                             tick += 1
-                            // Consumimos y seguimos leyendo puntos hasta el up.
                             while (true) {
                                 val event = awaitPointerEvent()
-                                val change = event.changes.firstOrNull() ?: break
-                                if (!change.pressed) break // dedo levantado
+                                val change = event.changes.firstOrNull { it.id == downId } ?: break
+                                if (!change.pressed) break // dedo original levantado
                                 if (change.positionChange() != Offset.Zero) {
                                     path.lineTo(change.position.x, change.position.y)
                                     puntos.add(change.position)

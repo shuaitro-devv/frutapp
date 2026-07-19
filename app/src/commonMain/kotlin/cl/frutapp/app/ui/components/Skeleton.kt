@@ -77,3 +77,76 @@ fun OrderListSkeleton(modifier: Modifier = Modifier, rows: Int = 5) {
         }
     }
 }
+
+/** Skeleton para pantallas de detalle (repartidor + picker): header con
+ *  numero de pedido + N cards apiladas. Aproxima la forma final para que la
+ *  transicion de placeholder a contenido no salte. */
+@Composable
+fun DetalleSkeleton(
+    modifier: Modifier = Modifier,
+    conMapa: Boolean = false,
+    cards: Int = 4,
+) {
+    Column(modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
+        // Header con id de pedido
+        SkeletonBox(Modifier.fillMaxWidth(0.45f).height(22.dp))
+        Spacer(Modifier.height(20.dp))
+        if (conMapa) {
+            SkeletonBox(Modifier.fillMaxWidth().height(180.dp), RoundedCornerShape(16.dp))
+            Spacer(Modifier.height(16.dp))
+        }
+        repeat(cards) {
+            SkeletonBox(Modifier.fillMaxWidth().height(80.dp), RoundedCornerShape(14.dp))
+            Spacer(Modifier.height(12.dp))
+        }
+    }
+}
+
+/** Skeleton para "cola" del staff (repartidor + picker): tarjeta con contador
+ *  arriba + filas de pedidos. Distinto de OrderListSkeleton porque el staff
+ *  ve numeros + priorities, no fotos de producto. */
+@Composable
+fun ColaStaffSkeleton(modifier: Modifier = Modifier, rows: Int = 5) {
+    Column(modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+        // Header "N pedidos"
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                SkeletonBox(Modifier.fillMaxWidth(0.4f).height(16.dp))
+                Spacer(Modifier.height(6.dp))
+                SkeletonBox(Modifier.fillMaxWidth(0.6f).height(11.dp))
+            }
+            SkeletonBox(Modifier.size(50.dp, 32.dp))
+        }
+        Spacer(Modifier.height(20.dp))
+        // Search bar
+        SkeletonBox(Modifier.fillMaxWidth().height(44.dp), RoundedCornerShape(22.dp))
+        Spacer(Modifier.height(16.dp))
+        repeat(rows) {
+            SkeletonBox(Modifier.fillMaxWidth().height(120.dp), RoundedCornerShape(14.dp))
+            Spacer(Modifier.height(10.dp))
+        }
+    }
+}
+
+/** Skeleton para picklist (item por item con checkbox y peso). */
+@Composable
+fun PicklistSkeleton(modifier: Modifier = Modifier, rows: Int = 6) {
+    Column(modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
+        SkeletonBox(Modifier.fillMaxWidth(0.5f).height(20.dp))
+        Spacer(Modifier.height(16.dp))
+        repeat(rows) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SkeletonBox(Modifier.size(24.dp), RoundedCornerShape(6.dp))
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    SkeletonBox(Modifier.fillMaxWidth(0.45f).height(14.dp))
+                    Spacer(Modifier.height(6.dp))
+                    SkeletonBox(Modifier.fillMaxWidth(0.25f).height(11.dp))
+                }
+                SkeletonBox(Modifier.size(60.dp, 32.dp))
+            }
+        }
+    }
+}

@@ -105,8 +105,13 @@ fun RepartidorColaContent(modifier: Modifier = Modifier) {
             FiltroChip("Distancia", Icons.Filled.Tune)
         }
         when {
-            cargandoInicial -> Box(modifier = Modifier.fillMaxSize().padding(top = 40.dp), contentAlignment = Alignment.TopCenter) {
-                CircularProgressIndicator(color = FrutAppColors.Brand400)
+            cargandoInicial -> androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxSize()) {
+                repeat(5) {
+                    cl.frutapp.app.ui.components.SkeletonBox(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).height(120.dp),
+                        androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                    )
+                }
             }
             despachos.isEmpty() -> Column(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 48.dp),

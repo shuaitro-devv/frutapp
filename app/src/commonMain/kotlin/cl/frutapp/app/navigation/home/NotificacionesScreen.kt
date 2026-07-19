@@ -6,6 +6,7 @@ import cl.frutapp.app.data.PendingNotification
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -106,8 +107,13 @@ class NotificacionesScreen : Screen {
                 }
 
                 when {
-                    loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = FrutAppColors.Brand400)
+                    loading -> Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                        repeat(6) {
+                            cl.frutapp.app.ui.components.SkeletonBox(
+                                Modifier.fillMaxWidth().padding(vertical = 6.dp).height(72.dp),
+                                androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                            )
+                        }
                     }
                     errorMsg != null -> Box(
                         modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp),

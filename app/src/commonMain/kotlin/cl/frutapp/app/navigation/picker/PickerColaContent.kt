@@ -145,11 +145,13 @@ fun PickerColaContent(modifier: Modifier = Modifier) {
 
 @Composable
 private fun ColaLoading() {
-    Box(
-        modifier = Modifier.fillMaxSize().padding(top = 40.dp),
-        contentAlignment = Alignment.TopCenter
-    ) {
-        CircularProgressIndicator(color = FrutAppColors.Brand400)
+    Column(modifier = Modifier.fillMaxSize()) {
+        repeat(5) {
+            cl.frutapp.app.ui.components.SkeletonBox(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).height(120.dp),
+                androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+            )
+        }
     }
 }
 

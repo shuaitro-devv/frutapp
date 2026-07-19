@@ -121,10 +121,17 @@ fun RepartidorItemsSheet(
             }
             Spacer(Modifier.height(12.dp))
             if (itemsFinal == null) {
-                Box(
+                androidx.compose.foundation.layout.Column(
                     modifier = Modifier.fillMaxWidth().height(420.dp),
-                    contentAlignment = Alignment.Center
-                ) { CircularProgressIndicator(color = FrutAppColors.Brand400) }
+                ) {
+                    repeat(4) {
+                        cl.frutapp.app.ui.components.SkeletonBox(
+                            Modifier.fillMaxWidth().height(64.dp),
+                            androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth().height(420.dp),

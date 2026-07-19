@@ -215,10 +215,43 @@ class WebpayPagoService(
             )
             repo.cambiarEstado(token, WEBPAY_ESTADO_PAGADA)
         } catch (e: ConflictException) {
-            // Ya estaba pagado en algun estado posterior: tratamos como exito
-            // — el dinero esta cobrado y el pedido esta avanzando.
-            logger.info("Webpay.retorno: pedido ${tx.orderId} ya estaba pagado (concurrencia OK)")
-            repo.cambiarEstado(token, WEBPAY_ESTADO_PAGADA)
+            // ConflictException = la transicion CREADO->PAGADO no encontro un
+            // pedido en CREADO. Puede ser:
+            //  (a) ya paso a PAGADO por otra tx concurrente → exito.
+            //  (b) paso a CANCELADO por el auto-cancel job → CATASTROFE:
+            //      Transbank ya cobro pero el pedido esta cancelado. Marcamos
+            //      ERROR y dejamos que soporte reconcilie con refund manual.
+            val statusActual = orders.currentStatus(tx.orderId)
+            when (statusActual) {
+                OrderStatus.PAGADO, OrderStatus.EN_PICKING, OrderStatus.STOCK_CONFIRMADO,
+                OrderStatus.FACTURADO, OrderStatus.EN_DESPACHO, OrderStatus.ENTREGADO,
+                OrderStatus.ESPERANDO_AJUSTE_CLIENTE -> {
+                    // (a) ya avanzo por otra ruta — exito.
+                    logger.info("Webpay.retorno: pedido ${tx.orderId} ya estaba pagado (concurrencia OK, status=$statusActual)")
+                    repo.cambiarEstado(token, WEBPAY_ESTADO_PAGADA)
+                }
+                else -> {
+                    // (b) CANCELADO/DEVOLUCION o null → dinero cobrado sin
+                    // pedido. Marcamos ERROR, evento pago.webpay_pedido_cancelado
+                    // para alertar soporte, y respondemos Error al cliente.
+                    logger.error("Webpay.retorno: pedido ${tx.orderId} en status=$statusActual pero Transbank aprobo — refund manual necesario")
+                    repo.cambiarEstado(token, WEBPAY_ESTADO_ERROR)
+                    events.logSafely(
+                        eventType = "pago.webpay_pedido_cancelado",
+                        userId = tx.userId,
+                        entityType = "order",
+                        entityId = tx.orderId,
+                        payload = buildJsonObject {
+                            put("token", JsonPrimitive(token))
+                            put("authorizationCode", JsonPrimitive(confirmar.authorizationCode ?: "?"))
+                            put("buyOrder", JsonPrimitive(tx.buyOrder))
+                            put("statusActual", JsonPrimitive(statusActual?.name ?: "null"))
+                            put("monto", JsonPrimitive(tx.monto))
+                        },
+                    )
+                    return RetornoResult.Error
+                }
+            }
         } catch (e: Throwable) {
             // ERROR de verdad: el dinero esta cobrado en Transbank pero no
             // logramos marcar el pedido como pagado. Marcamos ERROR y dejamos

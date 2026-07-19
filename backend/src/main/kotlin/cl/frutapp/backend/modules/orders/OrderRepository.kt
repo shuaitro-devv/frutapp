@@ -8,6 +8,7 @@ import cl.frutapp.shared.dto.OrderDto
 import cl.frutapp.shared.dto.OrderItemDto
 import cl.frutapp.shared.dto.OrderPaymentDto
 import cl.frutapp.shared.dto.OrderSummaryDto
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import org.jetbrains.exposed.sql.ResultRow
@@ -586,14 +587,25 @@ class OrderRepository {
             ?.let { it[OrdersTable.numero] to it[OrdersTable.pickupLocationId] }
     }
 
-    /** Pedidos en CREADO creados antes de [umbral]. Usado por el job de
-     *  auto-cancel — los pedidos que quedan asi son Webpay abandonados
-     *  (cliente abrio el flujo y volvio atras sin pagar). */
+    /** Pedidos en CREADO creados antes de [umbral], EXCLUYENDO aquellos con una
+     *  transaccion Webpay INICIADA reciente (< 10 min). Sin esa exclusion, un
+     *  cliente que retoma el pago cerca del umbral podia terminar con dinero
+     *  cobrado y pedido CANCELADO — el auto-cancel corria mientras el
+     *  Transbank aprobaba y el pedido pasaba a CANCELADO. Si la tx no volvio
+     *  en 10 min asumimos que el cliente cerro Webpay definitivamente. */
     suspend fun listCreadosAntesDe(umbral: kotlinx.datetime.Instant): List<UUID> = dbQuery {
+        val cortoParaTxViva = Clock.System.now() - 10.minutes
+        val txVivas = cl.frutapp.backend.modules.pagos.WebpayTransaccionTable
+            .select(cl.frutapp.backend.modules.pagos.WebpayTransaccionTable.orderId)
+            .where {
+                (cl.frutapp.backend.modules.pagos.WebpayTransaccionTable.estado eq cl.frutapp.backend.modules.pagos.WEBPAY_ESTADO_INICIADA) and
+                    (cl.frutapp.backend.modules.pagos.WebpayTransaccionTable.creadoEn.greater(cortoParaTxViva))
+            }
         OrdersTable.select(OrdersTable.id).where {
             (OrdersTable.status eq "CREADO") and
                 (OrdersTable.createdAt.less(umbral)) and
-                OrdersTable.deletedAt.isNull()
+                OrdersTable.deletedAt.isNull() and
+                (OrdersTable.id notInSubQuery txVivas)
         }.map { it[OrdersTable.id] }
     }
 

@@ -157,9 +157,7 @@ class PickerPicklistScreen(
                     }
                     Text(numero ?: pedidoId, color = FrutAppColors.Brand800, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 }
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    androidx.compose.material3.CircularProgressIndicator(color = FrutAppColors.Brand400)
-                }
+                cl.frutapp.app.ui.components.PicklistSkeleton(modifier = Modifier.fillMaxSize())
             }
         } else {
         val data = currentPicklist

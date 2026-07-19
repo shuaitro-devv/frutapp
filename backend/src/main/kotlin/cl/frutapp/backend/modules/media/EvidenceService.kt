@@ -134,6 +134,13 @@ class EvidenceService(
             }.any()
         }
         if (!puedeSubir) throw ValidationException("Este pedido no está en despacho o no es tuyo.")
+        // Cleanup de firmas anteriores del mismo pedido: la ultima gana. Sin
+        // esto cada re-firma dejaba una fila huerfana en BD y un objeto en
+        // MinIO — con N repartidores re-firmando el bucket y la tabla crecen
+        // linealmente sin uso. Best-effort en MinIO: los que fallen quedan
+        // huerfanos pero sin bloquear al repartidor.
+        val keysHuerfanas = repo.deleteAndReturnKeysByTipo(orderId, "DELIVERY_SIGNATURE")
+        keysHuerfanas.forEach { k -> runCatching { storage.borrar(k) } }
         val evidenceId = UUID.randomUUID()
         val key = "evidence/$orderId/signature/$evidenceId.png"
         storage.subir(key, bytes, "image/png")
@@ -182,7 +189,9 @@ class EvidenceService(
             }.any()
         }
         if (!puedeBorrar) throw ValidationException("Este pedido no está en despacho o no es tuyo.")
-        val deleted = repo.deleteIfOrderLevel(evidenceId, orderId)
+        // Solo permitimos borrar FOTOS de entrega desde este endpoint. La firma
+        // se sobrescribe subiendo una nueva; no hay path para borrarla sola.
+        val deleted = repo.deleteIfOrderLevel(evidenceId, orderId, tipoEsperado = "DELIVERY_PHOTO")
             ?: throw NotFoundException("Evidencia no encontrada.")
         // BD borrada; ahora limpiamos MinIO. Si falla queda el objeto huerfano
         // en el bucket — aceptable. Al reves seria peor: fila apuntando a nada.

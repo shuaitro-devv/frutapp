@@ -239,8 +239,13 @@ private fun SelectorPedidoSheet(
                 modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
             )
             when {
-                pedidos == null -> Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                    androidx.compose.material3.CircularProgressIndicator(color = FrutAppColors.Brand400)
+                pedidos == null -> Column(modifier = Modifier.fillMaxWidth()) {
+                    repeat(3) {
+                        cl.frutapp.app.ui.components.SkeletonBox(
+                            Modifier.fillMaxWidth().padding(vertical = 4.dp).height(56.dp),
+                            RoundedCornerShape(12.dp),
+                        )
+                    }
                 }
                 pedidos.isEmpty() -> Text(
                     "Todavia no tenes pedidos. Hace tu primera compra y volve aca.",

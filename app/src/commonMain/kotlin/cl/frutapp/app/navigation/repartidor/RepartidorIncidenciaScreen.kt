@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -73,8 +74,8 @@ class RepartidorIncidenciaScreen(private val pedidoId: String) : Screen {
                 }
         }
         val despacho = despachoState ?: run {
-            Box(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = FrutAppColors.Brand400)
+            androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
+                cl.frutapp.app.ui.components.DetalleSkeleton(cards = 3)
             }
             return
         }

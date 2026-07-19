@@ -87,8 +87,8 @@ class PickerDetalleHandoffScreen(
                 }
         }
         val data = picklist ?: run {
-            Box(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background), contentAlignment = Alignment.Center) {
-                androidx.compose.material3.CircularProgressIndicator(color = FrutAppColors.Brand400)
+            androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
+                cl.frutapp.app.ui.components.DetalleSkeleton(cards = 4)
             }
             return
         }

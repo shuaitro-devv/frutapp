@@ -73,12 +73,13 @@ jobs:
 
       - name: Build release APK
         env:
-          # Tag del release. Para push de tag, ref_name = "v0.1.3". Para
-          # workflow_dispatch manual viene del input. Le sacamos la "v" para
-          # que Android muestre "0.1.3" en Ajustes → Apps → FrutApp.
-          # versionCode = numero de run del workflow (estrictamente creciente
-          # aunque se re-publique un tag).
-          APP_TAG: ${{ github.ref_name || github.event.inputs.tag }}
+          # Tag del release. Priorizamos github.event.inputs.tag PRIMERO — en
+          # workflow_dispatch manual `github.ref_name` resuelve al branch
+          # chequeado ("main"), no vacio, asi que si el orden fuera al reves
+          # el APK se llamaria "FrutApp-main.apk" y el release se crearia
+          # con tag "main". Para push de tag, inputs.tag es null y cae a
+          # ref_name que sí es el tag.
+          APP_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           chmod +x ./gradlew
           VERSION_NAME="${APP_TAG#v}"
@@ -90,11 +91,14 @@ jobs:
             -PappVersionCode="${VERSION_CODE}"
 
       # El nombre del asset incluye el tag para que sea claro en la UI de
-      # Releases y para links directos por versión.
+      # Releases y para links directos por versión. Mismo orden que el step
+      # de build: input primero (workflow_dispatch), ref_name segundo (push).
       - name: Rename APK with tag
         id: rename
+        env:
+          APP_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
-          TAG="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
+          TAG="$APP_TAG"
           SRC=app/build/outputs/apk/frutapp/release/FrutApp-release.apk
           DST=FrutApp-${TAG}.apk
           cp "$SRC" "$DST"

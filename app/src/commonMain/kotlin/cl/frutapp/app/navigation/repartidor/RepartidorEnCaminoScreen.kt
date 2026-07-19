@@ -121,8 +121,8 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
             }
         }
         val despacho = despachoState ?: run {
-            Box(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = FrutAppColors.Brand400)
+            Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
+                cl.frutapp.app.ui.components.DetalleSkeleton(conMapa = true, cards = 4)
             }
             return
         }
