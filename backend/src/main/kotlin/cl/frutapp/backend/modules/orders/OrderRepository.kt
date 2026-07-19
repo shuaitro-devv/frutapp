@@ -8,6 +8,7 @@ import cl.frutapp.shared.dto.OrderDto
 import cl.frutapp.shared.dto.OrderItemDto
 import cl.frutapp.shared.dto.OrderPaymentDto
 import cl.frutapp.shared.dto.OrderSummaryDto
+import kotlin.time.Duration.Companion.microseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -513,33 +514,76 @@ class OrderRepository {
         subtotalReal + envio
     }
 
-    /** Reintegra al ledger FrutCoins los coins canjeados en este pedido cuando se
-     *  cancela. Inserta un asiento positivo (delta = +frutcoinsCanjeadas) con
-     *  motivo='REINTEGRO_CANCELACION'. Idempotente: no chequea duplicados (el caller
-     *  solo debe llamarlo UNA vez por cancelacion, y la transicion ya esta guarded
-     *  por el status del CRITICAL fix). Si no habia coins canjeados, no-op. */
+    /** Al cancelar un pedido, revierte los movimientos FrutCoins que se
+     *  generaron al crearlo:
+     *   - +REINTEGRO_CANCELACION por los coins que el cliente canjeó (delta
+     *     positivo, motivo REINTEGRO_CANCELACION).
+     *   - -REVERSO_COMPRA por los coins que se acumularon como recompensa de
+     *     compra (delta negativo, motivo REVERSO_COMPRA).
+     *  Sin el segundo, los pedidos Webpay abandonados dejaban saldo fantasma
+     *  al cliente aunque nunca hubiera pagado nada. Idempotente: el caller
+     *  llama esto UNA vez por cancelacion (guarded por applyTransition).
+     *  Si el pedido no tenia ni canjes ni acumulacion, no-op. */
     suspend fun reintegrarFrutCoinsCanjeados(orderId: UUID) = dbQuery {
         val row = OrdersTable
             .selectAll().where { OrdersTable.id eq orderId }
             .singleOrNull() ?: return@dbQuery
         val canjeados = row[OrdersTable.frutcoinsCanjeadas]
-        if (canjeados <= 0) return@dbQuery
         val userId = row[OrdersTable.userId]
-        // Saldo actual del ledger para mantener balance_after coherente con el resto
-        // de filas (no nos confiamos del cache).
+        // Recuperamos la cantidad de coins acumulados como COMPRA para este
+        // pedido — miramos el ledger porque la tabla orders no lo guarda.
+        val acumuladosCompra = FrutCoinsLedgerTable
+            .select(FrutCoinsLedgerTable.delta)
+            .where {
+                (FrutCoinsLedgerTable.orderId eq orderId) and
+                    (FrutCoinsLedgerTable.motivo eq "COMPRA")
+            }
+            .sumOf { it[FrutCoinsLedgerTable.delta] }
+        if (canjeados <= 0 && acumuladosCompra <= 0) return@dbQuery
         val saldoActual = FrutCoinsLedgerTable
             .selectAll().where { FrutCoinsLedgerTable.userId eq userId }
-            .orderBy(FrutCoinsLedgerTable.createdAt to org.jetbrains.exposed.sql.SortOrder.DESC)
+            .orderBy(FrutCoinsLedgerTable.createdAt to SortOrder.DESC)
             .firstOrNull()?.get(FrutCoinsLedgerTable.balanceAfter) ?: 0
-        val nuevoSaldo = saldoActual + canjeados
-        FrutCoinsLedgerTable.insert {
-            it[id] = UUID.randomUUID()
-            it[FrutCoinsLedgerTable.userId] = userId
-            it[FrutCoinsLedgerTable.orderId] = orderId
-            it[delta] = canjeados
-            it[motivo] = "REINTEGRO_CANCELACION"
-            it[balanceAfter] = nuevoSaldo
-            it[createdAt] = Clock.System.now()
+        var nuevoSaldo = saldoActual
+        // Timestamps DISTINTOS entre los dos inserts: el orderBy(createdAt DESC)
+        // que lee saldoActual en llamadas futuras necesita un ganador determinista.
+        // Con el mismo `now` Postgres eligia arbitrariamente y contaminaba la
+        // columna balanceAfter para operaciones posteriores.
+        val nowReintegro = Clock.System.now()
+        if (canjeados > 0) {
+            nuevoSaldo += canjeados
+            FrutCoinsLedgerTable.insert {
+                it[id] = UUID.randomUUID()
+                it[FrutCoinsLedgerTable.userId] = userId
+                it[FrutCoinsLedgerTable.orderId] = orderId
+                it[delta] = canjeados
+                it[motivo] = "REINTEGRO_CANCELACION"
+                it[balanceAfter] = nuevoSaldo
+                it[createdAt] = nowReintegro
+            }
+        }
+        if (acumuladosCompra > 0) {
+            // Clamp: si el user ya gasto los coins acumulados en otro pedido, no
+            // permitimos que el balance quede negativo — restamos solo hasta 0.
+            // El shortfall queda registrado como diferencia entre `delta` real
+            // y `acumuladosCompra` para trazabilidad en soporte.
+            val reversoReal = minOf(acumuladosCompra, nuevoSaldo)
+            nuevoSaldo -= reversoReal
+            val nowReverso = Clock.System.now().let { t ->
+                // Garantizamos strictly greater que nowReintegro (Postgres timestamp
+                // tiene resolucion de microsegundos; sumar 1 nanosegundo es
+                // suficiente para el orderBy).
+                if (t > nowReintegro) t else nowReintegro + 1.microseconds
+            }
+            FrutCoinsLedgerTable.insert {
+                it[id] = UUID.randomUUID()
+                it[FrutCoinsLedgerTable.userId] = userId
+                it[FrutCoinsLedgerTable.orderId] = orderId
+                it[delta] = -reversoReal
+                it[motivo] = if (reversoReal < acumuladosCompra) "REVERSO_COMPRA_PARCIAL" else "REVERSO_COMPRA"
+                it[balanceAfter] = nuevoSaldo
+                it[createdAt] = nowReverso
+            }
         }
         Unit
     }

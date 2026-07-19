@@ -25,6 +25,7 @@ import cl.frutapp.backend.modules.rbac.PermissionCache
 import cl.frutapp.backend.modules.rbac.RbacRepository
 import cl.frutapp.backend.plugins.configureCors
 import cl.frutapp.backend.plugins.configureRateLimit
+import cl.frutapp.backend.plugins.configureRequestSizeLimit
 import cl.frutapp.backend.plugins.configureDatabases
 import cl.frutapp.backend.plugins.configureWebSocketsPlugin
 import cl.frutapp.backend.modules.audit.UserEventService
@@ -123,6 +124,7 @@ fun Application.module() {
 
     configureSerialization()
     configureCors()
+    configureRequestSizeLimit()
     configureRateLimit()
     configureStatusPages()
     configureMonitoring()

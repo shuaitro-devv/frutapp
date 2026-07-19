@@ -55,7 +55,9 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.isUuidLike
 import cl.frutapp.app.data.remote.StaffDispatchApi
 import cl.frutapp.app.data.remote.StaffEvidenceApi
+import cl.frutapp.app.platform.decodeImagen
 import cl.frutapp.app.platform.rememberSelectorImagenes
+import cl.frutapp.app.ui.components.FirmaCaptureOverlay
 import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.components.FrutButtonOutline
 import cl.frutapp.app.ui.components.FrutButtonPrimary
@@ -102,37 +104,36 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
         // mostramos el error sin transicionar el pedido.
         var codigoInput by remember { mutableStateOf("") }
         var entregando by remember { mutableStateOf(false) }
-        // Foto del paquete: opcional; el repartidor la saca antes de confirmar
-        // la entrega para dejar evidencia de que dejo el paquete al cliente.
-        // Guardamos los bytes localmente para mostrar preview sin re-descargar
-        // desde MinIO, y el evidenceId para poder eliminarla del backend si
-        // el repartidor la descarta antes de confirmar. "subiendo" y "borrando"
-        // deshabilitan la card para evitar dobles taps mientras hay red en curso.
-        var fotoBytes by remember { mutableStateOf<ByteArray?>(null) }
-        var fotoEvidenceId by remember { mutableStateOf<String?>(null) }
+        // Fotos del paquete: hasta MAX_FOTOS_ENTREGA. Cada una tiene sus bytes
+        // (para preview local + zoom) y el evidenceId del backend (para
+        // eliminarla). "subiendoFoto" es global mientras hay una en camino;
+        // "borrandoIndex" apunta al thumb que esta ejecutando el DELETE (null
+        // = nada borrandose), asi no bloqueamos toda la grid al borrar una sola.
+        var fotos by remember { mutableStateOf<List<FotoEntrega>>(emptyList()) }
         var subiendoFoto by remember { mutableStateOf(false) }
-        var borrandoFoto by remember { mutableStateOf(false) }
-        // Toggle del visor fullscreen: se abre al tocar el thumb, se cierra al
-        // tocar la imagen (mismo patron que VisorEvidenciaFullscreen del cliente).
-        var verFotoFullscreen by remember { mutableStateOf(false) }
-        // Firma del receptor: la ruta paralela a la foto. Guardamos los bytes
-        // PNG rendereados en cliente + el id devuelto por backend. No permitimos
-        // borrar la firma (por ahora): si el repartidor se equivoca, tapea
-        // "Firma del receptor" de nuevo y la sobreescribe (una firma nueva se
-        // toma como la vigente porque la query cliente ordena por uploadedAt DESC).
+        var borrandoIndex by remember { mutableStateOf<Int?>(null) }
+        // Firma del receptor: bytes PNG rendereados en cliente. No permitimos
+        // borrar (queda pisada por la siguiente firma). subiendoFirma = red en
+        // vuelo.
         var firmaBytes by remember { mutableStateOf<ByteArray?>(null) }
         var subiendoFirma by remember { mutableStateOf(false) }
-        var capturandoFirma by remember { mutableStateOf(false) }
-        var verFirmaFullscreen by remember { mutableStateOf(false) }
+        // Overlay activo: refactor de 3 booleans a un solo estado con tipo,
+        // para que sea imposible tener dos overlays simultaneos por accidente.
+        var overlay by remember { mutableStateOf<OverlayEntrega>(OverlayEntrega.None) }
+        val borrandoFoto = borrandoIndex != null
+        val hayRedEnVuelo = subiendoFoto || borrandoFoto || subiendoFirma
         val evidenceApi = remember { StaffEvidenceApi() }
         val selectorFoto = rememberSelectorImagenes { bytes ->
-            if (subiendoFoto || borrandoFoto || subiendoFirma) return@rememberSelectorImagenes
+            if (hayRedEnVuelo) return@rememberSelectorImagenes
+            if (fotos.size >= MAX_FOTOS_ENTREGA) {
+                showToast("Máximo $MAX_FOTOS_ENTREGA fotos por entrega")
+                return@rememberSelectorImagenes
+            }
             // Fixture mock (pedidoId no es UUID): simulamos el flujo sin
             // pegarle al backend, si no el POST /staff/dispatches/{id}/evidence
             // devuelve 400 "orderId inválido" y confunde al repartidor de demo.
             if (!esBackendReal) {
-                fotoBytes = bytes
-                fotoEvidenceId = "mock"
+                fotos = fotos + FotoEntrega(bytes = bytes, evidenceId = "mock-${fotos.size}")
                 showToast("Foto adjuntada.")
                 return@rememberSelectorImagenes
             }
@@ -140,8 +141,7 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
             scope.launch {
                 runCatching { evidenceApi.subirEntrega(pedidoId, bytes, comentario = null) }
                     .onSuccess { dto ->
-                        fotoBytes = bytes
-                        fotoEvidenceId = dto.id
+                        fotos = fotos + FotoEntrega(bytes = bytes, evidenceId = dto.id)
                         showToast("Foto adjuntada.")
                     }
                     .onFailure { e ->
@@ -152,39 +152,34 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
                 subiendoFoto = false
             }
         }
-        val eliminarFoto = eliminarFoto@{
-            if (borrandoFoto || subiendoFoto) return@eliminarFoto
-            val id = fotoEvidenceId ?: return@eliminarFoto
-            // Mock: solo limpia estado local (no hay endpoint que llamar).
-            if (!esBackendReal || id == "mock") {
-                fotoBytes = null
-                fotoEvidenceId = null
+        val eliminarFotoEnIndex = eliminarFoto@{ index: Int ->
+            if (hayRedEnVuelo) return@eliminarFoto
+            val foto = fotos.getOrNull(index) ?: return@eliminarFoto
+            val id = foto.evidenceId
+            if (!esBackendReal || id.startsWith("mock")) {
+                fotos = fotos.filterIndexed { i, _ -> i != index }
                 return@eliminarFoto
             }
-            borrandoFoto = true
+            borrandoIndex = index
             scope.launch {
                 runCatching { evidenceApi.eliminarEntrega(pedidoId, id) }
                     .onSuccess {
-                        fotoBytes = null
-                        fotoEvidenceId = null
+                        fotos = fotos.filter { it.evidenceId != id }
                     }
                     .onFailure { e ->
                         if (e is kotlinx.coroutines.CancellationException) throw e
-                        // 404 = la evidencia ya no existe (borrada por otra
-                        // sesion o retry despues de un timeout donde la
-                        // primera pego bien). Idempotente: limpiamos estado
-                        // local y listo, sin toast de error.
+                        // 404 = idempotente: la fila ya no existe en backend,
+                        // limpiamos el thumb local igual.
                         val es404 = e is io.ktor.client.plugins.ClientRequestException &&
                             e.response.status == io.ktor.http.HttpStatusCode.NotFound
                         if (es404) {
-                            fotoBytes = null
-                            fotoEvidenceId = null
+                            fotos = fotos.filter { it.evidenceId != id }
                         } else {
                             ErrorReporter.report(screen = "RepartidorEntrega", action = "delete_evidence", error = e)
                             showToast(mensajeAmigable(e, "eliminar la foto"))
                         }
                     }
-                borrandoFoto = false
+                borrandoIndex = null
             }
             Unit
         }
@@ -219,34 +214,25 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
                 Spacer(Modifier.height(10.dp))
                 CodigoInputBoxes(codigo = codigoInput, onCodigo = { codigoInput = it })
                 Spacer(Modifier.height(14.dp))
-                val bytesLocales = fotoBytes
-                if (bytesLocales != null) {
-                    FotoEntregaPreviewCard(
-                        bytes = bytesLocales,
-                        borrando = borrandoFoto,
-                        onVer = { if (!borrandoFoto) verFotoFullscreen = true },
-                        onCambiar = { if (!borrandoFoto && !subiendoFoto) selectorFoto.camara() },
-                        onBorrar = eliminarFoto,
-                    )
-                } else {
-                    AccionCard(
-                        icon = Icons.Filled.CameraAlt,
-                        titulo = if (subiendoFoto) "Subiendo foto..." else "Tomar foto",
-                        sub = "Toma foto al paquete entregado",
-                        onClick = {
-                            if (!subiendoFoto && !borrandoFoto && !subiendoFirma) selectorFoto.camara()
-                        },
-                    )
-                }
+                FotosEntregaSection(
+                    fotos = fotos,
+                    subiendo = subiendoFoto,
+                    borrandoIndex = borrandoIndex,
+                    maxFotos = MAX_FOTOS_ENTREGA,
+                    hayRedEnVuelo = hayRedEnVuelo,
+                    onAgregar = { if (!hayRedEnVuelo) selectorFoto.camara() },
+                    onVer = { index -> overlay = OverlayEntrega.VerFoto(index) },
+                    onBorrar = eliminarFotoEnIndex,
+                )
                 Spacer(Modifier.height(8.dp))
                 val firmaLocales = firmaBytes
                 if (firmaLocales != null) {
                     FirmaPreviewCard(
                         bytes = firmaLocales,
                         subiendo = subiendoFirma,
-                        onVer = { if (!subiendoFirma) verFirmaFullscreen = true },
+                        onVer = { if (!subiendoFirma) overlay = OverlayEntrega.VerFirma },
                         onCambiar = {
-                            if (!subiendoFirma && !subiendoFoto && !borrandoFoto) capturandoFirma = true
+                            if (!hayRedEnVuelo) overlay = OverlayEntrega.CapturarFirma
                         },
                     )
                 } else {
@@ -255,7 +241,7 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
                         titulo = if (subiendoFirma) "Subiendo firma..." else "Firma del receptor",
                         sub = "Solicitar firma en la pantalla",
                         onClick = {
-                            if (!subiendoFirma && !subiendoFoto && !borrandoFoto) capturandoFirma = true
+                            if (!hayRedEnVuelo) overlay = OverlayEntrega.CapturarFirma
                         },
                     )
                 }
@@ -313,48 +299,75 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
                 )
             }
         }
-        // Visor fullscreen del thumb — se abre al tocar la foto en la card.
-        // Toca la imagen para cerrar (mismo gesto que VisorEvidenciaFullscreen
-        // del cliente). Vive fuera del Column principal para overlay real por
-        // encima del bottom bar.
-        val fotoParaVer = fotoBytes
-        if (verFotoFullscreen && fotoParaVer != null) {
-            FotoEntregaFullscreen(bytes = fotoParaVer, onCerrar = { verFotoFullscreen = false })
-        }
-        val firmaParaVer = firmaBytes
-        if (verFirmaFullscreen && firmaParaVer != null) {
-            FotoEntregaFullscreen(bytes = firmaParaVer, onCerrar = { verFirmaFullscreen = false })
-        }
-        // Overlay de captura de firma. Al Guardar, mandamos el PNG al backend
-        // (o simulamos en fixture) y actualizamos el estado local.
-        if (capturandoFirma) {
-            cl.frutapp.app.ui.components.FirmaCaptureOverlay(
-                onCancelar = { capturandoFirma = false },
-                onGuardar = { png ->
-                    capturandoFirma = false
-                    if (!esBackendReal) {
-                        firmaBytes = png
-                        showToast("Firma guardada.")
-                        return@FirmaCaptureOverlay
-                    }
-                    subiendoFirma = true
-                    scope.launch {
-                        runCatching { evidenceApi.subirFirma(pedidoId, png) }
-                            .onSuccess {
-                                firmaBytes = png
-                                showToast("Firma guardada.")
-                            }
-                            .onFailure { e ->
-                                if (e is kotlinx.coroutines.CancellationException) throw e
-                                ErrorReporter.report(screen = "RepartidorEntrega", action = "upload_signature", error = e)
-                                showToast(mensajeAmigable(e, "guardar la firma"))
-                            }
-                        subiendoFirma = false
-                    }
-                },
-            )
+        // Overlays: solo puede haber uno activo a la vez por diseño (sealed
+        // class Overlay). Se renderean fuera del Column para quedar por encima
+        // del bottom bar del scaffold.
+        when (val ov = overlay) {
+            is OverlayEntrega.None -> Unit
+            is OverlayEntrega.VerFoto -> {
+                val foto = fotos.getOrNull(ov.index)
+                if (foto != null) {
+                    FotoEntregaFullscreen(bytes = foto.bytes, onCerrar = { overlay = OverlayEntrega.None })
+                } else {
+                    // El index quedo stale (foto borrada mientras el visor estaba abierto)
+                    overlay = OverlayEntrega.None
+                }
+            }
+            is OverlayEntrega.VerFirma -> {
+                val firma = firmaBytes
+                if (firma != null) {
+                    FotoEntregaFullscreen(bytes = firma, onCerrar = { overlay = OverlayEntrega.None })
+                } else {
+                    overlay = OverlayEntrega.None
+                }
+            }
+            is OverlayEntrega.CapturarFirma -> {
+                FirmaCaptureOverlay(
+                    onCancelar = { overlay = OverlayEntrega.None },
+                    onGuardar = { png ->
+                        overlay = OverlayEntrega.None
+                        if (!esBackendReal) {
+                            firmaBytes = png
+                            showToast("Firma guardada.")
+                            return@FirmaCaptureOverlay
+                        }
+                        subiendoFirma = true
+                        scope.launch {
+                            runCatching { evidenceApi.subirFirma(pedidoId, png) }
+                                .onSuccess {
+                                    firmaBytes = png
+                                    showToast("Firma guardada.")
+                                }
+                                .onFailure { e ->
+                                    if (e is kotlinx.coroutines.CancellationException) throw e
+                                    ErrorReporter.report(screen = "RepartidorEntrega", action = "upload_signature", error = e)
+                                    showToast(mensajeAmigable(e, "guardar la firma"))
+                                }
+                            subiendoFirma = false
+                        }
+                    },
+                )
+            }
         }
     }
+}
+
+/** Constante MAX de fotos por entrega — puedo pisar la del receptor si se
+ *  fue del 1 al 3, pero para evidenciar entrega 3 angulos (frente / paquete /
+ *  interior) alcanza con eso; abrir mas requiere pensar en storage por pedido. */
+private const val MAX_FOTOS_ENTREGA = 3
+
+/** Foto adjuntada a una entrega: bytes locales (para preview instantaneo sin
+ *  bajar de MinIO) + evidenceId del backend (para el DELETE). */
+private data class FotoEntrega(val bytes: ByteArray, val evidenceId: String)
+
+/** Overlay activo en la pantalla de entrega. Excluyente por diseño (impide
+ *  bugs futuros de 2 overlays abiertos a la vez). */
+private sealed class OverlayEntrega {
+    object None : OverlayEntrega()
+    data class VerFoto(val index: Int) : OverlayEntrega()
+    object VerFirma : OverlayEntrega()
+    object CapturarFirma : OverlayEntrega()
 }
 
 @Composable
@@ -491,31 +504,94 @@ private fun ResumenPedidoCard(items: Int, unidades: Int) {
     }
 }
 
-/** Card con preview de la foto tomada por el repartidor.
- *   - Tap en el thumb → visor fullscreen (verla en grande).
- *   - Botón "Cambiar" (texto verde) → abre la cámara para reemplazar.
- *   - Botón X en la esquina → elimina la foto sin reemplazo.
- *  Mientras el DELETE esta en vuelo el thumb muestra spinner y bloquea taps. */
+/** Grid horizontal de fotos de entrega: hasta [maxFotos] thumbs con X para
+ *  eliminar cada una + tile "+" para agregar mas. Cuando no hay ninguna
+ *  muestra el estado inicial (card grande "Tomar foto"). Diseño pensado
+ *  para 3 fotos (frente / paquete / interior) que caben en una fila. */
 @Composable
-private fun FotoEntregaPreviewCard(
-    bytes: ByteArray,
-    borrando: Boolean,
-    onVer: () -> Unit,
-    onCambiar: () -> Unit,
-    onBorrar: () -> Unit,
+private fun FotosEntregaSection(
+    fotos: List<FotoEntrega>,
+    subiendo: Boolean,
+    borrandoIndex: Int?,
+    maxFotos: Int,
+    hayRedEnVuelo: Boolean,
+    onAgregar: () -> Unit,
+    onVer: (Int) -> Unit,
+    onBorrar: (Int) -> Unit,
 ) {
-    val bitmap = androidx.compose.runtime.remember(bytes) { cl.frutapp.app.platform.decodeImagen(bytes) }
-    Row(
+    if (fotos.isEmpty() && !subiendo) {
+        AccionCard(
+            icon = Icons.Filled.CameraAlt,
+            titulo = "Tomar foto",
+            sub = "Toma hasta $maxFotos fotos del paquete entregado",
+            onClick = { if (!hayRedEnVuelo) onAgregar() },
+        )
+        return
+    }
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.White, RoundedCornerShape(14.dp))
             .border(1.dp, FrutAppColors.Brand100, RoundedCornerShape(14.dp))
             .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Fotos del paquete",
+                color = FrutAppColors.Brand800,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                "${fotos.size}/$maxFotos",
+                color = FrutAppColors.InkSoft,
+                fontSize = 12.sp,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            fotos.forEachIndexed { index, foto ->
+                FotoEntregaThumb(
+                    foto = foto,
+                    borrando = borrandoIndex == index,
+                    onVer = { onVer(index) },
+                    onBorrar = { onBorrar(index) },
+                )
+            }
+            if (fotos.size < maxFotos) {
+                TileAgregarFoto(
+                    subiendo = subiendo,
+                    habilitado = !hayRedEnVuelo,
+                    onClick = onAgregar,
+                )
+            }
+        }
+        if (fotos.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "El cliente las ve en su tracking. Toca una para ver en grande.",
+                color = FrutAppColors.InkSoft,
+                fontSize = 11.sp,
+            )
+        }
+    }
+}
+
+/** Thumb 80dp con la foto + X para eliminar. Spinner overlay mientras el
+ *  DELETE del backend esta en vuelo. */
+@Composable
+private fun FotoEntregaThumb(
+    foto: FotoEntrega,
+    borrando: Boolean,
+    onVer: () -> Unit,
+    onBorrar: () -> Unit,
+) {
+    val bitmap = remember(foto.bytes) { decodeImagen(foto.bytes) }
+    Box(modifier = Modifier.size(80.dp)) {
         Box(
             modifier = Modifier
-                .size(72.dp)
+                .fillMaxSize()
                 .background(FrutAppColors.Brand50, RoundedCornerShape(10.dp))
                 .clickable(enabled = !borrando, onClick = onVer),
             contentAlignment = Alignment.Center,
@@ -525,41 +601,52 @@ private fun FotoEntregaPreviewCard(
                     bitmap = bitmap,
                     contentDescription = "Foto del paquete",
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(72.dp),
+                    modifier = Modifier.size(80.dp),
                 )
             }
             if (borrando) {
-                Box(modifier = Modifier.size(72.dp).background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(10.dp)))
+                Box(modifier = Modifier.size(80.dp).background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(10.dp)))
                 androidx.compose.material3.CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
             }
         }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text("Foto adjuntada", color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text(
-                text = if (borrando) "Eliminando..." else "El cliente la ve en su tracking. Toca la foto para verla en grande.",
-                color = FrutAppColors.InkSoft,
-                fontSize = 12.sp,
-            )
-            if (!borrando) {
-                Text(
-                    text = "Cambiar",
-                    color = FrutAppColors.Brand600,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 4.dp).clickable(onClick = onCambiar),
-                )
+        if (!borrando) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(2.dp)
+                    .size(22.dp)
+                    .background(Color.White, CircleShape)
+                    .border(1.dp, FrutAppColors.Brand100, CircleShape)
+                    .clickable(onClick = onBorrar),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Filled.Close, contentDescription = "Eliminar foto", tint = FrutAppColors.Brand800, modifier = Modifier.size(14.dp))
             }
         }
-        Spacer(Modifier.width(6.dp))
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .background(FrutAppColors.Brand50, CircleShape)
-                .clickable(enabled = !borrando, onClick = onBorrar),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Filled.Close, contentDescription = "Eliminar foto", tint = FrutAppColors.Brand800, modifier = Modifier.size(18.dp))
+    }
+}
+
+/** Tile "+" para agregar otra foto. Muestra spinner mientras hay una subida
+ *  en curso (upload previo). Tile del mismo tamaño que los thumbs para que
+ *  la row se vea alineada. */
+@Composable
+private fun TileAgregarFoto(subiendo: Boolean, habilitado: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(80.dp)
+            .background(FrutAppColors.Brand50, RoundedCornerShape(10.dp))
+            .border(1.dp, FrutAppColors.Brand400, RoundedCornerShape(10.dp))
+            .clickable(enabled = habilitado && !subiendo, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (subiendo) {
+            androidx.compose.material3.CircularProgressIndicator(
+                color = FrutAppColors.Brand600,
+                strokeWidth = 2.dp,
+                modifier = Modifier.size(22.dp),
+            )
+        } else {
+            Icon(Icons.Filled.CameraAlt, contentDescription = "Agregar foto", tint = FrutAppColors.Brand600, modifier = Modifier.size(28.dp))
         }
     }
 }
@@ -574,7 +661,7 @@ private fun FirmaPreviewCard(
     onVer: () -> Unit,
     onCambiar: () -> Unit,
 ) {
-    val bitmap = androidx.compose.runtime.remember(bytes) { cl.frutapp.app.platform.decodeImagen(bytes) }
+    val bitmap = remember(bytes) { decodeImagen(bytes) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -633,7 +720,7 @@ private fun FirmaPreviewCard(
 /** Overlay fullscreen para ver la foto del thumb en grande. Toca para cerrar. */
 @Composable
 private fun FotoEntregaFullscreen(bytes: ByteArray, onCerrar: () -> Unit) {
-    val bitmap = androidx.compose.runtime.remember(bytes) { cl.frutapp.app.platform.decodeImagen(bytes) }
+    val bitmap = remember(bytes) { decodeImagen(bytes) }
     Box(
         modifier = Modifier
             .fillMaxSize()
