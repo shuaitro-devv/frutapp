@@ -359,15 +359,31 @@ private fun Detail(
         Text("Estado del pedido", color = FrutAppColors.Brand800, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 8.dp))
         pasos.forEachIndexed { i, paso -> TimelineStep(paso, isLast = i == pasos.lastIndex) }
 
-        // Foto(s) del paquete entregado, subidas por el repartidor al confirmar
-        // la entrega. Van separadas de las fotos por-item del picker: es evidencia
-        // del pedido completo, no de un producto. Se filtran por orderItemId=null.
-        val fotosEntrega = evidencias.filter { it.orderItemId == null }
+        // Evidencia de entrega: separamos fotos de firma. Ambas viven en el
+        // mismo endpoint /v1/orders/{id}/evidence con orderItemId=null, pero
+        // el tipo (V40+) las distingue. Fallback para legacy pre-V40: si
+        // tipo es null y no hay '/signature/' en la URL, se considera foto.
+        val entregas = evidencias.filter { it.orderItemId == null }
+        // Un solo "es firma?" para no repetir la logica (y evitar la asimetria
+        // donde una fila con tipo=null y key /signature/ quedaba invisible).
+        val esFirma: (cl.frutapp.shared.dto.OrderItemEvidenceDto) -> Boolean = { ev ->
+            ev.tipo == "DELIVERY_SIGNATURE" ||
+                (ev.tipo == null && ev.url.substringBefore('?').contains("/signature/"))
+        }
+        val firmaEntrega = entregas.firstOrNull(esFirma)
+        val fotosEntrega = entregas.filterNot(esFirma)
         if (fotosEntrega.isNotEmpty()) {
             FotosEntregaCard(
                 fotos = fotosEntrega,
                 onFotoClick = onEvidenciaClick,
                 modifier = Modifier.padding(top = 16.dp),
+            )
+        }
+        if (firmaEntrega != null) {
+            FirmaEntregaCard(
+                firma = firmaEntrega,
+                onFirmaClick = onEvidenciaClick,
+                modifier = Modifier.padding(top = 12.dp),
             )
         }
 
@@ -751,6 +767,36 @@ private fun FotosEntregaCard(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             fotos.forEach { ev -> EvidenciaThumb(ev = ev, size = 90.dp, onClick = { onFotoClick(ev) }) }
         }
+    }
+}
+
+/** Card con la firma capturada por el repartidor. Se separa de las fotos de
+ *  entrega porque es evidencia legal distinta ("el receptor firmo el acuse de
+ *  recibo") — merece su propia visual con el thumb blanco + trazos. */
+@Composable
+private fun FirmaEntregaCard(
+    firma: cl.frutapp.shared.dto.OrderItemEvidenceDto,
+    onFirmaClick: (cl.frutapp.shared.dto.OrderItemEvidenceDto) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(FrutAppColors.Cream, RoundedCornerShape(14.dp))
+            .padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("✍️", fontSize = 16.sp)
+            Text(
+                "Firma del receptor",
+                color = FrutAppColors.Brand800,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 6.dp),
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        EvidenciaThumb(ev = firma, size = 90.dp, onClick = { onFirmaClick(firma) })
     }
 }
 

@@ -86,7 +86,7 @@ class EvidenceService(
         val evidenceId = UUID.randomUUID()
         val key = "evidence/$orderId/delivery/$evidenceId.jpg"
         storage.subir(key, bytes, contentType)
-        val row = repo.insertOrderLevel(orderId, key, comentario, repartidorId)
+        val row = repo.insertOrderLevel(orderId, key, comentario, repartidorId, "DELIVERY_PHOTO")
         events.logSafely(
             eventType = "staff.delivery_evidence_uploaded",
             userId = repartidorId,
@@ -103,7 +103,58 @@ class EvidenceService(
             orderItemId = null,
             url = storage.urlFirmada(row.imageKey),
             comentario = row.comentario,
-            uploadedAt = row.uploadedAt
+            uploadedAt = row.uploadedAt,
+            tipo = row.tipo,
+        )
+    }
+
+    /** El repartidor sube UNA firma del receptor (PNG con trazos del cliente).
+     *  Mismo gate que la foto de entrega: pedido EN_DESPACHO + assigned al
+     *  repartidor. La firma se guarda como PNG (transparencia + trazos negros),
+     *  key `evidence/{orderId}/signature/{uuid}.png`. Si ya habia una firma para
+     *  este pedido, se pisa por la nueva (una sola firma vigente por entrega). */
+    suspend fun uploadSignatureAsRepartidor(
+        repartidorId: UUID,
+        orderId: UUID,
+        bytes: ByteArray,
+        context: EventContext,
+    ): OrderItemEvidenceDto {
+        // Reusamos el validador pero forzando PNG (la firma no es JPG).
+        if (bytes.size.toLong() > MAX_BYTES) {
+            throw ValidationException("La firma pesa más de 5 MB. Vuelve a firmar con trazos más simples.")
+        }
+        if (!verifyMagicNumber(bytes, "image/png")) {
+            throw ValidationException("La firma no es un PNG válido.")
+        }
+        val puedeSubir = dbQuery {
+            OrdersTable.selectAll().where {
+                (OrdersTable.id eq orderId) and
+                (OrdersTable.assignedRepartidorId eq repartidorId) and
+                (OrdersTable.status eq "EN_DESPACHO")
+            }.any()
+        }
+        if (!puedeSubir) throw ValidationException("Este pedido no está en despacho o no es tuyo.")
+        val evidenceId = UUID.randomUUID()
+        val key = "evidence/$orderId/signature/$evidenceId.png"
+        storage.subir(key, bytes, "image/png")
+        val row = repo.insertOrderLevel(orderId, key, comentario = null, uploadedBy = repartidorId, tipo = "DELIVERY_SIGNATURE")
+        events.logSafely(
+            eventType = "staff.delivery_signature_uploaded",
+            userId = repartidorId,
+            entityType = "customer_order",
+            entityId = orderId,
+            payload = buildJsonObject {
+                put("evidenceId", JsonPrimitive(row.id.toString()))
+            },
+            context = context,
+        )
+        return OrderItemEvidenceDto(
+            id = row.id.toString(),
+            orderItemId = null,
+            url = storage.urlFirmada(row.imageKey),
+            comentario = row.comentario,
+            uploadedAt = row.uploadedAt,
+            tipo = row.tipo,
         )
     }
 
@@ -157,7 +208,8 @@ class EvidenceService(
                 orderItemId = row.orderItemId?.toString(),
                 url = storage.urlFirmada(row.imageKey),
                 comentario = row.comentario,
-                uploadedAt = row.uploadedAt
+                uploadedAt = row.uploadedAt,
+                tipo = row.tipo,
             )
         }
 
@@ -203,7 +255,8 @@ class EvidenceService(
             orderItemId = row.orderItemId?.toString(),
             url = storage.urlFirmada(row.imageKey),
             comentario = row.comentario,
-            uploadedAt = row.uploadedAt
+            uploadedAt = row.uploadedAt,
+            tipo = row.tipo,
         )
     }
 

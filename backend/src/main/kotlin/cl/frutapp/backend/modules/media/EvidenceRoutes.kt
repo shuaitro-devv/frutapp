@@ -121,6 +121,38 @@ fun Route.evidenceRoutes(service: EvidenceService) {
             call.respond(HttpStatusCode.Created, cl.frutapp.shared.dto.UploadEvidenceResponse(evidencia = dto))
         }
 
+        // El repartidor sube UNA firma del receptor al confirmar la entrega.
+        // Mismo gate/ownership que /evidence. Body multipart PNG con el archivo
+        // en "archivo". Si ya habia una firma para este pedido queda como
+        // evidencia previa (no la borramos automaticamente; la ultima gana
+        // por uploadedAt DESC en la query del cliente).
+        post("/v1/staff/dispatches/{orderId}/signature") {
+            if (!call.hasPermission("order:dispatch")) {
+                call.respond(HttpStatusCode.Forbidden); return@post
+            }
+            val repartidorId = call.userId()
+            val orderId = call.parameters["orderId"]?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+                ?: throw ValidationException("orderId inválido.")
+            var bytes: ByteArray? = null
+            call.receiveMultipart().forEachPart { part ->
+                if (part is PartData.FileItem) {
+                    bytes = part.provider().readBytes()
+                }
+                part.dispose()
+            }
+            val b = bytes ?: run {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Falta el archivo"))
+                return@post
+            }
+            val dto = service.uploadSignatureAsRepartidor(
+                repartidorId = repartidorId,
+                orderId = orderId,
+                bytes = b,
+                context = call.eventContext(),
+            )
+            call.respond(HttpStatusCode.Created, cl.frutapp.shared.dto.UploadEvidenceResponse(evidencia = dto))
+        }
+
         // El repartidor borra una foto de entrega que subio antes de confirmar
         // la entrega (previsualiza y decide reemplazarla). Mismo gate del POST.
         delete("/v1/staff/dispatches/{orderId}/evidence/{evidenceId}") {

@@ -26,6 +26,8 @@ internal object OrderItemEvidenceTable : Table("order_item_evidence") {
     val comentario = text("comentario").nullable()
     val uploadedBy = uuid("uploaded_by")
     val uploadedAt = timestamp("uploaded_at")
+    // V40: distingue foto de entrega vs firma. NULL = legacy (pre-V40).
+    val tipo = text("tipo").nullable()
 
     override val primaryKey = PrimaryKey(id)
 }

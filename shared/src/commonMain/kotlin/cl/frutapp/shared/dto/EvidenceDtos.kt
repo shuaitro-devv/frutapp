@@ -18,6 +18,10 @@ data class OrderItemEvidenceDto(
     val url: String,
     val comentario: String? = null,
     val uploadedAt: String,
+    /** Distingue foto de entrega vs firma del receptor (V40+). NULL para filas
+     *  legacy o para evidencia del picker (donde orderItemId != null).
+     *  Valores: 'DELIVERY_PHOTO' | 'DELIVERY_SIGNATURE'. */
+    val tipo: String? = null,
 )
 
 /** Respuesta del upload: la evidencia recien creada con su URL presignada. */

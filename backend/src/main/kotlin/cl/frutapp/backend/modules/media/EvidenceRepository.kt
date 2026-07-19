@@ -38,17 +38,21 @@ class EvidenceRepository {
             it[OrderItemEvidenceTable.comentario] = comentario
             it[OrderItemEvidenceTable.uploadedBy] = uploadedBy
             it[OrderItemEvidenceTable.uploadedAt] = now
+            it[OrderItemEvidenceTable.tipo] = null // picker item evidence — sin tipo (legacy)
         }
-        EvidenceRow(newId, orderItemId, imageKey, comentario, now.toString())
+        EvidenceRow(newId, orderItemId, imageKey, comentario, now.toString(), null)
     }
 
     /** Inserta una evidencia del pedido completo (repartidor). orderItemId = null.
-     *  El caller (service) valida que el pedido este EN_DESPACHO y asignado al repartidor. */
+     *  El caller (service) valida que el pedido este EN_DESPACHO y asignado al repartidor.
+     *  [tipo] es 'DELIVERY_PHOTO' o 'DELIVERY_SIGNATURE' (V40+). Los inserts nuevos
+     *  siempre lo setean; el null solo queda para filas legacy pre-V40. */
     suspend fun insertOrderLevel(
         orderId: UUID,
         imageKey: String,
         comentario: String?,
-        uploadedBy: UUID
+        uploadedBy: UUID,
+        tipo: String,
     ): EvidenceRow = dbQuery {
         val newId = UUID.randomUUID()
         val now = Clock.System.now()
@@ -60,8 +64,9 @@ class EvidenceRepository {
             it[OrderItemEvidenceTable.comentario] = comentario
             it[OrderItemEvidenceTable.uploadedBy] = uploadedBy
             it[OrderItemEvidenceTable.uploadedAt] = now
+            it[OrderItemEvidenceTable.tipo] = tipo
         }
-        EvidenceRow(newId, null, imageKey, comentario, now.toString())
+        EvidenceRow(newId, null, imageKey, comentario, now.toString(), tipo)
     }
 
     /** Todas las evidencias de un pedido (cliente las ve en tracking). Mas
@@ -76,7 +81,8 @@ class EvidenceRepository {
                     orderItemId = row[OrderItemEvidenceTable.orderItemId],
                     imageKey = row[OrderItemEvidenceTable.imageKey],
                     comentario = row[OrderItemEvidenceTable.comentario],
-                    uploadedAt = row[OrderItemEvidenceTable.uploadedAt].toString()
+                    uploadedAt = row[OrderItemEvidenceTable.uploadedAt].toString(),
+                    tipo = row[OrderItemEvidenceTable.tipo],
                 )
             }
     }
@@ -105,7 +111,8 @@ class EvidenceRepository {
             orderItemId = row[OrderItemEvidenceTable.orderItemId],
             imageKey = row[OrderItemEvidenceTable.imageKey],
             comentario = row[OrderItemEvidenceTable.comentario],
-            uploadedAt = row[OrderItemEvidenceTable.uploadedAt].toString()
+            uploadedAt = row[OrderItemEvidenceTable.uploadedAt].toString(),
+            tipo = row[OrderItemEvidenceTable.tipo],
         )
     }
 
@@ -114,6 +121,8 @@ class EvidenceRepository {
         val orderItemId: UUID?,
         val imageKey: String,
         val comentario: String?,
-        val uploadedAt: String
+        val uploadedAt: String,
+        /** NULL para legacy o filas de picker; 'DELIVERY_PHOTO' o 'DELIVERY_SIGNATURE'. */
+        val tipo: String?,
     )
 }

@@ -115,9 +115,18 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
         // Toggle del visor fullscreen: se abre al tocar el thumb, se cierra al
         // tocar la imagen (mismo patron que VisorEvidenciaFullscreen del cliente).
         var verFotoFullscreen by remember { mutableStateOf(false) }
+        // Firma del receptor: la ruta paralela a la foto. Guardamos los bytes
+        // PNG rendereados en cliente + el id devuelto por backend. No permitimos
+        // borrar la firma (por ahora): si el repartidor se equivoca, tapea
+        // "Firma del receptor" de nuevo y la sobreescribe (una firma nueva se
+        // toma como la vigente porque la query cliente ordena por uploadedAt DESC).
+        var firmaBytes by remember { mutableStateOf<ByteArray?>(null) }
+        var subiendoFirma by remember { mutableStateOf(false) }
+        var capturandoFirma by remember { mutableStateOf(false) }
+        var verFirmaFullscreen by remember { mutableStateOf(false) }
         val evidenceApi = remember { StaffEvidenceApi() }
         val selectorFoto = rememberSelectorImagenes { bytes ->
-            if (subiendoFoto || borrandoFoto) return@rememberSelectorImagenes
+            if (subiendoFoto || borrandoFoto || subiendoFirma) return@rememberSelectorImagenes
             // Fixture mock (pedidoId no es UUID): simulamos el flujo sin
             // pegarle al backend, si no el POST /staff/dispatches/{id}/evidence
             // devuelve 400 "orderId inválido" y confunde al repartidor de demo.
@@ -224,11 +233,32 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
                         icon = Icons.Filled.CameraAlt,
                         titulo = if (subiendoFoto) "Subiendo foto..." else "Tomar foto",
                         sub = "Toma foto al paquete entregado",
-                        onClick = { if (!subiendoFoto) selectorFoto.camara() },
+                        onClick = {
+                            if (!subiendoFoto && !borrandoFoto && !subiendoFirma) selectorFoto.camara()
+                        },
                     )
                 }
                 Spacer(Modifier.height(8.dp))
-                AccionCard(icon = Icons.Filled.Draw, titulo = "Firma del receptor", sub = "Solicitar firma en la pantalla", onClick = { showToast("Firma - Próximamente") })
+                val firmaLocales = firmaBytes
+                if (firmaLocales != null) {
+                    FirmaPreviewCard(
+                        bytes = firmaLocales,
+                        subiendo = subiendoFirma,
+                        onVer = { if (!subiendoFirma) verFirmaFullscreen = true },
+                        onCambiar = {
+                            if (!subiendoFirma && !subiendoFoto && !borrandoFoto) capturandoFirma = true
+                        },
+                    )
+                } else {
+                    AccionCard(
+                        icon = Icons.Filled.Draw,
+                        titulo = if (subiendoFirma) "Subiendo firma..." else "Firma del receptor",
+                        sub = "Solicitar firma en la pantalla",
+                        onClick = {
+                            if (!subiendoFirma && !subiendoFoto && !borrandoFoto) capturandoFirma = true
+                        },
+                    )
+                }
                 Spacer(Modifier.height(12.dp))
                 ResumenPedidoCard(items = despacho.items, unidades = despacho.unidades)
                 Spacer(Modifier.height(12.dp))
@@ -250,11 +280,12 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
                         entregando -> "Confirmando..."
                         subiendoFoto -> "Espera la foto..."
                         borrandoFoto -> "Espera la foto..."
+                        subiendoFirma -> "Espera la firma..."
                         else -> "Confirmar entrega"
                     },
-                    enabled = !entregando && !subiendoFoto && !borrandoFoto && codigoInput.length == 4,
+                    enabled = !entregando && !subiendoFoto && !borrandoFoto && !subiendoFirma && codigoInput.length == 4,
                     onClick = {
-                        if (entregando || subiendoFoto || borrandoFoto) return@FrutButtonPrimary
+                        if (entregando || subiendoFoto || borrandoFoto || subiendoFirma) return@FrutButtonPrimary
                         if (codigoInput.length != 4) {
                             showToast("Pídele al cliente el código de 4 dígitos.")
                             return@FrutButtonPrimary
@@ -289,6 +320,39 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
         val fotoParaVer = fotoBytes
         if (verFotoFullscreen && fotoParaVer != null) {
             FotoEntregaFullscreen(bytes = fotoParaVer, onCerrar = { verFotoFullscreen = false })
+        }
+        val firmaParaVer = firmaBytes
+        if (verFirmaFullscreen && firmaParaVer != null) {
+            FotoEntregaFullscreen(bytes = firmaParaVer, onCerrar = { verFirmaFullscreen = false })
+        }
+        // Overlay de captura de firma. Al Guardar, mandamos el PNG al backend
+        // (o simulamos en fixture) y actualizamos el estado local.
+        if (capturandoFirma) {
+            cl.frutapp.app.ui.components.FirmaCaptureOverlay(
+                onCancelar = { capturandoFirma = false },
+                onGuardar = { png ->
+                    capturandoFirma = false
+                    if (!esBackendReal) {
+                        firmaBytes = png
+                        showToast("Firma guardada.")
+                        return@FirmaCaptureOverlay
+                    }
+                    subiendoFirma = true
+                    scope.launch {
+                        runCatching { evidenceApi.subirFirma(pedidoId, png) }
+                            .onSuccess {
+                                firmaBytes = png
+                                showToast("Firma guardada.")
+                            }
+                            .onFailure { e ->
+                                if (e is kotlinx.coroutines.CancellationException) throw e
+                                ErrorReporter.report(screen = "RepartidorEntrega", action = "upload_signature", error = e)
+                                showToast(mensajeAmigable(e, "guardar la firma"))
+                            }
+                        subiendoFirma = false
+                    }
+                },
+            )
         }
     }
 }
@@ -496,6 +560,72 @@ private fun FotoEntregaPreviewCard(
             contentAlignment = Alignment.Center,
         ) {
             Icon(Icons.Filled.Close, contentDescription = "Eliminar foto", tint = FrutAppColors.Brand800, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+/** Card compacta para la firma capturada. Mismo layout que la foto pero sin
+ *  X (la firma se sobrescribe al capturar una nueva; no permitimos borrarla
+ *  sola porque legalmente es "el receptor firmo, aca esta la evidencia"). */
+@Composable
+private fun FirmaPreviewCard(
+    bytes: ByteArray,
+    subiendo: Boolean,
+    onVer: () -> Unit,
+    onCambiar: () -> Unit,
+) {
+    val bitmap = androidx.compose.runtime.remember(bytes) { cl.frutapp.app.platform.decodeImagen(bytes) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White, RoundedCornerShape(14.dp))
+            .border(1.dp, FrutAppColors.Brand100, RoundedCornerShape(14.dp))
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .background(Color.White, RoundedCornerShape(10.dp))
+                .border(1.dp, FrutAppColors.Brand100, RoundedCornerShape(10.dp))
+                .clickable(enabled = !subiendo, onClick = onVer),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = "Firma del receptor",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(64.dp),
+                )
+            }
+            if (subiendo) {
+                Box(modifier = Modifier.size(72.dp).background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(10.dp)))
+                androidx.compose.material3.CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = if (subiendo) "Subiendo firma..." else "Firma capturada",
+                color = FrutAppColors.Brand800,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = if (subiendo) "Espera un momento" else "Toca la firma para verla en grande.",
+                color = FrutAppColors.InkSoft,
+                fontSize = 12.sp,
+            )
+            if (!subiendo) {
+                Text(
+                    text = "Volver a firmar",
+                    color = FrutAppColors.Brand600,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 4.dp).clickable(onClick = onCambiar),
+                )
+            }
         }
     }
 }

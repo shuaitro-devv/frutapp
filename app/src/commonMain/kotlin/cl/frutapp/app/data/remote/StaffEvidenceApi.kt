@@ -58,6 +58,27 @@ class StaffEvidenceApi(
         client.delete("$baseUrl/v1/staff/dispatches/$orderId/evidence/$evidenceId")
     }
 
+    /** Repartidor sube la firma del receptor (PNG con los trazos capturados en
+     *  el canvas). Endpoint distinto de la foto para que el cliente en su
+     *  tracking la muestre bajo una card 'Firma del receptor' separada. */
+    suspend fun subirFirma(orderId: String, pngBytes: ByteArray): OrderItemEvidenceDto {
+        val response = client.post("$baseUrl/v1/staff/dispatches/$orderId/signature") {
+            setBody(MultiPartFormDataContent(
+                formData {
+                    append(
+                        key = "archivo",
+                        value = pngBytes,
+                        headers = Headers.build {
+                            append(HttpHeaders.ContentType, "image/png")
+                            append(HttpHeaders.ContentDisposition, "filename=\"firma.png\"")
+                        }
+                    )
+                }
+            ))
+        }
+        return response.body<UploadEvidenceResponse>().evidencia
+    }
+
     /** Repartidor sube UNA foto del paquete entregado. La evidencia queda
      *  ligada al pedido completo (orderItemId = null en el DTO de respuesta). */
     suspend fun subirEntrega(orderId: String, bytes: ByteArray, comentario: String?): OrderItemEvidenceDto {
