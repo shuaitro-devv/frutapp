@@ -7,6 +7,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -48,6 +49,13 @@ class StaffEvidenceApi(
             ))
         }
         return response.body<UploadEvidenceResponse>().evidencia
+    }
+
+    /** Repartidor borra una foto de entrega que subio (para reemplazarla). El
+     *  backend valida ownership + estado EN_DESPACHO antes de borrar. 204 sin
+     *  body si ok; 404 si la evidencia ya no existe (idempotente). */
+    suspend fun eliminarEntrega(orderId: String, evidenceId: String) {
+        client.delete("$baseUrl/v1/staff/dispatches/$orderId/evidence/$evidenceId")
     }
 
     /** Repartidor sube UNA foto del paquete entregado. La evidencia queda

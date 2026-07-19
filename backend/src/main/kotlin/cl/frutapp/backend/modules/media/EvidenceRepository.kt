@@ -4,7 +4,9 @@ import cl.frutapp.backend.db.dbQuery
 import cl.frutapp.backend.modules.orders.OrderItemsTable
 import kotlinx.datetime.Clock
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import java.util.UUID
@@ -77,6 +79,34 @@ class EvidenceRepository {
                     uploadedAt = row[OrderItemEvidenceTable.uploadedAt].toString()
                 )
             }
+    }
+
+    /** Borra la fila si sigue existiendo Y cumple todas las restricciones
+     *  atomicamente: mismo pedido, es foto de entrega (orderItemId=null) y no
+     *  hubo transicion de estado entre check y delete. Devuelve la fila
+     *  borrada (para que el service borre el objeto en MinIO despues) o null
+     *  si algo cambio. Reemplaza el patron find + check + delete anterior que
+     *  tenia TOCTOU: si el pedido pasaba a ENTREGADO entre check y delete, la
+     *  evidencia se borraba igual. */
+    suspend fun deleteIfOrderLevel(id: UUID, orderId: UUID): EvidenceRow? = dbQuery {
+        val row = OrderItemEvidenceTable
+            .selectAll()
+            .where {
+                (OrderItemEvidenceTable.id eq id) and
+                    (OrderItemEvidenceTable.orderId eq orderId) and
+                    OrderItemEvidenceTable.orderItemId.isNull()
+            }
+            .firstOrNull()
+            ?: return@dbQuery null
+        val affected = OrderItemEvidenceTable.deleteWhere { OrderItemEvidenceTable.id eq id }
+        if (affected == 0) return@dbQuery null
+        EvidenceRow(
+            id = row[OrderItemEvidenceTable.id],
+            orderItemId = row[OrderItemEvidenceTable.orderItemId],
+            imageKey = row[OrderItemEvidenceTable.imageKey],
+            comentario = row[OrderItemEvidenceTable.comentario],
+            uploadedAt = row[OrderItemEvidenceTable.uploadedAt].toString()
+        )
     }
 
     data class EvidenceRow(

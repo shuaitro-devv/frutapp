@@ -107,6 +107,47 @@ class EvidenceService(
         )
     }
 
+    /** El repartidor borra una foto de entrega que subio. Restricciones:
+     *   - Pedido debe estar EN_DESPACHO y asignado a este repartidor (mismo
+     *     gate que subir — no puede borrar despues de confirmar entrega).
+     *   - Solo evidencia de ENTREGA (orderItemId=null) — no permitimos borrar
+     *     evidencias del picker aca (esas son de otro workflow y otro rol).
+     *  El delete de BD lo hace `repo.deleteIfOrderLevel` en UNA transaccion
+     *  atomica (evita TOCTOU si el pedido pasa a ENTREGADO entre el check y
+     *  el delete). Idempotente: si la fila ya no existe (borrada por otra
+     *  sesion o reintento) devolvemos NotFound — el cliente lo trata como
+     *  exito y limpia estado local. */
+    suspend fun deleteAsRepartidor(
+        repartidorId: UUID,
+        orderId: UUID,
+        evidenceId: UUID,
+        context: EventContext,
+    ) {
+        val puedeBorrar = dbQuery {
+            OrdersTable.selectAll().where {
+                (OrdersTable.id eq orderId) and
+                (OrdersTable.assignedRepartidorId eq repartidorId) and
+                (OrdersTable.status eq "EN_DESPACHO")
+            }.any()
+        }
+        if (!puedeBorrar) throw ValidationException("Este pedido no está en despacho o no es tuyo.")
+        val deleted = repo.deleteIfOrderLevel(evidenceId, orderId)
+            ?: throw NotFoundException("Evidencia no encontrada.")
+        // BD borrada; ahora limpiamos MinIO. Si falla queda el objeto huerfano
+        // en el bucket — aceptable. Al reves seria peor: fila apuntando a nada.
+        runCatching { storage.borrar(deleted.imageKey) }
+        events.logSafely(
+            eventType = "staff.delivery_evidence_deleted",
+            userId = repartidorId,
+            entityType = "customer_order",
+            entityId = orderId,
+            payload = buildJsonObject {
+                put("evidenceId", JsonPrimitive(evidenceId.toString()))
+            },
+            context = context,
+        )
+    }
+
     /** Lista las evidencias de un pedido para el cliente (tracking). El
      *  caller (route) ya verifica ownership del pedido por el clienteId. */
     suspend fun listByOrder(orderId: UUID): List<OrderItemEvidenceDto> =

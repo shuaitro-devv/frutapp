@@ -15,6 +15,7 @@ import io.ktor.server.auth.authenticate
 import io.ktor.server.request.receiveMultipart
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.utils.io.core.readBytes
@@ -118,6 +119,21 @@ fun Route.evidenceRoutes(service: EvidenceService) {
                 context = call.eventContext()
             )
             call.respond(HttpStatusCode.Created, cl.frutapp.shared.dto.UploadEvidenceResponse(evidencia = dto))
+        }
+
+        // El repartidor borra una foto de entrega que subio antes de confirmar
+        // la entrega (previsualiza y decide reemplazarla). Mismo gate del POST.
+        delete("/v1/staff/dispatches/{orderId}/evidence/{evidenceId}") {
+            if (!call.hasPermission("order:dispatch")) {
+                call.respond(HttpStatusCode.Forbidden); return@delete
+            }
+            val repartidorId = call.userId()
+            val orderId = call.parameters["orderId"]?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+                ?: throw ValidationException("orderId inválido.")
+            val evidenceId = call.parameters["evidenceId"]?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+                ?: throw ValidationException("evidenceId inválido.")
+            service.deleteAsRepartidor(repartidorId, orderId, evidenceId, call.eventContext())
+            call.respond(HttpStatusCode.NoContent)
         }
 
         get("/v1/orders/{orderId}/evidence") {

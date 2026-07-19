@@ -1,7 +1,10 @@
 package cl.frutapp.app.navigation.repartidor
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -101,26 +104,32 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
         var entregando by remember { mutableStateOf(false) }
         // Foto del paquete: opcional; el repartidor la saca antes de confirmar
         // la entrega para dejar evidencia de que dejo el paquete al cliente.
-        // "Cargando" bloquea el boton mientras corre el multipart al backend;
-        // "Adjuntada" cambia la card a estado exitoso.
-        var fotoSubida by remember { mutableStateOf(false) }
+        // Guardamos los bytes localmente para mostrar preview sin re-descargar
+        // desde MinIO, y el evidenceId para poder eliminarla del backend si
+        // el repartidor la descarta antes de confirmar. "subiendo" y "borrando"
+        // deshabilitan la card para evitar dobles taps mientras hay red en curso.
+        var fotoBytes by remember { mutableStateOf<ByteArray?>(null) }
+        var fotoEvidenceId by remember { mutableStateOf<String?>(null) }
         var subiendoFoto by remember { mutableStateOf(false) }
+        var borrandoFoto by remember { mutableStateOf(false) }
         val evidenceApi = remember { StaffEvidenceApi() }
         val selectorFoto = rememberSelectorImagenes { bytes ->
-            if (subiendoFoto) return@rememberSelectorImagenes
+            if (subiendoFoto || borrandoFoto) return@rememberSelectorImagenes
             // Fixture mock (pedidoId no es UUID): simulamos el flujo sin
             // pegarle al backend, si no el POST /staff/dispatches/{id}/evidence
             // devuelve 400 "orderId inválido" y confunde al repartidor de demo.
             if (!esBackendReal) {
-                fotoSubida = true
+                fotoBytes = bytes
+                fotoEvidenceId = "mock"
                 showToast("Foto adjuntada.")
                 return@rememberSelectorImagenes
             }
             subiendoFoto = true
             scope.launch {
                 runCatching { evidenceApi.subirEntrega(pedidoId, bytes, comentario = null) }
-                    .onSuccess {
-                        fotoSubida = true
+                    .onSuccess { dto ->
+                        fotoBytes = bytes
+                        fotoEvidenceId = dto.id
                         showToast("Foto adjuntada.")
                     }
                     .onFailure { e ->
@@ -130,6 +139,42 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
                     }
                 subiendoFoto = false
             }
+        }
+        val eliminarFoto = eliminarFoto@{
+            if (borrandoFoto || subiendoFoto) return@eliminarFoto
+            val id = fotoEvidenceId ?: return@eliminarFoto
+            // Mock: solo limpia estado local (no hay endpoint que llamar).
+            if (!esBackendReal || id == "mock") {
+                fotoBytes = null
+                fotoEvidenceId = null
+                return@eliminarFoto
+            }
+            borrandoFoto = true
+            scope.launch {
+                runCatching { evidenceApi.eliminarEntrega(pedidoId, id) }
+                    .onSuccess {
+                        fotoBytes = null
+                        fotoEvidenceId = null
+                    }
+                    .onFailure { e ->
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        // 404 = la evidencia ya no existe (borrada por otra
+                        // sesion o retry despues de un timeout donde la
+                        // primera pego bien). Idempotente: limpiamos estado
+                        // local y listo, sin toast de error.
+                        val es404 = e is io.ktor.client.plugins.ClientRequestException &&
+                            e.response.status == io.ktor.http.HttpStatusCode.NotFound
+                        if (es404) {
+                            fotoBytes = null
+                            fotoEvidenceId = null
+                        } else {
+                            ErrorReporter.report(screen = "RepartidorEntrega", action = "delete_evidence", error = e)
+                            showToast(mensajeAmigable(e, "eliminar la foto"))
+                        }
+                    }
+                borrandoFoto = false
+            }
+            Unit
         }
         Column(modifier = Modifier.fillMaxSize().background(FrutAppColors.Background).statusBarsPadding()) {
             Row(
@@ -162,17 +207,22 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
                 Spacer(Modifier.height(10.dp))
                 CodigoInputBoxes(codigo = codigoInput, onCodigo = { codigoInput = it })
                 Spacer(Modifier.height(14.dp))
-                AccionCard(
-                    icon = if (fotoSubida) Icons.Filled.Check else Icons.Filled.CameraAlt,
-                    titulo = when {
-                        subiendoFoto -> "Subiendo foto..."
-                        fotoSubida -> "Foto adjuntada"
-                        else -> "Tomar foto"
-                    },
-                    sub = if (fotoSubida) "El cliente vera la foto en su tracking"
-                          else "Toma foto al paquete entregado",
-                    onClick = { if (!subiendoFoto) selectorFoto.camara() },
-                )
+                val bytesLocales = fotoBytes
+                if (bytesLocales != null) {
+                    FotoEntregaPreviewCard(
+                        bytes = bytesLocales,
+                        borrando = borrandoFoto,
+                        onCambiar = { if (!borrandoFoto && !subiendoFoto) selectorFoto.camara() },
+                        onBorrar = eliminarFoto,
+                    )
+                } else {
+                    AccionCard(
+                        icon = Icons.Filled.CameraAlt,
+                        titulo = if (subiendoFoto) "Subiendo foto..." else "Tomar foto",
+                        sub = "Toma foto al paquete entregado",
+                        onClick = { if (!subiendoFoto) selectorFoto.camara() },
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
                 AccionCard(icon = Icons.Filled.Draw, titulo = "Firma del receptor", sub = "Solicitar firma en la pantalla", onClick = { showToast("Firma - Próximamente") })
                 Spacer(Modifier.height(12.dp))
@@ -187,10 +237,20 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
             ) {
                 FrutButtonOutline(text = "Problema", onClick = { navigator.push(RepartidorIncidenciaScreen(pedidoId)) }, modifier = Modifier.weight(1f))
                 FrutButtonPrimary(
-                    text = if (entregando) "Confirmando..." else "Confirmar entrega",
-                    enabled = !entregando && codigoInput.length == 4,
+                    // No dejamos disparar delivered mientras hay una operacion
+                    // de red por la foto (subiendo o borrando): si pega antes
+                    // el POST /delivered, el backend transiciona a ENTREGADO y
+                    // el POST /evidence rebota (status != EN_DESPACHO), quedando
+                    // la entrega sin foto y con un toast confuso al repartidor.
+                    text = when {
+                        entregando -> "Confirmando..."
+                        subiendoFoto -> "Espera la foto..."
+                        borrandoFoto -> "Espera la foto..."
+                        else -> "Confirmar entrega"
+                    },
+                    enabled = !entregando && !subiendoFoto && !borrandoFoto && codigoInput.length == 4,
                     onClick = {
-                        if (entregando) return@FrutButtonPrimary
+                        if (entregando || subiendoFoto || borrandoFoto) return@FrutButtonPrimary
                         if (codigoInput.length != 4) {
                             showToast("Pídele al cliente el código de 4 dígitos.")
                             return@FrutButtonPrimary
@@ -351,6 +411,69 @@ private fun ResumenPedidoCard(items: Int, unidades: Int) {
             Text("Resumen del pedido", color = FrutAppColors.Brand800, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             Text("$items productos · $unidades unidades", color = FrutAppColors.InkSoft, fontSize = 12.sp)
             Text("Sin incidencias", color = FrutAppColors.Brand600, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+/** Card con preview de la foto tomada por el repartidor. Toca la imagen para
+ *  sacar otra (reemplaza, borrando la anterior del backend antes). El botón X
+ *  arriba a la derecha la elimina sin dejar reemplazo. Mientras hay una
+ *  operación de red en curso (borrar), muestra un spinner sobre el thumb y
+ *  bloquea los taps para evitar dobles requests. */
+@Composable
+private fun FotoEntregaPreviewCard(
+    bytes: ByteArray,
+    borrando: Boolean,
+    onCambiar: () -> Unit,
+    onBorrar: () -> Unit,
+) {
+    val bitmap = androidx.compose.runtime.remember(bytes) { cl.frutapp.app.platform.decodeImagen(bytes) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White, RoundedCornerShape(14.dp))
+            .border(1.dp, FrutAppColors.Brand100, RoundedCornerShape(14.dp))
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .background(FrutAppColors.Brand50, RoundedCornerShape(10.dp))
+                .clickable(enabled = !borrando, onClick = onCambiar),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = "Foto del paquete",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(72.dp),
+                )
+            }
+            if (borrando) {
+                Box(modifier = Modifier.size(72.dp).background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(10.dp)))
+                androidx.compose.material3.CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Foto adjuntada", color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                text = if (borrando) "Eliminando..." else "El cliente la ve en su tracking. Toca para cambiarla.",
+                color = FrutAppColors.InkSoft,
+                fontSize = 12.sp,
+            )
+        }
+        Spacer(Modifier.width(6.dp))
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .background(FrutAppColors.Brand50, CircleShape)
+                .clickable(enabled = !borrando, onClick = onBorrar),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Filled.Close, contentDescription = "Eliminar foto", tint = FrutAppColors.Brand800, modifier = Modifier.size(18.dp))
         }
     }
 }
