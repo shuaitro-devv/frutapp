@@ -112,6 +112,9 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
         var fotoEvidenceId by remember { mutableStateOf<String?>(null) }
         var subiendoFoto by remember { mutableStateOf(false) }
         var borrandoFoto by remember { mutableStateOf(false) }
+        // Toggle del visor fullscreen: se abre al tocar el thumb, se cierra al
+        // tocar la imagen (mismo patron que VisorEvidenciaFullscreen del cliente).
+        var verFotoFullscreen by remember { mutableStateOf(false) }
         val evidenceApi = remember { StaffEvidenceApi() }
         val selectorFoto = rememberSelectorImagenes { bytes ->
             if (subiendoFoto || borrandoFoto) return@rememberSelectorImagenes
@@ -212,6 +215,7 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
                     FotoEntregaPreviewCard(
                         bytes = bytesLocales,
                         borrando = borrandoFoto,
+                        onVer = { if (!borrandoFoto) verFotoFullscreen = true },
                         onCambiar = { if (!borrandoFoto && !subiendoFoto) selectorFoto.camara() },
                         onBorrar = eliminarFoto,
                     )
@@ -277,6 +281,14 @@ class RepartidorEntregaScreen(private val pedidoId: String) : Screen {
                     modifier = Modifier.weight(1.4f)
                 )
             }
+        }
+        // Visor fullscreen del thumb — se abre al tocar la foto en la card.
+        // Toca la imagen para cerrar (mismo gesto que VisorEvidenciaFullscreen
+        // del cliente). Vive fuera del Column principal para overlay real por
+        // encima del bottom bar.
+        val fotoParaVer = fotoBytes
+        if (verFotoFullscreen && fotoParaVer != null) {
+            FotoEntregaFullscreen(bytes = fotoParaVer, onCerrar = { verFotoFullscreen = false })
         }
     }
 }
@@ -415,15 +427,16 @@ private fun ResumenPedidoCard(items: Int, unidades: Int) {
     }
 }
 
-/** Card con preview de la foto tomada por el repartidor. Toca la imagen para
- *  sacar otra (reemplaza, borrando la anterior del backend antes). El botón X
- *  arriba a la derecha la elimina sin dejar reemplazo. Mientras hay una
- *  operación de red en curso (borrar), muestra un spinner sobre el thumb y
- *  bloquea los taps para evitar dobles requests. */
+/** Card con preview de la foto tomada por el repartidor.
+ *   - Tap en el thumb → visor fullscreen (verla en grande).
+ *   - Botón "Cambiar" (texto verde) → abre la cámara para reemplazar.
+ *   - Botón X en la esquina → elimina la foto sin reemplazo.
+ *  Mientras el DELETE esta en vuelo el thumb muestra spinner y bloquea taps. */
 @Composable
 private fun FotoEntregaPreviewCard(
     bytes: ByteArray,
     borrando: Boolean,
+    onVer: () -> Unit,
     onCambiar: () -> Unit,
     onBorrar: () -> Unit,
 ) {
@@ -440,7 +453,7 @@ private fun FotoEntregaPreviewCard(
             modifier = Modifier
                 .size(72.dp)
                 .background(FrutAppColors.Brand50, RoundedCornerShape(10.dp))
-                .clickable(enabled = !borrando, onClick = onCambiar),
+                .clickable(enabled = !borrando, onClick = onVer),
             contentAlignment = Alignment.Center,
         ) {
             if (bitmap != null) {
@@ -460,10 +473,19 @@ private fun FotoEntregaPreviewCard(
         Column(modifier = Modifier.weight(1f)) {
             Text("Foto adjuntada", color = FrutAppColors.Brand800, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Text(
-                text = if (borrando) "Eliminando..." else "El cliente la ve en su tracking. Toca para cambiarla.",
+                text = if (borrando) "Eliminando..." else "El cliente la ve en su tracking. Toca la foto para verla en grande.",
                 color = FrutAppColors.InkSoft,
                 fontSize = 12.sp,
             )
+            if (!borrando) {
+                Text(
+                    text = "Cambiar",
+                    color = FrutAppColors.Brand600,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 4.dp).clickable(onClick = onCambiar),
+                )
+            }
         }
         Spacer(Modifier.width(6.dp))
         Box(
@@ -474,6 +496,35 @@ private fun FotoEntregaPreviewCard(
             contentAlignment = Alignment.Center,
         ) {
             Icon(Icons.Filled.Close, contentDescription = "Eliminar foto", tint = FrutAppColors.Brand800, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+/** Overlay fullscreen para ver la foto del thumb en grande. Toca para cerrar. */
+@Composable
+private fun FotoEntregaFullscreen(bytes: ByteArray, onCerrar: () -> Unit) {
+    val bitmap = androidx.compose.runtime.remember(bytes) { cl.frutapp.app.platform.decodeImagen(bytes) }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.94f))
+            .clickable(onClick = onCerrar),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = "Foto del paquete",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
+                )
+            }
+            Spacer(Modifier.height(20.dp))
+            Text("Toca para cerrar", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
         }
     }
 }
