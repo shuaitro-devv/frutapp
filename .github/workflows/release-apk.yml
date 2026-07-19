@@ -72,9 +72,22 @@ jobs:
           EOF
 
       - name: Build release APK
+        env:
+          # Tag del release. Para push de tag, ref_name = "v0.1.3". Para
+          # workflow_dispatch manual viene del input. Le sacamos la "v" para
+          # que Android muestre "0.1.3" en Ajustes → Apps → FrutApp.
+          # versionCode = numero de run del workflow (estrictamente creciente
+          # aunque se re-publique un tag).
+          APP_TAG: ${{ github.ref_name || github.event.inputs.tag }}
         run: |
           chmod +x ./gradlew
-          ./gradlew :app:assembleFrutappRelease --no-daemon --console=plain
+          VERSION_NAME="${APP_TAG#v}"
+          VERSION_CODE="${GITHUB_RUN_NUMBER}"
+          echo "Building versionName=${VERSION_NAME} versionCode=${VERSION_CODE}"
+          ./gradlew :app:assembleFrutappRelease \
+            --no-daemon --console=plain \
+            -PappVersionName="${VERSION_NAME}" \
+            -PappVersionCode="${VERSION_CODE}"
 
       # El nombre del asset incluye el tag para que sea claro en la UI de
       # Releases y para links directos por versión.

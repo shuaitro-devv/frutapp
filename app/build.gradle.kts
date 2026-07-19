@@ -96,8 +96,11 @@ android {
         applicationId = "cl.frutapp.app"
         minSdk = libs.versions.android.min.sdk.get().toInt()
         targetSdk = libs.versions.android.target.sdk.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0"
+        // El CI pasa -PappVersionName=<tag> al buildear un release desde un tag
+        // (workflow release-apk.yml). Sin ese prop caemos al fallback local
+        // para que el desarrollador vea 0.0.0-dev y sepa que no viene de tag.
+        versionCode = (findProperty("appVersionCode") as String?)?.toIntOrNull() ?: 1
+        versionName = (findProperty("appVersionName") as String?) ?: "0.0.0-dev"
         // Google Maps API key: se lee de local.properties (mapsApiKey=AIza...)
         // o env var MAPS_API_KEY (CI). Sin clave el mapa carga gris pero el
         // resto de la app funciona normal (mejor que crashear). El manifest
