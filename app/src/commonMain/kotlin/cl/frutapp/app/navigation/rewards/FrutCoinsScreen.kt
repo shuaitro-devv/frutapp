@@ -116,7 +116,7 @@ class FrutCoinsScreen : Screen {
                     Balance(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
 
                     codigoInvitacion?.let { codigo ->
-                        SectionTitle("Referí a un amigo", Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
+                        SectionTitle("Invita a un amigo", Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
                         CodigoInvitacionCard(
                             codigo = codigo,
                             modifier = Modifier.padding(horizontal = 20.dp),
@@ -329,7 +329,7 @@ private fun CodigoInvitacionCard(codigo: String, modifier: Modifier = Modifier) 
             .padding(14.dp),
     ) {
         Text(
-            "Compartí este código con tus amigos:",
+            "Comparte este código con tus amigos:",
             color = FrutAppColors.InkSoft,
             fontSize = 12.sp,
         )
@@ -351,7 +351,13 @@ private fun CodigoInvitacionCard(codigo: String, modifier: Modifier = Modifier) 
                 modifier = Modifier
                     .background(FrutAppColors.Brand600, RoundedCornerShape(10.dp))
                     .clickable {
-                        val texto = "¡Descarga FrutApp con mi código $codigo y ganamos FrutCoins los dos! De la cosecha a tu mesa 🥑🍅"
+                        // URL a la landing /invita/{codigo}: WhatsApp/Facebook
+                        // genera preview con og:image + og:title dinamicos
+                        // (nombre del referidor). Sin URL, el share seria
+                        // texto plano sin preview. La landing captura el
+                        // codigo y ademas activa el Google Play install
+                        // referrer para autocompletarlo al instalar la app.
+                        val texto = "¡Descarga FrutApp con mi código $codigo y ganamos FrutCoins los dos! De la cosecha a tu mesa 🥑🍅\n\nhttps://frutapp.cl/invita/$codigo"
                         cl.frutapp.app.ui.shareText(texto)
                     }
                     .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -361,7 +367,7 @@ private fun CodigoInvitacionCard(codigo: String, modifier: Modifier = Modifier) 
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            "Cuando tu amigo se registre con tu código y complete su primer pedido, tú recibís 200 FrutCoins y él/ella recibe 100.",
+            "Cuando tu amigo se registre con tu código y complete su primer pedido, tú recibes 200 FrutCoins y él/ella recibe 100.",
             color = FrutAppColors.InkSoft,
             fontSize = 11.sp,
         )

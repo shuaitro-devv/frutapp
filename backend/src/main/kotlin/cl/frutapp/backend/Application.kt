@@ -164,8 +164,12 @@ fun Application.module() {
     // deshabilitado silenciosamente (util en CI/dev sin MinIO local).
     val storageService: StorageService? = loadStorageService(this)
     val avatarService = storageService?.let { AvatarService(it) }
+    // Repositorio de users compartido — UserRepository es sin estado, pero
+    // extraerlo evita 3 instanciaciones + lo hace pasable a configureRouting
+    // para el modulo publico de referrals (verify de codigos sin auth).
+    val userRepository = UserRepository()
     val authService = AuthService(
-        users = UserRepository(),
+        users = userRepository,
         refreshTokens = RefreshTokenRepository(),
         passwordResetTokens = PasswordResetTokenRepository(),
         emailVerificationTokens = EmailVerificationTokenRepository(),
@@ -208,7 +212,7 @@ fun Application.module() {
         chatUnreadBatch = { ids, rol -> chatRepository.contarNoLeidosBatch(ids, rol) },
     )
     val adminUserService = AdminUserService(
-        UserRepository(), rbacRepository, PasswordResetTokenRepository(), tokenService, emailSender
+        userRepository, rbacRepository, PasswordResetTokenRepository(), tokenService, emailSender
     )
     val adminOrderService = AdminOrderService(orderRepository)
     val configService = ConfigService(configRepository)
@@ -260,7 +264,7 @@ fun Application.module() {
         webpayConfig.returnUrlBase
     )
     val referralBonusService = cl.frutapp.backend.modules.referrals.ReferralBonusService(
-        users = UserRepository(),
+        users = userRepository,
         events = userEventService,
     )
     val staffOrderService = StaffOrderService(
@@ -286,6 +290,7 @@ fun Application.module() {
         reviewService,
         rewardService,
         basketService,
+        userRepository,
     )
 
     // Refresca la config de negocio cada 60s (cambios en app_config sin redeploy).

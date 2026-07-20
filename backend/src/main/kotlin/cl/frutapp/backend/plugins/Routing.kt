@@ -9,7 +9,9 @@ import cl.frutapp.backend.modules.admin.AdminUserService
 import cl.frutapp.backend.modules.admin.adminOrderRoutes
 import cl.frutapp.backend.modules.admin.adminUserRoutes
 import cl.frutapp.backend.modules.auth.AuthService
+import cl.frutapp.backend.modules.auth.UserRepository
 import cl.frutapp.backend.modules.auth.authRoutes
+import cl.frutapp.backend.modules.referrals.referralRoutes
 import cl.frutapp.backend.modules.catalog.CatalogService
 import cl.frutapp.backend.modules.catalog.catalogRoutes
 import cl.frutapp.backend.modules.health.healthRoutes
@@ -65,10 +67,12 @@ fun Application.configureRouting(
     reviewService: ReviewService,
     rewardService: RewardService,
     basketService: BasketService,
+    userRepository: UserRepository,
 ) {
     routing {
         healthRoutes()
         authRoutes(authService, userEventService)
+        referralRoutes(userRepository)
         catalogRoutes(catalogService)
         orderRoutes(orderService)
         staffOrderRoutes(staffOrderService, catalogService)
