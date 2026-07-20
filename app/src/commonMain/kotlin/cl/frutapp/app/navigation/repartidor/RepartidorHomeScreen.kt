@@ -76,6 +76,16 @@ class RepartidorHomeScreen : Screen {
             )
         }
 
+        // Scanner del voucher del pedido: el repartidor escanea el QR/barcode
+        // pegado a la caja al retirar en bodega para confirmar el pedido
+        // fisico. Al leer muestra el codigo — integrar con matching de
+        // pedido en cola es follow-up.
+        val scanner = cl.frutapp.app.platform.rememberScanner(
+            prompt = "Apunta al QR del pedido",
+        ) { codigo ->
+            showToast("Código leído: $codigo")
+        }
+
         // Centro destacado del repartidor: las acciones recurrentes en ruta son navegar al
         // destino, marcar llegada y reportar problemas. Por ahora todo no-op con toast.
         val center = StaffCenterButton(
@@ -88,7 +98,7 @@ class RepartidorHomeScreen : Screen {
                     showToast("Navegar - Próximamente")
                 },
                 StaffQuickAction(Icons.Filled.QrCodeScanner, "Escanear entrega") {
-                    showToast("Escanear - Próximamente")
+                    scanner.escanear()
                 },
                 StaffQuickAction(Icons.Filled.ReportProblem, "Reportar incidencia") {
                     showToast("Reportar - Próximamente")

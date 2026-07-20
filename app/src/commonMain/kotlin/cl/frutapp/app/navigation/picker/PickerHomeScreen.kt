@@ -76,6 +76,16 @@ class PickerHomeScreen : Screen {
             )
         }
 
+        // Scanner de QR/barcode: para verificar que el picker agarra el
+        // producto correcto (barcode del envase) o para retomar un pedido
+        // rapido por su numero. Al leer, muestra el codigo — la integracion
+        // con matching de pedidos es follow-up del wire inicial.
+        val scanner = cl.frutapp.app.platform.rememberScanner(
+            prompt = "Apunta al código del producto o pedido",
+        ) { codigo ->
+            showToast("Código leído: $codigo")
+        }
+
         // Centro destacado: por ahora todo no-op con toast 'Próximamente'. Cuando esten
         // los flujos reales se cablean a: tomar siguiente pedido, escanear codigo y reportar
         // problema (estas son las acciones recurrentes del picker durante el turno).
@@ -89,7 +99,7 @@ class PickerHomeScreen : Screen {
                     showToast("Tomar siguiente - Próximamente")
                 },
                 StaffQuickAction(Icons.Filled.QrCodeScanner, "Escanear código") {
-                    showToast("Escanear - Próximamente")
+                    scanner.escanear()
                 },
                 StaffQuickAction(Icons.Filled.ReportProblem, "Reportar problema") {
                     showToast("Reportar - Próximamente")

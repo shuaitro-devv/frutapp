@@ -77,6 +77,10 @@ kotlin {
             // no autorizamos en T&C. Solo el messaging.
             implementation(platform("com.google.firebase:firebase-bom:33.4.0"))
             implementation("com.google.firebase:firebase-messaging-ktx")
+            // ZXing + CameraX: escaner de QR/barcodes para picker (verificar
+            // producto en el picklist) y repartidor (voucher de retiro). Es
+            // solo Android; el commonMain expone la interfaz via expect fun.
+            implementation(libs.zxing.android.embedded)
             // .await() sobre Task<T> de Firebase desde corutinas.
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.0")
             // GPS / ubicacion: Fused Location Provider (Google Play Services).

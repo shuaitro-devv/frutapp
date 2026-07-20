@@ -40,6 +40,9 @@ hikari = "5.1.0"
 # Storage (MinIO/S3)
 minio = "8.5.10"
 
+# Escaner QR/barcode (app, wrapper de ZXing + CameraX)
+zxing-android-embedded = "4.3.0"
+
 # Navigation app
 voyager = "1.0.0"
 
@@ -109,6 +112,9 @@ flyway-postgres = { module = "org.flywaydb:flyway-database-postgresql", version.
 # === Voyager (navigation app) ===
 voyager-navigator = { module = "cafe.adriel.voyager:voyager-navigator", version.ref = "voyager" }
 voyager-transitions = { module = "cafe.adriel.voyager:voyager-transitions", version.ref = "voyager" }
+
+# === QR / barcode scanner (androidMain) ===
+zxing-android-embedded = { module = "com.journeyapps:zxing-android-embedded", version.ref = "zxing-android-embedded" }
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
