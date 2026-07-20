@@ -259,10 +259,19 @@ fun Application.module() {
         else "Webpay: PRODUCCION habilitada. returnUrl={}/v1/pagos/webpay/retorno",
         webpayConfig.returnUrlBase
     )
+    val referralBonusService = cl.frutapp.backend.modules.referrals.ReferralBonusService(
+        users = UserRepository(),
+        events = userEventService,
+    )
     val staffOrderService = StaffOrderService(
         userEventService,
         notificationDispatcher,
-        avatarUrlResolver = avatarService?.let { svc -> { uid -> svc.urlFor(uid) } }
+        avatarUrlResolver = avatarService?.let { svc -> { uid -> svc.urlFor(uid) } },
+        referralBonusHook = { orderId ->
+            runCatching { referralBonusService.tryAwardOnFirstDelivery(orderId) }
+                .onFailure { e -> environment.log.warn("Referral bonus fallo para pedido {}: {}", orderId, e.message) }
+            Unit
+        },
     )
 
     configureSecurity(jwtConfig, tokenService)

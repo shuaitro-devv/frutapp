@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -76,6 +77,9 @@ class FrutCoinsScreen : Screen {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         var movimientos by remember { mutableStateOf<List<FrutCoinsEntryDto>>(emptyList()) }
+        // Codigo de invitacion propio. Se lee del /auth/me (backend lo genera
+        // lazy si el user es pre-V42). Null hasta que carga; el card lo esconde.
+        var codigoInvitacion by remember { mutableStateOf<String?>(null) }
         LaunchedEffect(Unit) {
             runCatching { OrderApi().frutCoins() }
                 .onSuccess {
@@ -85,6 +89,8 @@ class FrutCoinsScreen : Screen {
                 .onFailure { e ->
                     cl.frutapp.app.ui.ErrorReporter.report(screen = "FrutCoins", action = "load_balance", error = e)
                 }
+            runCatching { cl.frutapp.app.data.remote.AuthApi().me() }
+                .onSuccess { codigoInvitacion = it.codigoInvitacion }
         }
         val ganar = listOf(
             FormaGanar(Icons.Filled.ShoppingCart, "Por cada compra", "+50"),
@@ -108,6 +114,14 @@ class FrutCoinsScreen : Screen {
 
                 Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                     Balance(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
+
+                    codigoInvitacion?.let { codigo ->
+                        SectionTitle("Referí a un amigo", Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
+                        CodigoInvitacionCard(
+                            codigo = codigo,
+                            modifier = Modifier.padding(horizontal = 20.dp),
+                        )
+                    }
 
                     SectionTitle("Cómo ganar FrutCoins", Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
                     Column(modifier = Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -302,6 +316,54 @@ internal fun MovimientoRow(item: FrutCoinsEntryDto) {
             color = if (positivo) FrutAppColors.Brand600 else FrutAppColors.Error,
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun CodigoInvitacionCard(codigo: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(FrutAppColors.Brand50, RoundedCornerShape(14.dp))
+            .padding(14.dp),
+    ) {
+        Text(
+            "Compartí este código con tus amigos:",
+            color = FrutAppColors.InkSoft,
+            fontSize = 12.sp,
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                codigo,
+                color = FrutAppColors.Brand800,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .weight(1f)
+                    .background(Color.White, RoundedCornerShape(10.dp))
+                    .padding(vertical = 10.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+            Spacer(Modifier.width(10.dp))
+            Box(
+                modifier = Modifier
+                    .background(FrutAppColors.Brand600, RoundedCornerShape(10.dp))
+                    .clickable {
+                        val texto = "¡Descarga FrutApp con mi código $codigo y ganamos FrutCoins los dos! De la cosecha a tu mesa 🥑🍅"
+                        cl.frutapp.app.ui.shareText(texto)
+                    }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+            ) {
+                Text("Compartir", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Cuando tu amigo se registre con tu código y complete su primer pedido, tú recibís 200 FrutCoins y él/ella recibe 100.",
+            color = FrutAppColors.InkSoft,
+            fontSize = 11.sp,
         )
     }
 }

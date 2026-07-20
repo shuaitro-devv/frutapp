@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
@@ -68,6 +69,7 @@ class RegisterScreen : Screen {
         var password by remember { mutableStateOf("") }
         var confirm by remember { mutableStateOf("") }
         var acceptTerms by rememberSaveable { mutableStateOf(false) }
+        var codigoInv by rememberSaveable { mutableStateOf("") }
         val scope = rememberCoroutineScope()
         var loading by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
@@ -140,6 +142,17 @@ class RegisterScreen : Screen {
                     leadingIcon = Icons.Default.Lock,
                     isPassword = true
                 )
+                FrutTextField(
+                    value = codigoInv,
+                    // Codigo 8 chars alfanumericos upper. Filtramos + normalizamos
+                    // en input asi el user no tiene que preocuparse si lo pega
+                    // con espacios o guiones.
+                    onValueChange = { nuevo ->
+                        codigoInv = nuevo.filter { it.isLetterOrDigit() }.uppercase().take(8)
+                    },
+                    label = "Código de invitación (opcional)",
+                    leadingIcon = Icons.Default.PersonAdd,
+                )
             }
 
             Row(
@@ -197,7 +210,8 @@ class RegisterScreen : Screen {
                                     email = email.trim(),
                                     phone = phone.trim().ifBlank { null },
                                     password = password,
-                                    consentVersion = LEGAL_VERSION
+                                    consentVersion = LEGAL_VERSION,
+                                    codigoInvitacion = codigoInv.ifBlank { null },
                                 )
                             )
                         }

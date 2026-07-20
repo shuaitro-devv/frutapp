@@ -92,14 +92,23 @@ class AuthService(
             rbac.assignRole(existente.id, "cliente")
             existente.copy(name = nombreLimpio, phone = telefonoLimpio)
         } else {
+            // Resuelve referrer: si el codigo existe, guardamos el link. Si
+            // no existe (typo), ignoramos silenciosamente para no bloquear
+            // el registro. Codigo se compara case-sensitive (siempre
+            // upper-case por diseño).
+            val codigoLimpio = req.codigoInvitacion?.trim()?.uppercase()?.ifBlank { null }
+            val referrer = codigoLimpio?.let { users.findByCodigoInvitacion(it) }
             val nuevo = users.create(
                 name = nombreLimpio,
                 email = email,
                 phone = telefonoLimpio,
                 passwordHash = PasswordHasher.hash(req.password),
                 role = "CUSTOMER",
-                consentVersion = req.consentVersion
+                consentVersion = req.consentVersion,
+                referredByUserId = referrer?.id,
             )
+            // Genera codigo propio para que el nuevo user pueda referir tambien.
+            runCatching { users.ensureCodigoInvitacion(nuevo.id) }
             rbac.assignRole(nuevo.id, "cliente")
             nuevo
         }
@@ -175,7 +184,10 @@ class AuthService(
         val row = users.findById(uuid) ?: throw UnauthorizedException()
         val roles = rbac.rolesOf(row.id).ifEmpty { listOf("cliente") }
         val avatarUrl = avatarUrlResolver?.invoke(uuid)
-        return row.toDto().copy(roles = roles, avatarUrl = avatarUrl)
+        // Genera codigo de invitacion lazy: si el user es pre-V42 o el trigger
+        // del signup fallo, la primera vez que abre su perfil lo obtiene.
+        val codigo = runCatching { users.ensureCodigoInvitacion(uuid) }.getOrNull()
+        return row.toDto().copy(roles = roles, avatarUrl = avatarUrl, codigoInvitacion = codigo)
     }
 
     /** Genera y "envía" un código de recuperación. No revela si el correo existe. */

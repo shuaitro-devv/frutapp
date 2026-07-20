@@ -46,7 +46,9 @@ class UserRepository {
         phone: String?,
         passwordHash: String,
         role: String,
-        consentVersion: String? = null
+        consentVersion: String? = null,
+        codigoInvitacion: String? = null,
+        referredByUserId: UUID? = null,
     ): UserRow = dbQuery {
         val newId = UUID.randomUUID()
         UsersTable.insert {
@@ -61,8 +63,67 @@ class UserRepository {
                 it[UsersTable.consentVersion] = consentVersion
                 it[UsersTable.consentAt] = Clock.System.now()
             }
+            it[UsersTable.codigoInvitacion] = codigoInvitacion
+            it[UsersTable.referredByUserId] = referredByUserId
+            it[UsersTable.referralRewardGranted] = false
         }
         UserRow(newId, name, email, phone, passwordHash, role, emailVerified = false)
+    }
+
+    /** Busca un usuario por su codigo de invitacion. Case-sensitive porque
+     *  el codigo es siempre upper-case + charset restringido. Null si no
+     *  matchea (el signup ignora silenciosamente codigos invalidos para no
+     *  bloquear el registro por typos). */
+    suspend fun findByCodigoInvitacion(codigo: String): UserRow? = dbQuery {
+        UsersTable.selectAll()
+            .where { (UsersTable.codigoInvitacion eq codigo) and UsersTable.deletedAt.isNull() }
+            .singleOrNull()
+            ?.let { toRow(it) }
+    }
+
+    /** Devuelve el codigo del usuario, generandolo si es null (backfill lazy
+     *  para casos edge donde la migracion no lo genero). Idempotente. */
+    suspend fun ensureCodigoInvitacion(userId: UUID): String = dbQuery {
+        val existente = UsersTable.select(UsersTable.codigoInvitacion)
+            .where { UsersTable.id eq userId }
+            .singleOrNull()?.get(UsersTable.codigoInvitacion)
+        if (existente != null) return@dbQuery existente
+        // Retry ~5x en caso de colision (con 31^8 combinaciones, colision es raro).
+        repeat(5) {
+            val candidato = generarCodigo()
+            val filas = UsersTable.update({ UsersTable.id eq userId }) {
+                it[UsersTable.codigoInvitacion] = candidato
+            }
+            if (filas > 0) return@dbQuery candidato
+        }
+        error("No se pudo generar codigo de invitacion")
+    }
+
+    /** Marca la recompensa como otorgada. Idempotente (WHERE-guarded contra
+     *  falso true concurrente); devuelve true si esta llamada fue la que la
+     *  seteo, false si ya estaba true (caller no debe pagar de nuevo). */
+    suspend fun claimReferralReward(userId: UUID): Boolean = dbQuery {
+        val filas = UsersTable.update({
+            (UsersTable.id eq userId) and (UsersTable.referralRewardGranted eq false)
+        }) {
+            it[UsersTable.referralRewardGranted] = true
+            it[UsersTable.updatedAt] = Clock.System.now()
+        }
+        filas > 0
+    }
+
+    /** Devuelve (referredById, alreadyGranted) para un usuario. Null si el
+     *  user no existe. */
+    suspend fun referralInfoOf(userId: UUID): Pair<UUID?, Boolean>? = dbQuery {
+        UsersTable.select(UsersTable.referredByUserId, UsersTable.referralRewardGranted)
+            .where { UsersTable.id eq userId }
+            .singleOrNull()
+            ?.let { it[UsersTable.referredByUserId] to it[UsersTable.referralRewardGranted] }
+    }
+
+    private fun generarCodigo(): String {
+        val charset = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+        return (1..8).map { charset[kotlin.random.Random.nextInt(charset.length)] }.joinToString("")
     }
 
     suspend fun markEmailVerified(userId: UUID) = dbQuery {

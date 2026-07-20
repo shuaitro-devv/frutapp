@@ -10,7 +10,12 @@ data class RegisterRequest(
     val phone: String? = null,
     val password: String,
     /** Versión de T&C/Política aceptada al registrarse (para registrar el consentimiento). */
-    val consentVersion: String? = null
+    val consentVersion: String? = null,
+    /** V42: código de invitación opcional. Si es válido, el nuevo usuario
+     *  queda linkeado al que lo refirió; al completar su primer pedido
+     *  ENTREGADO ambos reciben FrutCoins. Si el código no existe se ignora
+     *  silenciosamente — no bloqueamos el registro por un typo. */
+    val codigoInvitacion: String? = null,
 )
 
 /** Cuerpo de login. */
@@ -81,7 +86,13 @@ data class UserDto(
     /** URL presignada de la foto de perfil. Null si el user no subió foto. Tiene
      *  TTL de 1h — el cliente refresca llamando a `/v1/auth/me`. Default null para
      *  retro-compatibilidad con clientes viejos. */
-    val avatarUrl: String? = null
+    val avatarUrl: String? = null,
+    /** V42: código de invitación del propio usuario (8 chars). Lo comparte
+     *  desde FrutCoinsScreen para invitar amigos y ganar FrutCoins cuando
+     *  ellos completen su primer pedido. Puede ser null en usuarios legacy
+     *  que aún no lo tienen generado (se genera lazy la primera vez que
+     *  el user lo mire en su perfil). */
+    val codigoInvitacion: String? = null,
 )
 
 /** Respuesta de auth: usuario + par de tokens. */

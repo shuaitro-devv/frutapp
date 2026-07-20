@@ -23,6 +23,10 @@ object UsersTable : Table("app_user") {
     // La URL presignada se genera al vuelo en cada GET /v1/auth/me — no la guardamos
     // en BD porque tiene TTL de 1h, los `object_key` son estables.
     val avatarObjectKey = text("avatar_object_key").nullable()
+    // V42: programa de referidos.
+    val codigoInvitacion = text("codigo_invitacion").nullable()
+    val referredByUserId = uuid("referred_by_user_id").nullable()
+    val referralRewardGranted = bool("referral_reward_granted")
     override val primaryKey = PrimaryKey(id)
 }
 

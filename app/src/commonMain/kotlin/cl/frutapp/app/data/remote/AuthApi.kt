@@ -12,6 +12,7 @@ import cl.frutapp.shared.dto.ResetPasswordRequest
 import cl.frutapp.shared.dto.VerifyEmailRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -69,4 +70,10 @@ class AuthApi(
             contentType(ContentType.Application.Json)
             setBody(req)
         }.body()
+
+    /** Devuelve los datos del usuario autenticado. Necesario para leer
+     *  campos derivados del backend (codigoInvitacion, avatarUrl actualizado)
+     *  fuera del ciclo login/refresh. */
+    suspend fun me(): cl.frutapp.shared.dto.UserDto =
+        client.get("$baseUrl/v1/auth/me").body()
 }

@@ -58,7 +58,11 @@ class StaffOrderService(
     /** Para los flows de peso variable (setItemPeso, complete con discriminacion
      *  por tolerancia). Usa los helpers tipados del repo en vez de SQL inline para
      *  evitar duplicar logica de calculo. */
-    private val orderRepository: OrderRepository = OrderRepository()
+    private val orderRepository: OrderRepository = OrderRepository(),
+    /** Hook opcional: fire-and-forget cuando un pedido pasa a ENTREGADO, para
+     *  chequear si aplica el bono de referido (primera entrega del cliente).
+     *  Null en tests. */
+    private val referralBonusHook: (suspend (orderId: UUID) -> Unit)? = null,
 ) {
 
     /**
@@ -799,6 +803,12 @@ class StaffOrderService(
             entityType = "order", entityId = orderId, context = context)
         // Push al cliente: "Pedido entregado".
         notifications?.onOrderTransition(orderId, OrderStatus.EN_DESPACHO, OrderStatus.ENTREGADO)
+        // Programa de referidos: si el cliente que entrego fue referido por
+        // alguien Y esta entrega es su PRIMERA (referral_reward_granted=false),
+        // otorgamos bonos. Fire-and-forget del hook para no bloquear
+        // el deliveredDispatch aunque el bonus falle (los recovery jobs
+        // pueden re-intentar leyendo referralRewardGranted=false).
+        referralBonusHook?.invoke(orderId)
     }
 
     /** El repartidor pausa el despacho en curso (semaforo largo, emergencia,
