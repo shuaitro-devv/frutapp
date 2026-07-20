@@ -80,6 +80,9 @@ jobs:
           # con tag "main". Para push de tag, inputs.tag es null y cae a
           # ref_name que sí es el tag.
           APP_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          # Google Maps API key. Si el secret no esta seteado el APK se
+          # compila igual pero el mapa se vera gris (no crashea la app).
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
         run: |
           chmod +x ./gradlew
           VERSION_NAME="${APP_TAG#v}"

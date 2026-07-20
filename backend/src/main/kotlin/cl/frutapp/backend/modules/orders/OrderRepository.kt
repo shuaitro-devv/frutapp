@@ -686,6 +686,14 @@ class OrderRepository {
             it[updatedAt] = Clock.System.now()
             if (totalFinal != null) it[OrdersTable.totalFinal] = totalFinal
             if (paymentStatus != null) it[OrdersTable.paymentStatus] = paymentStatus.name
+            // Al salir de EN_DESPACHO (ENTREGADO o CANCELADO) limpiamos la
+            // pausa. Sin esto, un pedido pausado que se cancela quedaria
+            // con el flag setteado indefinidamente en BD (irrelevante
+            // funcionalmente pero sucio para queries futuras).
+            if (from == OrderStatus.EN_DESPACHO && (to == OrderStatus.ENTREGADO || to == OrderStatus.CANCELADO)) {
+                it[dispatchPausedAt] = null
+                it[dispatchPauseReason] = null
+            }
         }
         if (updated == 0) {
             throw cl.frutapp.backend.error.ConflictException(
@@ -775,7 +783,33 @@ class OrderRepository {
         // OBLIGADO a pedirselo al cliente cara a cara para confirmar.
         deliveryCode = if (incluirDeliveryCode && r[OrdersTable.status] == "EN_DESPACHO")
             r[OrdersTable.deliveryCode] else null,
+        // Pausa del despacho: expuesta a todos (cliente para el banner, staff
+        // para saber el estado). Solo tiene sentido en EN_DESPACHO — para
+        // otros status se ignora en cliente.
+        dispatchPausedAt = r[OrdersTable.dispatchPausedAt]?.toString(),
+        dispatchPauseReason = r[OrdersTable.dispatchPauseReason],
     )
+
+    /** Setea/limpia la pausa del despacho para un pedido. [pausar] = true
+     *  guarda now + reason; false limpia ambos campos. Solo aplica si el
+     *  pedido esta EN_DESPACHO y asignado al repartidor. Devuelve las filas
+     *  afectadas (0 = pedido no existe / no en despacho / no es tuyo). */
+    suspend fun setDispatchPaused(
+        orderId: UUID,
+        repartidorId: UUID,
+        pausar: Boolean,
+        reason: String?,
+    ): Int = dbQuery {
+        val now = if (pausar) Clock.System.now() else null
+        OrdersTable.update({
+            (OrdersTable.id eq orderId) and
+                (OrdersTable.assignedRepartidorId eq repartidorId) and
+                (OrdersTable.status eq "EN_DESPACHO")
+        }) {
+            it[OrdersTable.dispatchPausedAt] = now
+            it[OrdersTable.dispatchPauseReason] = if (pausar) reason else null
+        }
+    }
 
     companion object {
         // Codigo de la pickup_location por defecto (seedeada en V12). Cuando exista

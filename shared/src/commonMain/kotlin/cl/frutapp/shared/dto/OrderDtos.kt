@@ -110,6 +110,14 @@ data class OrderDto(
      *  cara y el backend lo valida al confirmar entrega. NULL para todos los
      *  demas casos (otros status, endpoints staff, pedidos pre-V36). */
     val deliveryCode: String? = null,
+    /** Timestamp ISO cuando el repartidor pauso el despacho, si esta pausado.
+     *  NULL si no esta pausado (comportamiento default). El cliente ve un
+     *  banner "Pausado momentaneamente" en su tracking mientras este campo
+     *  no sea null. */
+    val dispatchPausedAt: String? = null,
+    /** Razon libre de la pausa (ver DispatchPauseReason en la app). NULL
+     *  cuando el pedido no esta pausado. */
+    val dispatchPauseReason: String? = null,
 )
 
 @Serializable
@@ -213,6 +221,15 @@ data class OrderSummaryDto(
 @Serializable
 data class ConfirmarEntregaRequest(
     val codigo: String,
+)
+
+/** Body para POST /v1/staff/orders/dispatch/{id}/pause. El repartidor pausa
+ *  o reanuda el despacho con el mismo endpoint (toggle). Reason obligatorio
+ *  al pausar (semaforo, emergencia, otro), ignorado al reanudar. */
+@Serializable
+data class PausarDespachoRequest(
+    val pausar: Boolean,
+    val reason: String? = null,
 )
 
 /** Saldo de FrutCoins (derivado del ledger) + movimientos. */
@@ -339,7 +356,11 @@ data class StaffDispatchDetailDto(
     val telefono: String? = null,
     val assignedAt: String? = null,
     val assignedToMe: Boolean = false,
-    val items: List<StaffOrderItemDto>
+    val items: List<StaffOrderItemDto>,
+    /** Timestamp cuando el repartidor pauso el despacho (null = no pausado).
+     *  La app del repartidor lo usa para renderizar "Pausar" o "Reanudar". */
+    val dispatchPausedAt: String? = null,
+    val dispatchPauseReason: String? = null,
 )
 
 /** Respuesta de "tomar pedido": OK o conflicto. */

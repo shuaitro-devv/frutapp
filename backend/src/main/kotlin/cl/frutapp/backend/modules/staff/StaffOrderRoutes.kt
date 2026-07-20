@@ -225,6 +225,27 @@ fun Route.staffOrderRoutes(staffOrders: StaffOrderService, catalogService: Catal
                 staffOrders.deliveredDispatch(repartidorId, orderId, body?.codigo, call.eventContext())
                 call.respond(HttpStatusCode.NoContent)
             }
+
+            // POST /v1/staff/orders/dispatch/{id}/pause -> pausa/reanuda el
+            // despacho. Body: { pausar: true|false, reason: "Semaforo largo" }.
+            // Solo el repartidor asignado + pedido EN_DESPACHO puede pausar.
+            post("/dispatch/{id}/pause") {
+                if (!call.hasPermission("order:dispatch")) {
+                    call.respond(HttpStatusCode.Forbidden)
+                    return@post
+                }
+                val repartidorId = call.userId()
+                val orderId = call.orderIdParam()
+                val body = call.receive<cl.frutapp.shared.dto.PausarDespachoRequest>()
+                staffOrders.togglePauseDispatch(
+                    repartidorId = repartidorId,
+                    orderId = orderId,
+                    pausar = body.pausar,
+                    reason = body.reason,
+                    context = call.eventContext(),
+                )
+                call.respond(HttpStatusCode.NoContent)
+            }
         }
     }
 }

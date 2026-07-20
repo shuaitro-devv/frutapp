@@ -693,7 +693,9 @@ class StaffOrderService(
             telefono = telefono,
             assignedAt = orderRow[OrdersTable.assignedAt]?.toString(),
             assignedToMe = orderRow[OrdersTable.assignedRepartidorId] == repartidorId,
-            items = items
+            items = items,
+            dispatchPausedAt = orderRow[OrdersTable.dispatchPausedAt]?.toString(),
+            dispatchPauseReason = orderRow[OrdersTable.dispatchPauseReason],
         )
     }
 
@@ -797,6 +799,39 @@ class StaffOrderService(
             entityType = "order", entityId = orderId, context = context)
         // Push al cliente: "Pedido entregado".
         notifications?.onOrderTransition(orderId, OrderStatus.EN_DESPACHO, OrderStatus.ENTREGADO)
+    }
+
+    /** El repartidor pausa el despacho en curso (semaforo largo, emergencia,
+     *  etc). Setea dispatch_paused_at + reason en la fila del pedido y notifica
+     *  al cliente. Se llama con [pausar]=false para reanudar (mismo endpoint
+     *  con toggle, mas simple que 2 endpoints separados). Solo el repartidor
+     *  asignado + pedido EN_DESPACHO puede pausar. */
+    suspend fun togglePauseDispatch(
+        repartidorId: UUID,
+        orderId: UUID,
+        pausar: Boolean,
+        reason: String?,
+        context: EventContext,
+    ) {
+        val filas = orderRepository.setDispatchPaused(orderId, repartidorId, pausar, reason?.trim()?.take(120))
+        if (filas == 0) {
+            throw ValidationException("Este pedido no está en despacho o no es tuyo.")
+        }
+        val eventType = if (pausar) "staff.dispatch_paused" else "staff.dispatch_resumed"
+        events.logSafely(
+            eventType = eventType,
+            userId = repartidorId,
+            entityType = "order",
+            entityId = orderId,
+            payload = if (pausar && reason != null) buildJsonObject { put("reason", JsonPrimitive(reason)) }
+                      else kotlinx.serialization.json.JsonObject(emptyMap()),
+            context = context,
+        )
+        // Notificar al cliente. Usamos onOrderPaused / onOrderResumed
+        // dedicados (no reusamos onOrderTransition porque no hay cambio de
+        // status y el mensaje es distinto).
+        if (pausar) notifications?.onOrderPaused(orderId, reason)
+        else notifications?.onOrderResumed(orderId)
     }
 
     /** Codigo de 4 digitos (1000-9999) para el handshake fisico de entrega.

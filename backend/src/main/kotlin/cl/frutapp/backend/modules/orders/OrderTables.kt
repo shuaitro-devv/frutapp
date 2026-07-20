@@ -37,6 +37,10 @@ object OrdersTable : Table("customer_order") {
     // envia en /delivered y el backend valida match antes de transicionar a
     // ENTREGADO.
     val deliveryCode = text("delivery_code").nullable()
+    // V41: pausa del despacho — timestamp cuando el repartidor pauso, se
+    // limpia al reanudar o al ENTREGAR/CANCELAR. NULL = no pausado.
+    val dispatchPausedAt = timestamp("dispatch_paused_at").nullable()
+    val dispatchPauseReason = text("dispatch_pause_reason").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 

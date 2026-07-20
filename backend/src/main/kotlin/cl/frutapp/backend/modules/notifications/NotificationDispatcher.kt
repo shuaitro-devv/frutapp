@@ -101,6 +101,81 @@ class NotificationDispatcher(
         }
     }
 
+    /** Push al cliente cuando el repartidor pausa el despacho (semaforo,
+     *  emergencia, etc). No es un cambio de estado — sigue en EN_DESPACHO —
+     *  pero el cliente merece saber por que el marker del mapa no se mueve.
+     *  Reason libre truncada a 80 chars en el body para no llenar la notif. */
+    fun onOrderPaused(orderId: UUID, reason: String?) {
+        pushSimpleAlCliente(
+            orderId = orderId,
+            title = "Tu pedido está pausado",
+            bodyTemplate = if (reason.isNullOrBlank()) "Pedido {numero}: el repartidor pausó momentáneamente."
+                           else "Pedido {numero}: pausado — ${reason.trim().take(80)}",
+            statusTag = "PAUSED",
+            collapseKeyPrefix = "order-pause",
+        )
+    }
+
+    /** Push al cliente cuando el repartidor reanuda el despacho pausado. */
+    fun onOrderResumed(orderId: UUID) {
+        pushSimpleAlCliente(
+            orderId = orderId,
+            title = "Tu pedido está en camino de nuevo",
+            bodyTemplate = "Pedido {numero}: el repartidor reanudó el trayecto.",
+            statusTag = "RESUMED",
+            collapseKeyPrefix = "order-pause",
+        )
+    }
+
+    /** Helper compartido para push de eventos "sin cambio de estado" (pausar,
+     *  reanudar, futuros). Reusa la logica de inbox + push del onOrderTransition
+     *  pero sin la rama de repartidores (esos son eventos de-cliente-a-cliente). */
+    private fun pushSimpleAlCliente(
+        orderId: UUID,
+        title: String,
+        bodyTemplate: String,
+        statusTag: String,
+        collapseKeyPrefix: String,
+    ) {
+        if (fcm == null) return
+        scope.launch {
+            runCatching {
+                val ownerInfo = orderRepo.findOwnerAndNumero(orderId) ?: return@launch
+                val (customerId, numero) = ownerInfo
+                val body = bodyTemplate.replace("{numero}", numero)
+                inbox.create(
+                    userId = customerId,
+                    type = "PEDIDO",
+                    title = title,
+                    body = body,
+                    data = """{"orderId":"$orderId","orderNumero":"$numero","status":"$statusTag"}""",
+                )
+                val tokens = deviceTokens.listByUser(customerId)
+                tokens.forEach { row ->
+                    val msg = FcmMessage(
+                        token = row.fcmToken,
+                        title = title,
+                        body = body,
+                        data = mapOf(
+                            "type" to "order_status",
+                            "orderId" to orderId.toString(),
+                            "orderNumero" to numero,
+                            "status" to statusTag,
+                        ),
+                        androidCollapseKey = "$collapseKeyPrefix:$orderId",
+                        androidChannelId = ANDROID_CHANNEL_ORDERS,
+                    )
+                    when (fcm.send(msg)) {
+                        is SendResult.UnregisteredToken -> deviceTokens.deleteByToken(row.fcmToken)
+                        else -> Unit
+                    }
+                }
+            }.onFailure { e ->
+                logger.error("Error despachando push simple para pedido {}", orderId, e)
+            }
+        }
+    }
+
     /**
      * Notifica a pickers de una [locationId] que hay un pedido nuevo en cola.
      * Disparado desde `OrderService.create` tras persistir el pedido.

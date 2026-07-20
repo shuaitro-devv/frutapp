@@ -310,6 +310,12 @@ private fun Detail(
             CodigoEntregaCard(codigo = codigoEntrega, modifier = Modifier.padding(top = 14.dp))
         }
 
+        // Banner cuando el repartidor pauso el despacho. Se muestra ANTES del
+        // mapa para que el cliente entienda por que el marker no se mueve.
+        if (o.status == "EN_DESPACHO" && o.dispatchPausedAt != null) {
+            PausadoBanner(reason = o.dispatchPauseReason, modifier = Modifier.padding(top = 12.dp))
+        }
+
         // Hero: mapa con tracking del repartidor cuando EN_DESPACHO; imagen
         // ilustrativa para el resto de los estados. Gated por feature.mapa_repartidor.
         // Si la flag esta apagada, mostramos siempre la imagen.
@@ -970,6 +976,32 @@ private fun ChatUnreadDot(count: Int) {
 /** Card destacada con el codigo de 4 digitos que el cliente debe darle al
  *  repartidor cara a cara para confirmar la entrega. Sin esto el repartidor
  *  no puede marcar entregado. */
+@Composable
+private fun PausadoBanner(reason: String?, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(FrutAppColors.AmberSoft, RoundedCornerShape(14.dp))
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("⏸", fontSize = 20.sp)
+        Column(modifier = Modifier.padding(start = 10.dp)) {
+            Text(
+                "Tu repartidor pausó un momento",
+                color = FrutAppColors.AmberCoin,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                if (reason.isNullOrBlank()) "Va a reanudar en breve." else "Motivo: $reason",
+                color = FrutAppColors.InkSoft,
+                fontSize = 12.sp,
+            )
+        }
+    }
+}
+
 @Composable
 private fun CodigoEntregaCard(codigo: String, modifier: Modifier = Modifier) {
     Column(

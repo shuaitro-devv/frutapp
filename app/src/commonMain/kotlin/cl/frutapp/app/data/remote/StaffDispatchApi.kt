@@ -62,4 +62,13 @@ class StaffDispatchApi(
             setBody(ConfirmarEntregaRequest(codigo = codigo))
         }
     }
+
+    /** Pausa o reanuda el despacho. Un solo endpoint toggle: pausar=true con
+     *  reason, pausar=false para reanudar (reason ignorado). */
+    suspend fun togglePause(orderId: String, pausar: Boolean, reason: String? = null) {
+        client.post("$baseUrl/v1/staff/orders/dispatch/$orderId/pause") {
+            contentType(ContentType.Application.Json)
+            setBody(cl.frutapp.shared.dto.PausarDespachoRequest(pausar = pausar, reason = reason))
+        }
+    }
 }

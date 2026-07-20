@@ -65,6 +65,7 @@ import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.StaffActionsSheet
 import cl.frutapp.app.ui.openUrl
 import cl.frutapp.app.ui.showToast
+import kotlinx.coroutines.launch
 import cl.frutapp.app.ui.theme.FrutAppColors
 import cl.frutapp.app.navigation.shop.ChatScreen
 
@@ -77,15 +78,25 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
         val esBackendReal = remember(pedidoId) { pedidoId.isUuidLike() }
         val dispatchApi = remember { StaffDispatchApi() }
         var despachoState by remember(pedidoId) {
             mutableStateOf(if (esBackendReal) null else despachoPorId(pedidoId))
         }
+        // Estado local de pausa. Se sincroniza con el backend en el take/detalle
+        // pero como el toggle es lightweight lo llevamos optimista para que la
+        // UI responda sin esperar el round-trip.
+        var pausado by remember(pedidoId) { mutableStateOf(false) }
+        var togglingPausa by remember(pedidoId) { mutableStateOf(false) }
+        var dialogoPausa by remember { mutableStateOf(false) }
         LaunchedEffect(pedidoId) {
             if (!esBackendReal) return@LaunchedEffect
             runCatching { dispatchApi.detalle(pedidoId) }
-                .onSuccess { despachoState = it.toDespachoItem() }
+                .onSuccess {
+                    despachoState = it.toDespachoItem()
+                    pausado = it.dispatchPausedAt != null
+                }
                 .onFailure { e ->
                     if (e is kotlinx.coroutines.CancellationException) throw e
                     ErrorReporter.report(screen = "RepartidorEnCamino", action = "fetch_detalle", error = e)
@@ -94,6 +105,33 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
                     showToast("No pudimos cargar el despacho. Vuelve a intentarlo.")
                     navigator.pop()
                 }
+        }
+        // Helper: dispara toggle contra backend, actualiza estado local
+        // optimistamente. Si el backend rechaza, hace rollback + toast.
+        val togglePausa = togglePausa@{ nuevoPausar: Boolean, reason: String? ->
+            if (togglingPausa) return@togglePausa
+            if (!esBackendReal) {
+                pausado = nuevoPausar
+                showToast(if (nuevoPausar) "Entrega pausada" else "Entrega reanudada")
+                return@togglePausa
+            }
+            togglingPausa = true
+            val previo = pausado
+            pausado = nuevoPausar
+            scope.launch {
+                runCatching { dispatchApi.togglePause(pedidoId, nuevoPausar, reason) }
+                    .onSuccess {
+                        showToast(if (nuevoPausar) "Entrega pausada" else "Entrega reanudada")
+                    }
+                    .onFailure { e ->
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        pausado = previo
+                        ErrorReporter.report(screen = "RepartidorEnCamino", action = "toggle_pause", error = e)
+                        showToast(cl.frutapp.app.ui.mensajeAmigable(e, if (nuevoPausar) "pausar la entrega" else "reanudar"))
+                    }
+                togglingPausa = false
+            }
+            Unit
         }
 
         // Tracking: el repartidor postea su ubicacion cada 10s mientras esta
@@ -172,6 +210,10 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
                 }
             }
             Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp)) {
+                if (pausado) {
+                    PausaBanner(togglingPausa = togglingPausa, onReanudar = { togglePausa(false, null) })
+                    Spacer(Modifier.height(12.dp))
+                }
                 HeroEnCamino()
                 Spacer(Modifier.height(12.dp))
                 MapaConRuta(kmRestantes = 1.8)
@@ -195,7 +237,11 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
             StaffActionsSheet(
                 titulo = "Opciones de la entrega",
                 acciones = accionesRepartidor(
-                    onPausar = { showToast("Entrega pausada - Próximamente") },
+                    onPausar = {
+                        menuAbierto = false
+                        if (pausado) togglePausa(false, null) // reanudar directo
+                        else dialogoPausa = true // pedir razon
+                    },
                     onReportar = { navigator.push(RepartidorIncidenciaScreen(pedidoId)) },
                     onCambiarDireccion = { showToast("Cambiar dirección - Próximamente") },
                     onLlamarCliente = {
@@ -230,7 +276,93 @@ class RepartidorEnCaminoScreen(private val pedidoId: String) : Screen {
                 }
             )
         }
+        if (dialogoPausa) {
+            PausaRazonDialog(
+                onCerrar = { dialogoPausa = false },
+                onPausar = { razon ->
+                    dialogoPausa = false
+                    togglePausa(true, razon)
+                },
+            )
+        }
     }
+}
+
+/** Banner ambar cuando la entrega esta pausada. Muestra "Reanudar" como
+ *  CTA para que el repartidor lo tenga a mano sin abrir el menu. */
+@Composable
+private fun PausaBanner(togglingPausa: Boolean, onReanudar: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(FrutAppColors.AmberSoft, RoundedCornerShape(14.dp))
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("⏸", fontSize = 22.sp)
+        Column(modifier = Modifier.weight(1f).padding(start = 10.dp)) {
+            Text("Entrega pausada", color = FrutAppColors.AmberCoin, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "El cliente ve que estás pausado. Toca reanudar cuando estés listo.",
+                color = FrutAppColors.InkSoft,
+                fontSize = 12.sp,
+            )
+        }
+        Text(
+            text = if (togglingPausa) "..." else "Reanudar",
+            color = FrutAppColors.Brand600,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .background(Color.White, RoundedCornerShape(12.dp))
+                .clickable(enabled = !togglingPausa, onClick = onReanudar)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        )
+    }
+}
+
+/** Dialog para elegir la razón de la pausa. Presets rápidos (tap = pausa
+ *  directo) + un placeholder "Otro" que abre un textfield. Diseño chico
+ *  para no bloquear al repartidor. */
+@Composable
+private fun PausaRazonDialog(onCerrar: () -> Unit, onPausar: (String) -> Unit) {
+    val razones = listOf(
+        "Semáforo largo",
+        "Estacioné para atender",
+        "Tráfico congestionado",
+        "Emergencia personal",
+    )
+    AlertDialog(
+        onDismissRequest = onCerrar,
+        title = { Text("¿Por qué pausas?", fontWeight = FontWeight.Bold, color = FrutAppColors.Brand800) },
+        text = {
+            Column {
+                Text(
+                    "El cliente verá que su pedido está pausado con la razón que elijas.",
+                    color = FrutAppColors.InkSoft,
+                    fontSize = 13.sp,
+                )
+                Spacer(Modifier.height(12.dp))
+                razones.forEach { razon ->
+                    Text(
+                        razon,
+                        color = FrutAppColors.Brand800,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(FrutAppColors.Brand50, RoundedCornerShape(10.dp))
+                            .clickable { onPausar(razon) }
+                            .padding(14.dp),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onCerrar) { Text("Cancelar", color = FrutAppColors.InkSoft) }
+        },
+    )
 }
 
 @Composable
