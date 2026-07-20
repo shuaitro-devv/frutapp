@@ -152,6 +152,14 @@ class WebpayPagoService(
             WEBPAY_ESTADO_PAGADA -> return RetornoResult.Aprobada
             WEBPAY_ESTADO_RECHAZADA -> return RetornoResult.Rechazada
             WEBPAY_ESTADO_ERROR -> return RetornoResult.Error
+            // ANULADA: refund automatico exitoso en una vuelta previa.
+            // Sin este case el segundo retorno cae al confirmar() → 422 →
+            // cambiarEstado(ERROR) sobreescribiendo ANULADA → soporte
+            // reconciliaria manual y podria disparar un refund duplicado.
+            WEBPAY_ESTADO_ANULADA -> return RetornoResult.Error
+            // REFUND_AMBIGUO: soporte tiene que investigar (posible doble
+            // refund). No re-intentamos automatico.
+            WEBPAY_ESTADO_REFUND_AMBIGUO -> return RetornoResult.Error
         }
 
         val confirmar = try {
@@ -232,23 +240,84 @@ class WebpayPagoService(
                 }
                 else -> {
                     // (b) CANCELADO/DEVOLUCION o null → dinero cobrado sin
-                    // pedido. Marcamos ERROR, evento pago.webpay_pedido_cancelado
-                    // para alertar soporte, y respondemos Error al cliente.
-                    logger.error("Webpay.retorno: pedido ${tx.orderId} en status=$statusActual pero Transbank aprobo — refund manual necesario")
-                    repo.cambiarEstado(token, WEBPAY_ESTADO_ERROR)
-                    events.logSafely(
-                        eventType = "pago.webpay_pedido_cancelado",
-                        userId = tx.userId,
-                        entityType = "order",
-                        entityId = tx.orderId,
-                        payload = buildJsonObject {
-                            put("token", JsonPrimitive(token))
-                            put("authorizationCode", JsonPrimitive(confirmar.authorizationCode ?: "?"))
-                            put("buyOrder", JsonPrimitive(tx.buyOrder))
-                            put("statusActual", JsonPrimitive(statusActual?.name ?: "null"))
-                            put("monto", JsonPrimitive(tx.monto))
-                        },
-                    )
+                    // pedido. Intentamos refund AUTOMATICO a Transbank; si
+                    // funciona, evento pago.webpay_pedido_cancelado_refunded;
+                    // si falla, cae al flujo manual pago.webpay_pedido_cancelado
+                    // para que soporte reconcilie.
+                    logger.warn("Webpay.retorno: pedido ${tx.orderId} en status=$statusActual pero Transbank aprobo — intentando refund automatico")
+                    // No usamos runCatching a secas porque tragaria CancellationException
+                    // (patron conocido en coroutines — rompe estructuras suspendidas).
+                    val refundResult: Result<RefundResult> = try {
+                        Result.success(client.refund(token, tx.monto))
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Throwable) {
+                        Result.failure(e)
+                    }
+                    val refunded = refundResult.getOrNull()?.exito == true
+                    val excepcion = refundResult.exceptionOrNull()
+                    // Un timeout / IO error es AMBIGUO: no sabemos si Transbank
+                    // recibio el POST y ejecuto el refund o si murio en la red.
+                    // Marcar como ERROR y disparar refund manual llevaria a
+                    // DOBLE REFUND si Transbank si lo proceso. Marcamos con
+                    // estado especifico para que soporte primero consulte el
+                    // status de la tx en Transbank antes de reintentar.
+                    val esAmbiguo = excepcion is java.io.IOException ||
+                        excepcion is java.util.concurrent.TimeoutException ||
+                        excepcion?.cause is java.net.SocketTimeoutException ||
+                        excepcion?.cause is java.io.IOException
+                    val nuevoEstado = when {
+                        refunded -> WEBPAY_ESTADO_ANULADA
+                        esAmbiguo -> WEBPAY_ESTADO_REFUND_AMBIGUO
+                        else -> WEBPAY_ESTADO_ERROR
+                    }
+                    repo.cambiarEstado(token, nuevoEstado)
+                    if (refunded) {
+                        val r = refundResult.getOrThrow()
+                        logger.info("Webpay.retorno: refund automatico OK pedido ${tx.orderId} type=${r.type} auth=${r.authorizationCode}")
+                        events.logSafely(
+                            eventType = "pago.webpay_pedido_cancelado_refunded",
+                            userId = tx.userId,
+                            entityType = "order",
+                            entityId = tx.orderId,
+                            payload = buildJsonObject {
+                                put("token", JsonPrimitive(token))
+                                put("buyOrder", JsonPrimitive(tx.buyOrder))
+                                put("monto", JsonPrimitive(tx.monto))
+                                put("refundType", JsonPrimitive(r.type ?: "?"))
+                                put("refundAuth", JsonPrimitive(r.authorizationCode ?: "?"))
+                            },
+                        )
+                    } else {
+                        val error = excepcion?.message
+                            ?: "refund devolvio type='${refundResult.getOrNull()?.type ?: "null"}'"
+                        val eventName = if (esAmbiguo) {
+                            "pago.webpay_refund_ambiguo"
+                        } else {
+                            "pago.webpay_pedido_cancelado"
+                        }
+                        val nota = if (esAmbiguo) {
+                            "REFUND AMBIGUO — soporte debe consultar status en Transbank ANTES de reintentar (posible doble refund)"
+                        } else {
+                            "refund manual necesario"
+                        }
+                        logger.error("Webpay.retorno: $nota pedido ${tx.orderId}: $error")
+                        events.logSafely(
+                            eventType = eventName,
+                            userId = tx.userId,
+                            entityType = "order",
+                            entityId = tx.orderId,
+                            payload = buildJsonObject {
+                                put("token", JsonPrimitive(token))
+                                put("authorizationCode", JsonPrimitive(confirmar.authorizationCode ?: "?"))
+                                put("buyOrder", JsonPrimitive(tx.buyOrder))
+                                put("statusActual", JsonPrimitive(statusActual?.name ?: "null"))
+                                put("monto", JsonPrimitive(tx.monto))
+                                put("refundError", JsonPrimitive(error))
+                                put("refundType", JsonPrimitive(refundResult.getOrNull()?.type ?: "null"))
+                            },
+                        )
+                    }
                     return RetornoResult.Error
                 }
             }

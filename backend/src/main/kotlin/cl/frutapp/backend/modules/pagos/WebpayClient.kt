@@ -90,6 +90,61 @@ class WebpayClient(private val cfg: WebpayConfig) {
     @Serializable
     private data class CardDetail(val card_number: String? = null)
 
+    @Serializable
+    private data class RefundRequest(val amount: Int)
+
+    @Serializable
+    private data class RefundResponse(
+        val type: String? = null,
+        val authorization_code: String? = null,
+        val authorization_date: String? = null,
+        val nullified_amount: Int? = null,
+        val balance: Int? = null,
+        val response_code: Int? = null,
+    )
+
+    /** Anula/refund una transaccion previamente confirmada.
+     *
+     *  Transbank distingue dos flujos segun el momento:
+     *   - Mismo dia habil, antes del cierre → REVERSED (anulacion total, no
+     *     hay comision).
+     *   - Otro dia o parcial → NULLIFIED (reembolso, con comision de $250 CLP).
+     *
+     *  Nosotros llamamos con `amount` = monto total original para pedir un
+     *  refund total. Transbank elige REVERSED o NULLIFIED segun el timing y
+     *  devuelve el `type` en la respuesta.
+     *
+     *  Usado por el flujo confirmarRetorno cuando encontramos que el pedido
+     *  esta CANCELADO al aprobar Webpay: el dinero se cobro pero el pedido
+     *  no existe → refund inmediato en vez de esperar reconciliacion manual.
+     */
+    suspend fun refund(token: String, montoClp: Int): RefundResult = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(RefundRequest.serializer(), RefundRequest(montoClp))
+        val req = HttpRequest.newBuilder(URI.create("$endpoint/$token/refunds"))
+            .header("Tbk-Api-Key-Id", cfg.commerceCode)
+            .header("Tbk-Api-Key-Secret", cfg.apiKey)
+            .header("Content-Type", "application/json")
+            .timeout(Duration.ofSeconds(20))
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .build()
+        val resp = http.send(req, HttpResponse.BodyHandlers.ofString())
+        if (resp.statusCode() !in 200..299) {
+            throw WebpayException("refund: HTTP ${resp.statusCode()} ${resp.body()}")
+        }
+        val parsed = json.decodeFromString(RefundResponse.serializer(), resp.body())
+        // Solo REVERSED y NULLIFIED devuelven el 100% al cliente. Los _PARTIAL
+        // son parciales — no los pedimos, pero si Transbank los devuelve NO
+        // los tratamos como exito (indica plata no devuelta que necesita
+        // reconciliacion manual).
+        val ok = parsed.type in setOf("REVERSED", "NULLIFIED")
+        RefundResult(
+            exito = ok,
+            type = parsed.type,
+            authorizationCode = parsed.authorization_code,
+            responseCode = parsed.response_code,
+        )
+    }
+
     /** Confirma (commit) la transaccion previamente creada. Llamar UNA sola
      *  vez por token: Transbank rechaza la segunda con 422. */
     suspend fun confirmar(token: String): ConfirmarResult = withContext(Dispatchers.IO) {
@@ -120,6 +175,13 @@ class WebpayClient(private val cfg: WebpayConfig) {
 }
 
 data class CrearTxResult(val token: String, val urlFormPost: String)
+
+data class RefundResult(
+    val exito: Boolean,
+    val type: String?,
+    val authorizationCode: String?,
+    val responseCode: Int?,
+)
 
 data class ConfirmarResult(
     val aprobada: Boolean,

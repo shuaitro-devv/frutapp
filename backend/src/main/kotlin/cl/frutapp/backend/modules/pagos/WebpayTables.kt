@@ -23,3 +23,13 @@ const val WEBPAY_ESTADO_INICIADA = "INICIADA"
 const val WEBPAY_ESTADO_PAGADA = "PAGADA"
 const val WEBPAY_ESTADO_RECHAZADA = "RECHAZADA"
 const val WEBPAY_ESTADO_ERROR = "ERROR"
+/** V0.1.13+: tx que se autorizo en Transbank pero cuyo pedido ya estaba
+ *  cancelado al llegar el retorno, y para la cual pedimos refund automatico
+ *  exitoso via WebpayClient.refund. Distinto de RECHAZADA (que es rechazo
+ *  en la autorizacion) y de ERROR (autorizada + refund fallido pendiente
+ *  de reconciliacion manual). */
+const val WEBPAY_ESTADO_ANULADA = "ANULADA"
+/** Refund pedido a Transbank pero la respuesta se perdio (timeout/red). NO
+ *  sabemos si la anulacion se ejecuto — no reintentar sin antes consultar
+ *  el status en Transbank; hacerlo directo puede causar doble refund. */
+const val WEBPAY_ESTADO_REFUND_AMBIGUO = "REFUND_AMBIGUO"
