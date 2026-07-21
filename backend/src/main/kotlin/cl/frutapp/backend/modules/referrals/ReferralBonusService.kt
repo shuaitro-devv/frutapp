@@ -4,31 +4,37 @@ import cl.frutapp.backend.db.dbQuery
 import cl.frutapp.backend.modules.audit.EventContext
 import cl.frutapp.backend.modules.audit.UserEventService
 import cl.frutapp.backend.modules.auth.UserRepository
+import cl.frutapp.backend.modules.auth.UsersTable
 import cl.frutapp.backend.modules.orders.FrutCoinsLedgerTable
+import cl.frutapp.backend.modules.orders.OrdersTable
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.update
 import org.slf4j.LoggerFactory
 import java.util.UUID
 import kotlin.time.Duration.Companion.microseconds
 
 /**
- * Programa "Referí un amigo": al completar la primera entrega de un usuario
+ * Programa "Invita a un amigo": al completar la primera entrega de un usuario
  * referido, otorga FrutCoins al referidor Y al referido, y marca la fila
  * app_user.referral_reward_granted = true para evitar pagos duplicados.
  *
- * Diseño:
- *  - Hook llamado desde `StaffOrderService.deliveredDispatch` (fire-and-forget).
- *  - Idempotencia: `UserRepository.claimReferralReward` usa un UPDATE
- *    WHERE-guarded (`referral_reward_granted = false`). Si ya se pagó,
- *    devuelve false y no volvemos a insertar en el ledger.
- *  - Los inserts al ledger usan timestamps distintos (ver caso [2] del
- *    audit del reverso de FrutCoins) para que orderBy(createdAt DESC) sea
- *    determinístico.
+ * Diseño (fix v0.1.18: TODO en una sola transaccion):
+ *  - Hook llamado desde `StaffOrderService.deliveredDispatch`.
+ *  - Claim + inserts del ledger en la MISMA dbQuery. Sin esto, si el
+ *    proceso muere entre el claim y los inserts, la fila queda con flag
+ *    true pero los bonos jamas se pagan (perdida silente).
+ *  - Filtros deletedAt en owner + referidor: no pagamos bonos a pedidos
+ *    ni usuarios eliminados.
+ *  - Idempotencia real: el UPDATE del flag es WHERE-guarded, asi que
+ *    dos calls concurrentes solo hacen commit uno.
  */
 class ReferralBonusService(
     private val users: UserRepository,
@@ -50,23 +56,43 @@ class ReferralBonusService(
      *  El caller debe pasar un [context] con la trazabilidad del request
      *  original (default EMPTY es aceptable para hooks fire-and-forget). */
     suspend fun tryAwardOnFirstDelivery(orderId: UUID, context: EventContext = EventContext.EMPTY) {
-        val cliente = ownerOf(orderId) ?: return
-        val (referredBy, alreadyGranted) = users.referralInfoOf(cliente) ?: return
-        if (referredBy == null) return
-        if (alreadyGranted) return
+        val resultado = dbQuery {
+            // Cliente dueño del pedido, filtrando pedidos soft-deleted.
+            val cliente = OrdersTable
+                .select(OrdersTable.userId)
+                .where { (OrdersTable.id eq orderId) and OrdersTable.deletedAt.isNull() }
+                .singleOrNull()?.get(OrdersTable.userId)
+                ?: return@dbQuery null
 
-        // Race guard: dos eventos deliveredDispatch concurrentes para el
-        // mismo cliente (imposible en la practica pero por si acaso). El
-        // UPDATE WHERE-guarded en claimReferralReward garantiza que solo
-        // uno gana.
-        val ganamos = users.claimReferralReward(cliente)
-        if (!ganamos) return
+            // Info del referral, filtrando users soft-deleted.
+            val fila = UsersTable
+                .select(UsersTable.referredByUserId, UsersTable.referralRewardGranted)
+                .where { (UsersTable.id eq cliente) and UsersTable.deletedAt.isNull() }
+                .singleOrNull()
+                ?: return@dbQuery null
+            val referredBy = fila[UsersTable.referredByUserId] ?: return@dbQuery null
+            if (fila[UsersTable.referralRewardGranted]) return@dbQuery null
 
-        // Pagamos ambos bonos en la MISMA dbQuery para que el saldo del
-        // referidor y del referido queden coherentes contra la lectura
-        // (aunque son users distintos, mantener la operacion atomica evita
-        // parcialmente aplicado si el proceso muere entre inserts).
-        dbQuery {
+            // El referidor tiene que seguir vivo. Sin esto pagariamos a un
+            // usuario borrado (row-fantasma).
+            val referrerVivo = UsersTable
+                .select(UsersTable.id)
+                .where { (UsersTable.id eq referredBy) and UsersTable.deletedAt.isNull() }
+                .empty().not()
+            if (!referrerVivo) return@dbQuery null
+
+            // Claim WHERE-guarded: dos calls concurrentes solo hacen commit
+            // una. La que pierde el race sale sin pagar.
+            val ganamos = UsersTable.update({
+                (UsersTable.id eq cliente) and (UsersTable.referralRewardGranted eq false)
+            }) {
+                it[UsersTable.referralRewardGranted] = true
+                it[UsersTable.updatedAt] = Clock.System.now()
+            } > 0
+            if (!ganamos) return@dbQuery null
+
+            // Bonos en el mismo dbQuery para no dejar el flag apuntando a
+            // un pago que jamas ocurrio si el proceso muere aca.
             insertLedger(
                 userId = referredBy,
                 orderId = orderId,
@@ -80,10 +106,15 @@ class ReferralBonusService(
                 motivo = "BONO_BIENVENIDA_REFERIDO",
                 nanosDelay = 1,
             )
-        }
 
-        log.info("Referral bonus: referidor={} recibio {} coins, referido={} recibio {} coins por entrega {}",
-            referredBy, BONO_REFERIDOR, cliente, BONO_REFERIDO, orderId)
+            Pair(cliente, referredBy)
+        } ?: return
+
+        val (cliente, referredBy) = resultado
+        log.info(
+            "Referral bonus: referidor={} recibio {} coins, referido={} recibio {} coins por entrega {}",
+            referredBy, BONO_REFERIDOR, cliente, BONO_REFERIDO, orderId
+        )
 
         events.logSafely(
             eventType = "coins.referral_awarded",
@@ -101,8 +132,7 @@ class ReferralBonusService(
     }
 
     /** Insert en el ledger con saldo calculado desde el balance_after
-     *  reciente del user. Requiere ejecucion dentro de un dbQuery (no lo
-     *  abre el mismo para poder agrupar los dos inserts del bono). */
+     *  reciente del user. Requiere ejecucion dentro de un dbQuery. */
     private fun insertLedger(
         userId: UUID,
         orderId: UUID,
@@ -125,13 +155,5 @@ class ReferralBonusService(
             it[FrutCoinsLedgerTable.balanceAfter] = nuevoSaldo
             it[FrutCoinsLedgerTable.createdAt] = now
         }
-    }
-
-    private suspend fun ownerOf(orderId: UUID): UUID? = dbQuery {
-        cl.frutapp.backend.modules.orders.OrdersTable
-            .select(cl.frutapp.backend.modules.orders.OrdersTable.userId)
-            .where { cl.frutapp.backend.modules.orders.OrdersTable.id eq orderId }
-            .singleOrNull()
-            ?.get(cl.frutapp.backend.modules.orders.OrdersTable.userId)
     }
 }

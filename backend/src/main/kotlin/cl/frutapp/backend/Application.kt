@@ -272,8 +272,22 @@ fun Application.module() {
         notificationDispatcher,
         avatarUrlResolver = avatarService?.let { svc -> { uid -> svc.urlFor(uid) } },
         referralBonusHook = { orderId ->
-            runCatching { referralBonusService.tryAwardOnFirstDelivery(orderId) }
-                .onFailure { e -> environment.log.warn("Referral bonus fallo para pedido {}: {}", orderId, e.message) }
+            // Fire-and-forget REAL (fix v0.1.18): la version anterior era
+            // `runCatching { … }` inline suspend, que hacia el POST
+            // /delivered esperar a que se calcule y persista el bono.
+            // Ahora lanzamos en el scope del Application (SupervisorJob),
+            // asi el repartidor recibe 204 al instante y el bono corre en
+            // background. try/catch explicito para no comer
+            // CancellationException si el server hace shutdown.
+            launch {
+                try {
+                    referralBonusService.tryAwardOnFirstDelivery(orderId)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    environment.log.warn("Referral bonus fallo para pedido {}: {}", orderId, t.message)
+                }
+            }
             Unit
         },
     )

@@ -38,11 +38,36 @@ fun Application.configureRateLimit() {
     }
 }
 
-/** Prefiere X-Forwarded-For (Traefik) sobre el remoteHost local. Cae al remote si
- *  el header no esta. Usamos solo la primera IP de la cadena para que un proxy
- *  intermedio no quede como key compartida entre clientes. */
+/** Resuelve la IP real del cliente para keying del rate limit.
+ *
+ *  IMPORTANTE (fix v0.1.18): la implementacion anterior tomaba el PRIMER
+ *  valor de X-Forwarded-For, que es TRIVIALMENTE spoofable porque los
+ *  proxies APPENDEAN al header sin verificar los valores previos. Un
+ *  atacante que manda `X-Forwarded-For: 1.2.3.4` en cada request rota su
+ *  key y salta el limite. Afecta TODO el pool "auth": login, register,
+ *  refresh, forgot, verify, verificacion de codigos de invitacion.
+ *
+ *  Estrategia nueva (orden de preferencia, siempre tomando el header
+ *  que NO puede ser suplantado por el cliente):
+ *   1. `CF-Connecting-IP`: Cloudflare lo pone al recibir el request desde
+ *      el cliente y REEMPLAZA cualquier valor previo. Ignora lo que el
+ *      cliente manda con ese header. Es el header oficial y confiable en
+ *      nuestro setup (Cloudflare -> Traefik -> backend).
+ *   2. `X-Real-IP`: convencion nginx/traefik para "IP real del cliente".
+ *      Nuestro Traefik la agrega y el cliente no puede suplantarla porque
+ *      Traefik la sobrescribe.
+ *   3. Ultimo valor de `X-Forwarded-For`: el proxy inmediato al backend
+ *      (Traefik) siempre APPENDEA la IP verdadera del cliente al final,
+ *      asi que el ultimo es el que Traefik agrego (los previos pueden
+ *      venir del cliente). Fallback si por config no llega CF ni X-Real.
+ *   4. `origin.remoteHost`: dev/local sin proxy. */
 private fun ApplicationRequest.clientIpKey(): String {
-    val xff = header("X-Forwarded-For")?.split(",")?.firstOrNull()?.trim()
-    if (!xff.isNullOrBlank()) return xff
+    header("CF-Connecting-IP")?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+    header("X-Real-IP")?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+    header("X-Forwarded-For")
+        ?.split(",")
+        ?.map { it.trim() }
+        ?.lastOrNull { it.isNotBlank() }
+        ?.let { return it }
     return origin.remoteHost
 }

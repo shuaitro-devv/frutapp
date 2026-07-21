@@ -82,43 +82,72 @@ class UserRepository {
     }
 
     /** Devuelve el codigo del usuario, generandolo si es null (backfill lazy
-     *  para casos edge donde la migracion no lo genero). Idempotente. */
+     *  para casos edge donde la migracion no lo genero). Idempotente y safe
+     *  bajo concurrencia.
+     *
+     *  Fix v0.1.18: la version anterior tenia dos bugs:
+     *   1. TOCTOU en el UPDATE: no filtraba `codigoInvitacion IS NULL`, asi
+     *      que dos calls concurrentes hacian SELECT null, generaban codigos
+     *      distintos, y el segundo pisaba al primero. El caller A retornaba
+     *      un codigo que ya no era el del user.
+     *   2. Colision con codigo existente de otro user tiraba SQLException
+     *      de UNIQUE, no `filas == 0`; el retry loop asumia lo segundo y
+     *      nunca reintentaba.
+     *
+     *  Ahora: UPDATE con guard `codigoInvitacion IS NULL` + catch de
+     *  ExposedSQLException dentro del retry (colision UNIQUE ~ retry). */
     suspend fun ensureCodigoInvitacion(userId: UUID): String = dbQuery {
         val existente = UsersTable.select(UsersTable.codigoInvitacion)
             .where { UsersTable.id eq userId }
             .singleOrNull()?.get(UsersTable.codigoInvitacion)
         if (existente != null) return@dbQuery existente
-        // Retry ~5x en caso de colision (con 31^8 combinaciones, colision es raro).
         repeat(5) {
             val candidato = generarCodigo()
-            val filas = UsersTable.update({ UsersTable.id eq userId }) {
-                it[UsersTable.codigoInvitacion] = candidato
+            val exitoso = try {
+                UsersTable.update({
+                    (UsersTable.id eq userId) and UsersTable.codigoInvitacion.isNull()
+                }) {
+                    it[UsersTable.codigoInvitacion] = candidato
+                } > 0
+            } catch (_: org.jetbrains.exposed.exceptions.ExposedSQLException) {
+                // Colision UNIQUE con codigo de otro user. Reintentamos.
+                false
             }
-            if (filas > 0) return@dbQuery candidato
+            if (exitoso) return@dbQuery candidato
+            // Si filas == 0 sin excepcion, otro thread ya nos gano en el
+            // race. Releemos el codigo que quedo persistido.
+            val quePersisto = UsersTable.select(UsersTable.codigoInvitacion)
+                .where { UsersTable.id eq userId }
+                .singleOrNull()?.get(UsersTable.codigoInvitacion)
+            if (quePersisto != null) return@dbQuery quePersisto
         }
-        error("No se pudo generar codigo de invitacion")
+        error("No se pudo generar codigo de invitacion tras 5 intentos")
     }
 
-    /** Marca la recompensa como otorgada. Idempotente (WHERE-guarded contra
-     *  falso true concurrente); devuelve true si esta llamada fue la que la
-     *  seteo, false si ya estaba true (caller no debe pagar de nuevo). */
-    suspend fun claimReferralReward(userId: UUID): Boolean = dbQuery {
-        val filas = UsersTable.update({
-            (UsersTable.id eq userId) and (UsersTable.referralRewardGranted eq false)
-        }) {
-            it[UsersTable.referralRewardGranted] = true
-            it[UsersTable.updatedAt] = Clock.System.now()
-        }
-        filas > 0
+    /** Comprueba si dos usuarios comparten el mismo `email_base` (todo lo
+     *  anterior al `+` del local-part) o el mismo telefono. Sirve para
+     *  detectar auto-referrals: alice@gmail.com registra alice+1@gmail.com
+     *  con su propio codigo de invitacion. Fix v0.1.18. */
+    suspend fun compartenIdentidad(referrerId: UUID, emailNuevo: String, telefonoNuevo: String?): Boolean = dbQuery {
+        val referrer = UsersTable.select(UsersTable.email, UsersTable.phone)
+            .where { (UsersTable.id eq referrerId) and UsersTable.deletedAt.isNull() }
+            .singleOrNull() ?: return@dbQuery false
+        val emailReferrer = referrer[UsersTable.email]
+        val phoneReferrer = referrer[UsersTable.phone]
+        if (emailBase(emailNuevo) == emailBase(emailReferrer)) return@dbQuery true
+        if (!telefonoNuevo.isNullOrBlank() && telefonoNuevo == phoneReferrer) return@dbQuery true
+        false
     }
 
-    /** Devuelve (referredById, alreadyGranted) para un usuario. Null si el
-     *  user no existe. */
-    suspend fun referralInfoOf(userId: UUID): Pair<UUID?, Boolean>? = dbQuery {
-        UsersTable.select(UsersTable.referredByUserId, UsersTable.referralRewardGranted)
-            .where { UsersTable.id eq userId }
-            .singleOrNull()
-            ?.let { it[UsersTable.referredByUserId] to it[UsersTable.referralRewardGranted] }
+    /** `alice+X@gmail.com` -> `alice@gmail.com`. Normaliza para detectar
+     *  el truco clasico de "sub-address" que casi todos los MTAs enrutan
+     *  al mismo mailbox. No es 100% robusto (Yahoo usa `-` en vez de `+`)
+     *  pero cubre Gmail/Outlook/iCloud, que son la mayoria en Chile. */
+    private fun emailBase(email: String): String {
+        val at = email.indexOf('@')
+        if (at < 0) return email.lowercase()
+        val local = email.substring(0, at).substringBefore('+')
+        return "$local${email.substring(at)}".lowercase()
     }
 
     private fun generarCodigo(): String {

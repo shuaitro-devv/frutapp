@@ -96,8 +96,16 @@ class AuthService(
             // no existe (typo), ignoramos silenciosamente para no bloquear
             // el registro. Codigo se compara case-sensitive (siempre
             // upper-case por diseño).
+            //
+            // Fix v0.1.18: rechazar auto-referral. Alice puede crear
+            // alice+2@gmail.com con SU codigo de invitacion y farmear
+            // FrutCoins. El check compara email_base (alice+X@ -> alice@)
+            // y telefono; no es perfecto pero eleva el costo de farming.
             val codigoLimpio = req.codigoInvitacion?.trim()?.uppercase()?.ifBlank { null }
             val referrer = codigoLimpio?.let { users.findByCodigoInvitacion(it) }
+            val referrerValido = referrer?.takeUnless {
+                users.compartenIdentidad(it.id, email, telefonoLimpio)
+            }
             val nuevo = users.create(
                 name = nombreLimpio,
                 email = email,
@@ -105,10 +113,20 @@ class AuthService(
                 passwordHash = PasswordHasher.hash(req.password),
                 role = "CUSTOMER",
                 consentVersion = req.consentVersion,
-                referredByUserId = referrer?.id,
+                referredByUserId = referrerValido?.id,
             )
             // Genera codigo propio para que el nuevo user pueda referir tambien.
-            runCatching { users.ensureCodigoInvitacion(nuevo.id) }
+            // Try/catch explicito (no runCatching) para no comer
+            // CancellationException si el scope se cancela.
+            try {
+                users.ensureCodigoInvitacion(nuevo.id)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                // La generacion del codigo propio no debe bloquear el
+                // signup: si falla, el user igual queda creado y el
+                // codigo se genera lazy la primera vez que lo pida en /me.
+            }
             rbac.assignRole(nuevo.id, "cliente")
             nuevo
         }
@@ -186,7 +204,15 @@ class AuthService(
         val avatarUrl = avatarUrlResolver?.invoke(uuid)
         // Genera codigo de invitacion lazy: si el user es pre-V42 o el trigger
         // del signup fallo, la primera vez que abre su perfil lo obtiene.
-        val codigo = runCatching { users.ensureCodigoInvitacion(uuid) }.getOrNull()
+        // Try/catch explicito para no comer CancellationException si el
+        // cliente se desconecta a mitad del /me.
+        val codigo = try {
+            users.ensureCodigoInvitacion(uuid)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            null
+        }
         return row.toDto().copy(roles = roles, avatarUrl = avatarUrl, codigoInvitacion = codigo)
     }
 
