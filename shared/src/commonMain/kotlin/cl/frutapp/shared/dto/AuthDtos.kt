@@ -98,11 +98,17 @@ data class UserDto(
 /** Respuesta del endpoint publico `GET /v1/referrals/verify/{codigo}`. Se usa
  *  desde la landing (page `/invita/[codigo]`) para renderizar OG tags
  *  personalizados y validar el codigo antes de mostrar el CTA. Nunca expone
- *  email, id ni apellido — solo el primer nombre del referidor. */
+ *  email, id ni apellido — solo el primer nombre del referidor.
+ *
+ *  bonoReferido / bonoReferidor: valores actuales del programa (fuente:
+ *  ReferralConfig del shared). Se envian aca para que la landing NO tenga
+ *  que hardcodearlos y quede siempre sincronizada con el backend. */
 @Serializable
 data class ReferralVerifyResponse(
     val codigo: String,
     val referrerFirstName: String,
+    val bonoReferido: Int,
+    val bonoReferidor: Int,
 )
 
 /** Respuesta de auth: usuario + par de tokens. */

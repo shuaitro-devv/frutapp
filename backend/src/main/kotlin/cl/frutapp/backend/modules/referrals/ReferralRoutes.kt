@@ -1,6 +1,7 @@
 package cl.frutapp.backend.modules.referrals
 
 import cl.frutapp.backend.modules.auth.UserRepository
+import cl.frutapp.shared.domain.ReferralConfig
 import cl.frutapp.shared.dto.ReferralVerifyResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
@@ -43,6 +44,8 @@ fun Route.referralRoutes(users: UserRepository) {
                     ReferralVerifyResponse(
                         codigo = codigo,
                         referrerFirstName = primerNombre,
+                        bonoReferido = ReferralConfig.BONO_REFERIDO,
+                        bonoReferidor = ReferralConfig.BONO_REFERIDOR,
                     )
                 )
             }

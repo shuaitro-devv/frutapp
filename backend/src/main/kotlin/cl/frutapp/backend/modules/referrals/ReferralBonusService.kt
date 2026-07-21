@@ -7,6 +7,7 @@ import cl.frutapp.backend.modules.auth.UserRepository
 import cl.frutapp.backend.modules.auth.UsersTable
 import cl.frutapp.backend.modules.orders.FrutCoinsLedgerTable
 import cl.frutapp.backend.modules.orders.OrdersTable
+import cl.frutapp.shared.domain.ReferralConfig
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -42,13 +43,8 @@ class ReferralBonusService(
 ) {
     private val log = LoggerFactory.getLogger("ReferralBonusService")
 
-    companion object {
-        // Bonos configurables. En una V+ podemos moverlos a app_config si
-        // queremos ajustarlos sin redeploy — por ahora hardcoded para
-        // simplicidad y evitar un query extra por cada bono.
-        const val BONO_REFERIDOR = 200
-        const val BONO_REFERIDO = 100
-    }
+    private val bonoReferidor = ReferralConfig.BONO_REFERIDOR
+    private val bonoReferido = ReferralConfig.BONO_REFERIDO
 
     /** Chequea si el pedido [orderId] es la primera entrega de un usuario
      *  con referrer, y si es asi, paga los bonos. Idempotente.
@@ -96,13 +92,13 @@ class ReferralBonusService(
             insertLedger(
                 userId = referredBy,
                 orderId = orderId,
-                delta = BONO_REFERIDOR,
+                delta = bonoReferidor,
                 motivo = "REFERIDO_COMPLETO",
             )
             insertLedger(
                 userId = cliente,
                 orderId = orderId,
-                delta = BONO_REFERIDO,
+                delta = bonoReferido,
                 motivo = "BONO_BIENVENIDA_REFERIDO",
                 nanosDelay = 1,
             )
@@ -113,7 +109,7 @@ class ReferralBonusService(
         val (cliente, referredBy) = resultado
         log.info(
             "Referral bonus: referidor={} recibio {} coins, referido={} recibio {} coins por entrega {}",
-            referredBy, BONO_REFERIDOR, cliente, BONO_REFERIDO, orderId
+            referredBy, bonoReferidor, cliente, bonoReferido, orderId
         )
 
         events.logSafely(
@@ -124,8 +120,8 @@ class ReferralBonusService(
             payload = buildJsonObject {
                 put("orderId", JsonPrimitive(orderId.toString()))
                 put("referidor", JsonPrimitive(referredBy.toString()))
-                put("bonoReferidor", JsonPrimitive(BONO_REFERIDOR))
-                put("bonoReferido", JsonPrimitive(BONO_REFERIDO))
+                put("bonoReferidor", JsonPrimitive(bonoReferidor))
+                put("bonoReferido", JsonPrimitive(bonoReferido))
             },
             context = context,
         )

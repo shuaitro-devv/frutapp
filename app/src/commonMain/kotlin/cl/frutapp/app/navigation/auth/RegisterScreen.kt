@@ -36,10 +36,12 @@ import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import cl.frutapp.app.data.TokenStore
 import cl.frutapp.app.data.remote.AuthApi
 import cl.frutapp.app.legal.LEGAL_VERSION
 import cl.frutapp.app.legal.LegalDocKind
 import cl.frutapp.app.navigation.legal.LegalDocScreen
+import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.components.AuthHeaderText
 import cl.frutapp.app.ui.components.AuthScaffold
 import cl.frutapp.app.ui.components.FrutButtonGhost
@@ -47,6 +49,7 @@ import cl.frutapp.app.ui.components.FrutButtonPrimary
 import cl.frutapp.app.ui.components.FrutTextField
 import cl.frutapp.app.ui.components.OrDivider
 import cl.frutapp.app.ui.components.SocialButtons
+import cl.frutapp.app.ui.mensajeAmigable
 import cl.frutapp.app.ui.theme.FrutAppColors
 import cl.frutapp.shared.dto.RegisterRequest
 import kotlinx.coroutines.launch
@@ -218,18 +221,18 @@ class RegisterScreen : Screen {
                             .onSuccess {
                                 // Marcamos el limbo: si el usuario cierra la app antes de
                                 // tipear el codigo, al volver caera directo en VerifyCode.
-                                cl.frutapp.app.data.TokenStore.markPendingEmail(email.trim())
+                                TokenStore.markPendingEmail(email.trim())
                                 navigator.push(VerifyCodeScreen(email = email.trim()))
                             }
                             .onFailure { e ->
-                                cl.frutapp.app.ui.ErrorReporter.report(screen = "Register", action = "register", error = e)
+                                ErrorReporter.report(screen = "Register", action = "register", error = e)
                                 val msg = e.message.orEmpty().lowercase()
                                 error = when {
                                     msg.contains("409") || msg.contains("conflict") || msg.contains("already") ->
                                         "Ese correo ya está registrado. Intenta iniciar sesión o recupera tu contraseña."
                                     msg.contains("422") || msg.contains("validation") || msg.contains("invalid") ->
                                         "Revisa los datos: el correo debe ser válido y la contraseña al menos 6 caracteres con letras y números."
-                                    else -> cl.frutapp.app.ui.mensajeAmigable(e, "crear la cuenta")
+                                    else -> mensajeAmigable(e, "crear la cuenta")
                                 }
                             }
                         loading = false

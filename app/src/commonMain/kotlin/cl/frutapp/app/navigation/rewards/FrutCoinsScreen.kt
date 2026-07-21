@@ -45,15 +45,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cl.frutapp.app.data.RewardsStore
+import cl.frutapp.app.data.remote.AuthApi
 import cl.frutapp.app.data.remote.OrderApi
 import cl.frutapp.app.navigation.recycle.ReciclaScreen
+import cl.frutapp.app.ui.ErrorReporter
 import cl.frutapp.app.ui.comingSoon
+import cl.frutapp.app.ui.shareText
+import cl.frutapp.shared.domain.ReferralConfig
 import cl.frutapp.shared.dto.FrutCoinsEntryDto
 import cl.frutapp.app.ui.components.FrutBottomNav
 import cl.frutapp.app.ui.components.FrutTab
@@ -87,9 +92,9 @@ class FrutCoinsScreen : Screen {
                     movimientos = it.movimientos
                 }
                 .onFailure { e ->
-                    cl.frutapp.app.ui.ErrorReporter.report(screen = "FrutCoins", action = "load_balance", error = e)
+                    ErrorReporter.report(screen = "FrutCoins", action = "load_balance", error = e)
                 }
-            runCatching { cl.frutapp.app.data.remote.AuthApi().me() }
+            runCatching { AuthApi().me() }
                 .onSuccess { codigoInvitacion = it.codigoInvitacion }
         }
         val ganar = listOf(
@@ -344,7 +349,7 @@ private fun CodigoInvitacionCard(codigo: String, modifier: Modifier = Modifier) 
                     .weight(1f)
                     .background(Color.White, RoundedCornerShape(10.dp))
                     .padding(vertical = 10.dp),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                textAlign = TextAlign.Center,
             )
             Spacer(Modifier.width(10.dp))
             Box(
@@ -358,7 +363,7 @@ private fun CodigoInvitacionCard(codigo: String, modifier: Modifier = Modifier) 
                         // codigo y ademas activa el Google Play install
                         // referrer para autocompletarlo al instalar la app.
                         val texto = "¡Descarga FrutApp con mi código $codigo y ganamos FrutCoins los dos! De la cosecha a tu mesa 🥑🍅\n\nhttps://frutapp.cl/invita/$codigo"
-                        cl.frutapp.app.ui.shareText(texto)
+                        shareText(texto)
                     }
                     .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {
@@ -367,7 +372,7 @@ private fun CodigoInvitacionCard(codigo: String, modifier: Modifier = Modifier) 
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            "Cuando tu amigo se registre con tu código y complete su primer pedido, tú recibes 200 FrutCoins y él/ella recibe 100.",
+            "Cuando tu amigo se registre con tu código y complete su primer pedido, tú recibes ${ReferralConfig.BONO_REFERIDOR} FrutCoins y él/ella recibe ${ReferralConfig.BONO_REFERIDO}.",
             color = FrutAppColors.InkSoft,
             fontSize = 11.sp,
         )
